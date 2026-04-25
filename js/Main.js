@@ -36,6 +36,8 @@ if (navToggle && navLinks) {
 }
 
 /* ── Scroll reveal ── */
+// Observe all .reveal elements and animate them into view
+// when they enter the viewport, with a staggered delay per item.
 const revealObserver = new IntersectionObserver((entries) => {
   entries.forEach((entry, i) => {
     if (entry.isIntersecting) {
@@ -53,6 +55,7 @@ document.querySelectorAll('.reveal').forEach(el => {
 });
 
 /* ── Active nav link ── */
+// Highlight the nav link that matches the current page URL.
 function setActiveNavLink() {
   const path = window.location.pathname;
   document.querySelectorAll('.nav-links a').forEach(link => {
@@ -66,6 +69,8 @@ function setActiveNavLink() {
 setActiveNavLink();
 
 /* ── Visitor logging ── */
+// Fire-and-forget visitor log — sends page + device info
+// to /api/visitor-log. Never blocks or throws to the user.
 async function logVisit() {
   try {
     const sessionId = getOrCreateSessionId();
@@ -88,6 +93,8 @@ async function logVisit() {
   }
 }
 
+// Returns a persistent session ID for this browser tab,
+// creating and storing one in sessionStorage if needed.
 function getOrCreateSessionId() {
   let id = sessionStorage.getItem('gg_session');
   if (!id) {
@@ -97,6 +104,7 @@ function getOrCreateSessionId() {
   return id;
 }
 
+// Infer device category from user agent string.
 function getDeviceType() {
   const ua = navigator.userAgent;
   if (/tablet|ipad/i.test(ua)) return 'tablet';
@@ -104,6 +112,7 @@ function getDeviceType() {
   return 'desktop';
 }
 
+// Read a single URL query parameter by name.
 function getParam(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
