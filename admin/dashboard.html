@@ -107,11 +107,12 @@
 
     .admin-topbar {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 1.2rem 2.5rem;
+      padding: 0.9rem 1.5rem;
       border-bottom: 1px solid rgba(46,95,163,0.15);
-      background: rgba(13,27,46,0.5);
+      background: rgba(13,27,46,0.6);
       position: sticky; top: 0; z-index: 50;
       backdrop-filter: blur(8px);
+      min-height: 56px;
     }
 
     .topbar-title {
@@ -129,22 +130,23 @@
     }
 
     /* ── Page sections ── */
-    .admin-page { display: none; padding: 2.5rem; }
+    .admin-page { display: none; padding: 1.5rem; }
     .admin-page.active { display: block; }
 
     /* ── Stat cards ── */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 1.2rem; margin-bottom: 2.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem; margin-bottom: 1.5rem;
     }
 
     .stat-card {
       background: rgba(27,42,74,0.4);
       border: 1px solid rgba(91,141,217,0.18);
-      border-radius: 4px; padding: 1.5rem;
+      border-radius: 4px; padding: 1.2rem;
       position: relative; overflow: hidden;
       transition: border-color var(--transition);
+      min-width: 0;
     }
 
     .stat-card:hover { border-color: rgba(91,141,217,0.35); }
@@ -160,8 +162,8 @@
     .stat-card.warning::before { background: #F57F17; }
 
     .stat-icon { font-size: 1.5rem; margin-bottom: 0.8rem; }
-    .stat-value { font-family: var(--font-serif); font-size: 2.2rem; font-weight: 300; color: var(--cream); line-height: 1; margin-bottom: 0.3rem; }
-    .stat-label { font-size: 0.68rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); }
+    .stat-value { font-family: var(--font-serif); font-size: 1.8rem; font-weight: 300; color: var(--cream); line-height: 1; margin-bottom: 0.3rem; }
+    .stat-label { font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .stat-change { font-size: 0.72rem; color: #81C784; margin-top: 0.5rem; }
 
     /* ── Content grid ── */
@@ -171,7 +173,8 @@
       gap: 1.5rem;
     }
 
-    .content-grid.wide { grid-template-columns: 2fr 1fr; }
+    .content-grid.wide { grid-template-columns: minmax(0,2fr) minmax(0,1fr); }
+    @media (max-width: 1000px) { .content-grid.wide { grid-template-columns: 1fr; } }
 
     /* ── Panel ── */
     .panel {
