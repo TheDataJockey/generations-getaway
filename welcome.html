@@ -433,14 +433,41 @@
     .logout-btn:hover { border-color: var(--blue-light); color: var(--sky); }
 
     /* ── Responsive ── */
+    /* ── Tablet ── */
+    @media (max-width: 900px) {
+      .portal-tabs { overflow-x: auto; scrollbar-width: none; }
+      .portal-tabs::-webkit-scrollbar { display: none; }
+      .portal-tab { font-size: 0.62rem; padding: 0.9rem 1.2rem; white-space: nowrap; }
+      .portal-content { padding: 2rem 1.5rem 4rem; }
+      .checklist-item { font-size: 0.8rem; }
+      .chat-messages { height: 280px; }
+    }
+    /* ── Mobile ── */
     @media (max-width: 640px) {
-      .login-card { padding: 2rem 1.5rem; }
-      .portal-header { padding: 6rem 1.5rem 3rem; }
+      .login-card { padding: 2rem 1.2rem; }
+      .login-logo { width: 80px; height: 80px; }
+      .login-title { font-size: 1.6rem; }
+      .pin-digit { width: 50px; height: 58px; font-size: 1.3rem; }
+      .portal-header { padding: 5rem 1.2rem 2.5rem; }
+      .welcome-greeting { font-size: clamp(1.6rem, 6vw, 2.5rem); }
+      .welcome-note { font-size: 0.82rem; }
       .stay-dates { flex-direction: column; width: 100%; }
       .stay-date-block + .stay-date-block { border-left: none; border-top: 1px solid rgba(91,141,217,0.3); }
-      .info-row { flex-direction: column; }
+      .nights-badge { font-size: 0.65rem; }
+      .portal-tab { font-size: 0.58rem; padding: 0.8rem 0.9rem; }
+      .info-card-header { padding: 1rem 1.2rem; }
+      .info-card-title { font-size: 1.1rem; }
+      .info-card.open .info-card-body { padding: 1.2rem; }
+      .info-row { flex-direction: column; gap: 0.3rem; }
       .info-row-value { text-align: left; }
-      .portal-content { padding: 2rem 1rem 4rem; }
+      .info-row-value.pin { font-size: 1.2rem; letter-spacing: 0.2em; }
+      .rule-item { font-size: 0.8rem; }
+      .portal-content { padding: 1.5rem 1rem 4rem; }
+      .chat-messages { height: 260px; }
+      .chat-msg { max-width: 92%; font-size: 0.8rem; }
+      .review-card { padding: 2rem 1.2rem; }
+      .review-buttons { flex-direction: column; }
+      .review-buttons .btn { width: 100%; justify-content: center; }
     }
   </style>
 </head>
