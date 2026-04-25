@@ -15,7 +15,12 @@
 import { validateAdminToken, extractToken } from './dashboard.js';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', 'https://www.generationsgetawayfl.com');
+  // Allow both www and non-www
+  const origin = req.headers.origin || '';
+  if (origin.includes('generationsgetawayfl.com') || origin.includes('localhost') || origin.includes('vercel.app')) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
@@ -34,9 +39,9 @@ export default async function handler(req, res) {
     }
 
     // ── Format dates for the AI ──
-    const fmtDate = (d) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', {{
+    const fmtDate = (d) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', {
       weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
-    }});
+    });
 
     const nights = Math.round(
       (new Date(check_out) - new Date(check_in)) / 86400000
