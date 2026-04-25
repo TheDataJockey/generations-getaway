@@ -1,6 +1,7 @@
 {
   "buildCommand": "npm install",
   "outputDirectory": ".",
+  "trailingSlash": false,
   "headers": [
     {
       "source": "/(.*)",
@@ -16,5 +17,9 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    { "source": "/admin", "destination": "/admin/login.html" },
+    { "source": "/admin/", "destination": "/admin/login.html" }
   ]
 }
