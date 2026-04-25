@@ -490,6 +490,13 @@
       display: flex; justify-content: flex-end; gap: 0.8rem;
     }
 
+    /* ── Mobile sidebar toggle ── */
+    .sidebar-mobile-toggle { display: none; }
+    #sidebarToggle { display: none; }
+    @media (max-width: 768px) {
+      #sidebarToggle { display: flex !important; }
+    }
+
     /* ── Responsive ── */
     @media (max-width: 900px) {
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -579,7 +586,14 @@
 
     <!-- Top bar -->
     <div class="admin-topbar">
-      <h1 class="topbar-title" id="pageTitle"><em>Dashboard</em></h1>
+      <div style="display:flex;align-items:center;gap:0.8rem;">
+        <!-- Mobile hamburger -->
+        <button id="sidebarToggle" aria-label="Toggle sidebar"
+          style="display:none;background:none;border:1px solid rgba(91,141,217,0.25);color:var(--sky);width:34px;height:34px;border-radius:3px;cursor:pointer;font-size:1.1rem;align-items:center;justify-content:center;flex-shrink:0;">
+          ☰
+        </button>
+        <h1 class="topbar-title" id="pageTitle"><em>Dashboard</em></h1>
+      </div>
       <div class="topbar-actions">
         <span class="topbar-time" id="currentTime"></span>
         <button class="btn btn-primary" id="topbarAction"
@@ -1813,6 +1827,35 @@
         timer = setTimeout(() => fn(...args), delay);
       };
     }
+
+    // ── Mobile sidebar toggle ──
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const adminSidebar  = document.getElementById('adminSidebar');
+
+    if (sidebarToggle) {
+      sidebarToggle.addEventListener('click', () => {
+        adminSidebar.classList.toggle('open');
+      });
+    }
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', (e) => {
+      if (window.innerWidth <= 768 &&
+          adminSidebar.classList.contains('open') &&
+          !adminSidebar.contains(e.target) &&
+          e.target !== sidebarToggle) {
+        adminSidebar.classList.remove('open');
+      }
+    });
+
+    // Close sidebar after nav item click on mobile
+    document.querySelectorAll('.nav-item[data-page]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (window.innerWidth <= 768) {
+          adminSidebar.classList.remove('open');
+        }
+      });
+    });
 
     // ── Init ──
     loadAdminInfo();
