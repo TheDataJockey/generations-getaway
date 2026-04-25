@@ -191,7 +191,7 @@
       credBtn.disabled = true;
       credBtn.textContent = 'Verifying...';
       try {
-        const res  = await fetch('/api/admin-auth/credentials', {
+        const res  = await fetch('/api/admin-auth?step=credentials', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
@@ -233,7 +233,7 @@
       totpBtn.textContent = 'Verifying...';
       alertBox.innerHTML = '';
       try {
-        const res  = await fetch('/api/admin-auth/totp', {
+        const res  = await fetch('/api/admin-auth?step=totp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: adminEmail, code }),
