@@ -1,0 +1,1752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="robots" content="noindex, nofollow"/>
+  <title>Admin Dashboard — Generations Getaway LLC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/css/styles.css"/>
+  <style>
+    /* ── Admin Layout ── */
+    body { background: #080f1a; }
+
+    .admin-layout {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    .admin-sidebar {
+      background: rgba(13,27,46,0.98);
+      border-right: 1px solid rgba(46,95,163,0.2);
+      display: flex; flex-direction: column;
+      position: fixed; top: 0; left: 0;
+      width: 240px; height: 100vh;
+      overflow-y: auto; z-index: 100;
+    }
+
+    .sidebar-brand {
+      display: flex; align-items: center; gap: 0.8rem;
+      padding: 1.5rem 1.5rem 1.2rem;
+      border-bottom: 1px solid rgba(46,95,163,0.2);
+    }
+
+    .sidebar-logo { width: 36px; height: 36px; object-fit: contain; }
+
+    .sidebar-name {
+      font-family: var(--font-serif); font-size: 0.9rem;
+      font-weight: 300; letter-spacing: 0.1em;
+      color: var(--sky); line-height: 1.3;
+    }
+
+    .sidebar-nav { flex: 1; padding: 1rem 0; }
+
+    .nav-section-label {
+      font-size: 0.58rem; letter-spacing: 0.3em;
+      text-transform: uppercase; color: var(--muted);
+      padding: 0.8rem 1.5rem 0.4rem;
+    }
+
+    .nav-item {
+      display: flex; align-items: center; gap: 0.7rem;
+      padding: 0.7rem 1.5rem; cursor: pointer;
+      font-size: 0.75rem; letter-spacing: 0.08em;
+      color: rgba(164,196,224,0.7);
+      transition: background var(--transition), color var(--transition);
+      border: none; background: none; width: 100%;
+      text-align: left; text-decoration: none;
+      font-family: var(--font-sans);
+    }
+
+    .nav-item:hover { background: rgba(46,95,163,0.1); color: var(--cream); }
+    .nav-item.active { background: rgba(46,95,163,0.18); color: var(--sky); }
+    .nav-item.active .nav-icon { color: var(--blue-light); }
+
+    .nav-icon { font-size: 1rem; width: 20px; text-align: center; flex-shrink: 0; }
+
+    .nav-badge {
+      margin-left: auto; padding: 0.15rem 0.5rem;
+      background: var(--blue); color: white;
+      font-size: 0.6rem; border-radius: 100px;
+      min-width: 18px; text-align: center;
+    }
+
+    .nav-badge.urgent { background: #C62828; }
+
+    .sidebar-footer {
+      padding: 1rem 1.5rem;
+      border-top: 1px solid rgba(46,95,163,0.2);
+    }
+
+    .admin-user-info {
+      display: flex; align-items: center; gap: 0.7rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .admin-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: rgba(46,95,163,0.3);
+      border: 1px solid var(--blue);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; color: var(--sky); flex-shrink: 0;
+    }
+
+    .admin-name { font-size: 0.75rem; color: var(--cream); }
+    .admin-role { font-size: 0.62rem; color: var(--muted); letter-spacing: 0.08em; }
+
+    /* ── Main Content ── */
+    .admin-main {
+      margin-left: 240px;
+      min-height: 100vh;
+      background: #080f1a;
+    }
+
+    .admin-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.2rem 2.5rem;
+      border-bottom: 1px solid rgba(46,95,163,0.15);
+      background: rgba(13,27,46,0.5);
+      position: sticky; top: 0; z-index: 50;
+      backdrop-filter: blur(8px);
+    }
+
+    .topbar-title {
+      font-family: var(--font-serif); font-size: 1.6rem;
+      font-weight: 300; color: var(--cream);
+    }
+
+    .topbar-title em { font-style: italic; color: var(--sky); }
+
+    .topbar-actions { display: flex; gap: 0.8rem; align-items: center; }
+
+    .topbar-time {
+      font-size: 0.72rem; color: var(--muted);
+      letter-spacing: 0.1em;
+    }
+
+    /* ── Page sections ── */
+    .admin-page { display: none; padding: 2.5rem; }
+    .admin-page.active { display: block; }
+
+    /* ── Stat cards ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.2rem; margin-bottom: 2.5rem;
+    }
+
+    .stat-card {
+      background: rgba(27,42,74,0.4);
+      border: 1px solid rgba(91,141,217,0.18);
+      border-radius: 4px; padding: 1.5rem;
+      position: relative; overflow: hidden;
+      transition: border-color var(--transition);
+    }
+
+    .stat-card:hover { border-color: rgba(91,141,217,0.35); }
+
+    .stat-card::before {
+      content: ''; position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: var(--blue);
+    }
+
+    .stat-card.urgent::before { background: #C62828; }
+    .stat-card.success::before { background: #2E7D32; }
+    .stat-card.warning::before { background: #F57F17; }
+
+    .stat-icon { font-size: 1.5rem; margin-bottom: 0.8rem; }
+    .stat-value { font-family: var(--font-serif); font-size: 2.2rem; font-weight: 300; color: var(--cream); line-height: 1; margin-bottom: 0.3rem; }
+    .stat-label { font-size: 0.68rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); }
+    .stat-change { font-size: 0.72rem; color: #81C784; margin-top: 0.5rem; }
+
+    /* ── Content grid ── */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    .content-grid.wide { grid-template-columns: 2fr 1fr; }
+
+    /* ── Panel ── */
+    .panel {
+      background: rgba(27,42,74,0.4);
+      border: 1px solid rgba(91,141,217,0.18);
+      border-radius: 4px; overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.2rem 1.5rem;
+      border-bottom: 1px solid rgba(91,141,217,0.15);
+    }
+
+    .panel-title {
+      font-family: var(--font-serif); font-size: 1.1rem; font-weight: 300;
+    }
+
+    .panel-body { padding: 1.5rem; }
+    .panel-body.no-pad { padding: 0; }
+
+    /* ── Table ── */
+    .admin-table { width: 100%; border-collapse: collapse; }
+
+    .admin-table th {
+      font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--muted); padding: 0.8rem 1.5rem;
+      border-bottom: 1px solid rgba(91,141,217,0.15);
+      text-align: left; white-space: nowrap;
+    }
+
+    .admin-table td {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid rgba(91,141,217,0.08);
+      font-size: 0.82rem; color: rgba(164,196,224,0.85);
+      vertical-align: middle;
+    }
+
+    .admin-table tr:last-child td { border-bottom: none; }
+    .admin-table tr:hover td { background: rgba(46,95,163,0.06); }
+
+    /* ── Status badges ── */
+    .status {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.2rem 0.7rem; border-radius: 100px;
+      font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase;
+      border: 1px solid;
+    }
+
+    .status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    .status-inquiry   { color: #FFD54F; border-color: rgba(255,213,79,0.3);  background: rgba(255,213,79,0.08);  }
+    .status-confirmed { color: #81C784; border-color: rgba(129,199,132,0.3); background: rgba(129,199,132,0.08); }
+    .status-completed { color: var(--muted); border-color: rgba(122,144,174,0.3); background: rgba(122,144,174,0.08); }
+    .status-cancelled { color: #EF9A9A; border-color: rgba(239,154,154,0.3); background: rgba(239,154,154,0.08); }
+
+    /* ── Action buttons ── */
+    .action-btn {
+      padding: 0.3rem 0.8rem;
+      font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase;
+      border-radius: 3px; cursor: pointer;
+      font-family: var(--font-sans);
+      transition: background var(--transition), color var(--transition);
+      border: 1px solid;
+    }
+
+    .action-btn-approve {
+      background: rgba(46,125,50,0.15); color: #81C784;
+      border-color: rgba(46,125,50,0.3);
+    }
+    .action-btn-approve:hover { background: rgba(46,125,50,0.3); }
+
+    .action-btn-decline {
+      background: rgba(198,40,40,0.1); color: #EF9A9A;
+      border-color: rgba(198,40,40,0.25);
+    }
+    .action-btn-decline:hover { background: rgba(198,40,40,0.25); }
+
+    .action-btn-view {
+      background: rgba(46,95,163,0.15); color: var(--sky);
+      border-color: rgba(46,95,163,0.3);
+    }
+    .action-btn-view:hover { background: rgba(46,95,163,0.3); }
+
+    /* ── Guest form ── */
+    .guest-form { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+    .guest-form .full { grid-column: 1 / -1; }
+
+    .notes-tabs { display: flex; gap: 0; border-bottom: 1px solid rgba(91,141,217,0.15); margin-bottom: 1.2rem; }
+    .notes-tab {
+      padding: 0.6rem 1rem; font-size: 0.65rem; letter-spacing: 0.15em;
+      text-transform: uppercase; color: var(--muted); cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color var(--transition), border-color var(--transition);
+      background: none; border-top: none; border-left: none; border-right: none;
+      font-family: var(--font-sans);
+    }
+    .notes-tab.active { color: var(--sky); border-bottom-color: var(--blue-light); }
+    .notes-panel { display: none; }
+    .notes-panel.active { display: block; }
+
+    /* ── Calendar ── */
+    .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; }
+    .cal-nav { display: flex; gap: 0.5rem; }
+    .cal-nav-btn {
+      width: 32px; height: 32px; border-radius: 3px;
+      background: rgba(46,95,163,0.15); border: 1px solid rgba(46,95,163,0.3);
+      color: var(--sky); cursor: pointer; display: flex; align-items: center;
+      justify-content: center; font-size: 0.8rem;
+      transition: background var(--transition);
+    }
+    .cal-nav-btn:hover { background: rgba(46,95,163,0.3); }
+    .cal-month-title { font-family: var(--font-serif); font-size: 1.2rem; font-weight: 300; }
+
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .cal-dow {
+      text-align: center; font-size: 0.6rem; letter-spacing: 0.15em;
+      text-transform: uppercase; color: var(--muted); padding: 0.5rem 0;
+    }
+    .cal-day {
+      aspect-ratio: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: flex-start; padding: 0.3rem;
+      border-radius: 3px; cursor: pointer; position: relative;
+      font-size: 0.78rem; color: rgba(164,196,224,0.7);
+      transition: background var(--transition);
+    }
+    .cal-day:hover { background: rgba(46,95,163,0.12); }
+    .cal-day.today { color: var(--sky); font-weight: 500; }
+    .cal-day.today::after {
+      content: ''; position: absolute; bottom: 4px;
+      width: 4px; height: 4px; border-radius: 50%; background: var(--blue-light);
+    }
+    .cal-day.booked { background: rgba(46,125,50,0.15); color: #81C784; }
+    .cal-day.inquiry { background: rgba(255,213,79,0.1); color: #FFD54F; }
+    .cal-day.blocked { background: rgba(198,40,40,0.1); color: #EF9A9A; }
+    .cal-day.other-month { opacity: 0.3; }
+
+    /* ── Knowledge base ── */
+    .kb-item {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid rgba(91,141,217,0.1);
+      display: grid; grid-template-columns: 1fr auto;
+      gap: 1rem; align-items: center;
+    }
+    .kb-item:last-child { border-bottom: none; }
+    .kb-question { font-size: 0.83rem; color: var(--cream); margin-bottom: 0.25rem; }
+    .kb-category { font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--blue-light); }
+
+    /* ── Chat escalations ── */
+    .chat-item {
+      padding: 1.2rem 1.5rem;
+      border-bottom: 1px solid rgba(91,141,217,0.1);
+    }
+    .chat-item:last-child { border-bottom: none; }
+    .chat-item-header { display: flex; justify-content: space-between; margin-bottom: 0.5rem; }
+    .chat-guest { font-size: 0.78rem; color: var(--sky); font-weight: 500; }
+    .chat-time  { font-size: 0.7rem; color: var(--muted); }
+    .chat-question { font-size: 0.82rem; color: rgba(164,196,224,0.85); line-height: 1.6; margin-bottom: 0.6rem; }
+    .chat-actions { display: flex; gap: 0.5rem; }
+
+    /* ── Event source toggles ── */
+    .source-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid rgba(91,141,217,0.1);
+    }
+    .source-row:last-child { border-bottom: none; }
+    .source-info { display: flex; align-items: center; gap: 0.8rem; }
+    .source-icon { font-size: 1.1rem; width: 28px; text-align: center; }
+    .source-name { font-size: 0.83rem; color: var(--cream); }
+    .source-meta { font-size: 0.7rem; color: var(--muted); }
+    .source-stats { text-align: right; }
+    .source-count { font-size: 0.82rem; color: var(--sky); }
+    .source-synced { font-size: 0.68rem; color: var(--muted); }
+
+    /* ── Toggle switch ── */
+    .toggle-wrap { display: flex; align-items: center; gap: 0.6rem; }
+    .toggle {
+      position: relative; width: 40px; height: 22px;
+      cursor: pointer;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0;
+      background: rgba(91,141,217,0.2);
+      border-radius: 22px; border: 1px solid rgba(91,141,217,0.3);
+      transition: background 0.3s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--muted); top: 2px; left: 2px;
+      transition: transform 0.3s, background 0.3s;
+    }
+    .toggle input:checked + .toggle-slider { background: rgba(46,125,50,0.3); border-color: #388E3C; }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(18px); background: #81C784; }
+    .toggle-label { font-size: 0.68rem; color: var(--muted); }
+
+    /* ── AI generate button ── */
+    .ai-btn {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.4rem 0.9rem; font-size: 0.65rem; letter-spacing: 0.12em;
+      text-transform: uppercase; border-radius: 3px; cursor: pointer;
+      font-family: var(--font-sans);
+      background: rgba(91,141,217,0.12);
+      border: 1px solid rgba(91,141,217,0.25);
+      color: var(--sky);
+      transition: background var(--transition);
+    }
+    .ai-btn:hover { background: rgba(91,141,217,0.25); }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      background: rgba(8,15,26,0.85); backdrop-filter: blur(4px);
+      align-items: center; justify-content: center; padding: 2rem;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--navy); border: 1px solid rgba(91,141,217,0.25);
+      border-radius: 4px; width: 100%; max-width: 680px;
+      max-height: 85vh; overflow-y: auto;
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid rgba(91,141,217,0.15);
+      position: sticky; top: 0; background: var(--navy); z-index: 1;
+    }
+    .modal-title { font-family: var(--font-serif); font-size: 1.4rem; font-weight: 300; }
+    .modal-close {
+      width: 32px; height: 32px; border-radius: 3px; background: none;
+      border: 1px solid rgba(91,141,217,0.2); color: var(--muted);
+      cursor: pointer; font-size: 1rem; display: flex;
+      align-items: center; justify-content: center;
+      transition: border-color var(--transition), color var(--transition);
+    }
+    .modal-close:hover { border-color: var(--blue-light); color: var(--sky); }
+    .modal-body { padding: 2rem; }
+    .modal-footer {
+      padding: 1.2rem 2rem;
+      border-top: 1px solid rgba(91,141,217,0.15);
+      display: flex; justify-content: flex-end; gap: 0.8rem;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1100px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .content-grid, .content-grid.wide { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      .admin-sidebar { transform: translateX(-100%); transition: transform 0.3s; }
+      .admin-sidebar.open { transform: translateX(0); }
+      .admin-main { margin-left: 0; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .guest-form { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+
+  <!-- ══════════════════════════════════
+       SIDEBAR
+       ══════════════════════════════════ -->
+  <aside class="admin-sidebar" id="adminSidebar" role="navigation" aria-label="Admin navigation">
+    <div class="sidebar-brand">
+      <img src="data:image/png;base64,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AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFz6f6cTN7g8BoKyAAAAAElFTkSuQmCC" alt="Logo" class="sidebar-logo"/>
+      <div class="sidebar-name">Generations<br/>Getaway LLC</div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Overview</div>
+      <button class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">📊</span> Dashboard
+      </button>
+
+      <div class="nav-section-label">Bookings</div>
+      <button class="nav-item" data-page="bookings">
+        <span class="nav-icon">📅</span> All Bookings
+        <span class="nav-badge urgent" id="inquiryBadge">0</span>
+      </button>
+      <button class="nav-item" data-page="calendar">
+        <span class="nav-icon">🗓</span> Calendar
+      </button>
+
+      <div class="nav-section-label">Guests</div>
+      <button class="nav-item" data-page="guests">
+        <span class="nav-icon">👤</span> Guest List
+      </button>
+      <button class="nav-item" data-page="add-guest">
+        <span class="nav-icon">➕</span> Add Guest
+      </button>
+
+      <div class="nav-section-label">Content</div>
+      <button class="nav-item" data-page="knowledge">
+        <span class="nav-icon">📚</span> Knowledge Base
+      </button>
+      <button class="nav-item" data-page="chat-log">
+        <span class="nav-icon">💬</span> Chat Log
+        <span class="nav-badge" id="chatBadge">0</span>
+      </button>
+      <button class="nav-item" data-page="events">
+        <span class="nav-icon">🎉</span> Event Sources
+      </button>
+
+      <div class="nav-section-label">System</div>
+      <button class="nav-item" data-page="admin-users">
+        <span class="nav-icon">🔐</span> Admin Users
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="admin-user-info">
+        <div class="admin-avatar" id="adminInitials">KY</div>
+        <div>
+          <div class="admin-name" id="adminName">Loading...</div>
+          <div class="admin-role" id="adminRole">—</div>
+        </div>
+      </div>
+      <button class="btn btn-ghost" id="logoutBtn"
+        style="width:100%;font-size:0.65rem;padding:0.5rem;">
+        Sign Out
+      </button>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════════════════
+       MAIN CONTENT
+       ══════════════════════════════════ -->
+  <main class="admin-main" id="adminMain">
+
+    <!-- Top bar -->
+    <div class="admin-topbar">
+      <h1 class="topbar-title" id="pageTitle">
+        <em>Dashboard</em>
+      </h1>
+      <div class="topbar-actions">
+        <span class="topbar-time" id="currentTime"></span>
+        <button class="btn btn-primary" id="topbarAction"
+          style="font-size:0.65rem;padding:0.5rem 1.2rem;"
+          onclick="showPage('add-guest')">
+          + Add Guest
+        </button>
+      </div>
+    </div>
+
+    <div id="alertBanner" role="alert" aria-live="polite" style="padding:0 2.5rem;margin-top:1rem;"></div>
+
+    <!-- ═══════════════════════════════
+         PAGE: DASHBOARD
+         ═══════════════════════════════ -->
+    <div class="admin-page active" id="page-dashboard">
+
+      <div class="stats-grid">
+        <div class="stat-card urgent">
+          <div class="stat-icon">📬</div>
+          <div class="stat-value" id="statInquiries">0</div>
+          <div class="stat-label">Pending Inquiries</div>
+        </div>
+        <div class="stat-card success">
+          <div class="stat-icon">✅</div>
+          <div class="stat-value" id="statConfirmed">0</div>
+          <div class="stat-label">Confirmed Bookings</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">👥</div>
+          <div class="stat-value" id="statGuests">0</div>
+          <div class="stat-label">Total Guests</div>
+        </div>
+        <div class="stat-card warning">
+          <div class="stat-icon">💬</div>
+          <div class="stat-value" id="statChats">0</div>
+          <div class="stat-label">Unanswered Chats</div>
+        </div>
+      </div>
+
+      <div class="content-grid wide">
+        <!-- Recent bookings -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Recent Bookings</span>
+            <button class="action-btn action-btn-view" onclick="showPage('bookings')">View All</button>
+          </div>
+          <div class="panel-body no-pad">
+            <table class="admin-table" id="recentBookingsTable">
+              <thead>
+                <tr>
+                  <th>Guest</th>
+                  <th>Check-In</th>
+                  <th>Check-Out</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="recentBookingsBody">
+                <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Unanswered chats -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Needs Follow-Up</span>
+            <button class="action-btn action-btn-view" onclick="showPage('chat-log')">View All</button>
+          </div>
+          <div class="panel-body no-pad" id="chatEscalations">
+            <div style="text-align:center;color:var(--muted);padding:2rem;font-size:0.82rem;">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════
+         PAGE: BOOKINGS
+         ═══════════════════════════════ -->
+    <div class="admin-page" id="page-bookings">
+      <div style="display:flex;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+        <input type="text" class="form-control" id="bookingSearch"
+          placeholder="Search by guest name..." style="max-width:280px;"/>
+        <select class="form-control" id="bookingFilter" style="max-width:180px;">
+          <option value="">All Statuses</option>
+          <option value="inquiry">Inquiry</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div class="panel">
+        <div class="panel-body no-pad">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Guest</th>
+                <th>Check-In</th>
+                <th>Check-Out</th>
+                <th>Nights</th>
+                <th>Guests</th>
+                <th>Source</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="allBookingsBody">
+              <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════
+         PAGE: CALENDAR
+         ═══════════════════════════════ -->
+    <div class="admin-page" id="page-calendar">
+      <div class="panel">
+        <div class="panel-body">
+          <div class="cal-header">
+            <div class="cal-month-title" id="calMonthTitle">Loading...</div>
+            <div class="cal-nav">
+              <button class="cal-nav-btn" id="calPrev" aria-label="Previous month">&larr;</button>
+              <button class="cal-nav-btn" id="calToday" style="width:auto;padding:0 0.8rem;font-size:0.65rem;">Today</button>
+              <button class="cal-nav-btn" id="calNext" aria-label="Next month">&rarr;</button>
+            </div>
+          </div>
+          <div class="cal-grid" id="calGrid">
+            <div class="cal-dow">Sun</div>
+            <div class="cal-dow">Mon</div>
+            <div class="cal-dow">Tue</div>
+            <div class="cal-dow">Wed</div>
+            <div class="cal-dow">Thu</div>
+            <div class="cal-dow">Fri</div>
+            <div class="cal-dow">Sat</div>
+          </div>
+          <div style="display:flex;gap:1.5rem;margin-top:1.2rem;font-size:0.72rem;color:var(--muted);">
+            <span style="display:flex;align-items:center;gap:0.4rem;"><span style="width:10px;height:10px;border-radius:2px;background:rgba(129,199,132,0.3);display:inline-block;"></span>Confirmed</span>
+            <span style="display:flex;align-items:center;gap:0.4rem;"><span style="width:10px;height:10px;border-radius:2px;background:rgba(255,213,79,0.2);display:inline-block;"></span>Inquiry</span>
+            <span style="display:flex;align-items:center;gap:0.4rem;"><span style="width:10px;height:10px;border-radius:2px;background:rgba(239,154,154,0.2);display:inline-block;"></span>Blocked</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════
+         PAGE: GUEST LIST
+         ═══════════════════════════════ -->
+    <div class="admin-page" id="page-guests">
+      <div style="display:flex;gap:1rem;margin-bottom:1.5rem;">
+        <input type="text" class="form-control" id="guestSearch"
+          placeholder="Search guests..." style="max-width:300px;"/>
+        <select class="form-control" id="guestFilter" style="max-width:180px;">
+          <option value="">All Guests</option>
+          <option value="vip">VIP</option>
+          <option value="blacklisted">Blacklisted</option>
+        </select>
+      </div>
+      <div class="panel">
+        <div class="panel-body no-pad">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Stays</th>
+                <th>Last Stay</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="guestListBody">
+              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════
+         PAGE: ADD / EDIT GUEST
+         ═══════════════════════════════ -->
+    <div class="admin-page" id="page-add-guest">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title" id="guestFormTitle">Add New Guest</span>
+          <button class="ai-btn" id="generateWelcomeBtn">✨ Generate Welcome Note</button>
+        </div>
+        <div class="panel-body">
+          <form id="guestForm" novalidate>
+            <input type="hidden" id="guestId"/>
+
+            <!-- Personal Info -->
+            <p class="nav-section-label" style="margin-bottom:1rem;">Personal Information</p>
+            <div class="guest-form" style="margin-bottom:1.5rem;">
+              <div class="form-group">
+                <label for="gFirstName">First Name *</label>
+                <input type="text" id="gFirstName" class="form-control" required/>
+              </div>
+              <div class="form-group">
+                <label for="gLastName">Last Name *</label>
+                <input type="text" id="gLastName" class="form-control" required/>
+              </div>
+              <div class="form-group">
+                <label for="gEmail">Email *</label>
+                <input type="email" id="gEmail" class="form-control" required/>
+              </div>
+              <div class="form-group">
+                <label for="gPhone">Phone</label>
+                <input type="tel" id="gPhone" class="form-control"/>
+              </div>
+              <div class="form-group">
+                <label for="gEmergencyName">Emergency Contact Name</label>
+                <input type="text" id="gEmergencyName" class="form-control"/>
+              </div>
+              <div class="form-group">
+                <label for="gEmergencyPhone">Emergency Contact Phone</label>
+                <input type="tel" id="gEmergencyPhone" class="form-control"/>
+              </div>
+            </div>
+
+            <!-- Booking Details -->
+            <p class="nav-section-label" style="margin-bottom:1rem;">Booking Details</p>
+            <div class="guest-form" style="margin-bottom:1.5rem;">
+              <div class="form-group">
+                <label for="gCheckIn">Check-In Date *</label>
+                <input type="date" id="gCheckIn" class="form-control" required/>
+              </div>
+              <div class="form-group">
+                <label for="gCheckOut">Check-Out Date *</label>
+                <input type="date" id="gCheckOut" class="form-control" required/>
+              </div>
+              <div class="form-group">
+                <label for="gNumGuests">Number of Guests</label>
+                <select id="gNumGuests" class="form-control">
+                  <option value="1">1</option>
+                  <option value="2" selected>2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="gSource">Booking Source</label>
+                <select id="gSource" class="form-control">
+                  <option value="direct">Direct</option>
+                  <option value="airbnb">Airbnb</option>
+                  <option value="vrbo">VRBO</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="gPin">Door PIN Code *</label>
+                <input type="text" id="gPin" class="form-control"
+                  maxlength="4" pattern="[0-9]{4}"
+                  placeholder="4 digits" required/>
+              </div>
+              <div class="form-group">
+                <label for="gNightlyRate">Nightly Rate ($)</label>
+                <input type="number" id="gNightlyRate" class="form-control" min="0" step="0.01"/>
+              </div>
+            </div>
+
+            <!-- Welcome Note -->
+            <p class="nav-section-label" style="margin-bottom:0.5rem;">Welcome Note</p>
+            <div class="form-group full" style="margin-bottom:1.5rem;">
+              <div id="welcomeNoteAlert" style="margin-bottom:0.5rem;"></div>
+              <textarea id="gWelcomeNote" class="form-control" rows="4"
+                placeholder="Write a personalized welcome message for this guest, or click Generate above..."></textarea>
+            </div>
+
+            <!-- Notes -->
+            <p class="nav-section-label" style="margin-bottom:1rem;">Notes</p>
+            <div class="notes-tabs" role="tablist">
+              <button type="button" class="notes-tab active" data-notes="guest">Guest</button>
+              <button type="button" class="notes-tab" data-notes="maintenance">Maintenance</button>
+              <button type="button" class="notes-tab" data-notes="payment">Payment</button>
+              <button type="button" class="notes-tab" data-notes="access">Access</button>
+              <button type="button" class="notes-tab" data-notes="review">Review</button>
+              <button type="button" class="notes-tab" data-notes="general">General</button>
+            </div>
+            <div class="notes-panel active" id="notes-guest">
+              <textarea id="gGuestNotes" class="form-control" rows="3" placeholder="Guest behavior, preferences, VIP notes..."></textarea>
+            </div>
+            <div class="notes-panel" id="notes-maintenance">
+              <textarea id="gMaintenanceNotes" class="form-control" rows="3" placeholder="Issues reported, repairs needed..."></textarea>
+            </div>
+            <div class="notes-panel" id="notes-payment">
+              <textarea id="gPaymentNotes" class="form-control" rows="3" placeholder="Payment status, disputes, late payments..."></textarea>
+            </div>
+            <div class="notes-panel" id="notes-access">
+              <textarea id="gAccessNotes" class="form-control" rows="3" placeholder="Lockouts, lost keys, access issues..."></textarea>
+            </div>
+            <div class="notes-panel" id="notes-review">
+              <textarea id="gReviewNotes" class="form-control" rows="3" placeholder="Their review, your private notes..."></textarea>
+            </div>
+            <div class="notes-panel" id="notes-general">
+              <textarea id="gGeneralNotes" class="form-control" rows="3" placeholder="Anything else..."></textarea>
+            </div>
+
+            <div style="display:flex;gap:1rem;margin-top:2rem;justify-content:flex-end;" id="guestFormAlert"></div>
+            <div style="display:flex;gap:1rem;justify-content:flex-end;margin-top:1rem;">
+              <button type="button" class="btn btn-ghost" onclick="showPage('guests')">Cancel</button>
+              <button type="submit" class="btn btn-primary" id="saveGuestBtn">Save Guest</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════
+         PAGE: KNOWLEDGE BASE
+         ═══════════════════════════════ -->
+    <div class="admin-page" id="page-knowledge">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:1.2rem;">
+        <button class="btn btn-primary" id="addKbBtn" style="font-size:0.65rem;">+ Add Entry</button>
+      </div>
+      <div class="panel">
+        <div class="panel-body no-pad" id="kbList">
+          <div style="text-align:center;color:var(--muted);padding:2rem;">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════
+         PAGE: CHAT LOG
+         ═══════════════════════════════ -->
+    <div class="admin-page" id="page-chat-log">
+      <div style="display:flex;gap:1rem;margin-bottom:1.5rem;">
+        <select class="form-control" id="chatFilter" style="max-width:200px;">
+          <option value="">All Messages</option>
+          <option value="escalated">Needs Follow-Up</option>
+          <option value="resolved">Resolved</option>
+        </select>
+      </div>
+      <div class="panel">
+        <div class="panel-body no-pad" id="chatLogList">
+          <div style="text-align:center;color:var(--muted);padding:2rem;">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════
+         PAGE: EVENT SOURCES
+         ═══════════════════════════════ -->
+    <div class="admin-page" id="page-events">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Event Source Controls</span>
+          <button class="action-btn action-btn-view" id="syncAllBtn">↻ Sync All Active</button>
+        </div>
+        <div class="panel-body no-pad" id="eventSourceList">
+          <div style="text-align:center;color:var(--muted);padding:2rem;">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════
+         PAGE: ADMIN USERS
+         ═══════════════════════════════ -->
+    <div class="admin-page" id="page-admin-users">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:1.2rem;">
+        <button class="btn btn-primary" id="addAdminBtn" style="font-size:0.65rem;">+ Add Admin User</button>
+      </div>
+      <div class="panel">
+        <div class="panel-body no-pad">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>2FA</th>
+                <th>Last Login</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="adminUsersList">
+              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ═══════════════════════════════
+     BOOKING DETAIL MODAL
+     ═══════════════════════════════ -->
+<div class="modal-overlay" id="bookingModal" role="dialog" aria-modal="true" aria-labelledby="bookingModalTitle">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="bookingModalTitle">Booking Details</h2>
+      <button class="modal-close" id="closeBookingModal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body" id="bookingModalBody">Loading...</div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="declineBookingBtn">Decline</button>
+      <button class="btn btn-primary" id="approveBookingBtn">Approve Booking</button>
+    </div>
+  </div>
+</div>
+
+<!-- KB Entry Modal -->
+<div class="modal-overlay" id="kbModal" role="dialog" aria-modal="true" aria-labelledby="kbModalTitle">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="kbModalTitle">Add Knowledge Base Entry</h2>
+      <button class="modal-close" id="closeKbModal" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:1.2rem;">
+        <input type="hidden" id="kbId"/>
+        <div class="form-group">
+          <label for="kbCategory">Category</label>
+          <select id="kbCategory" class="form-control">
+            <option value="house_rules">House Rules</option>
+            <option value="pool_spa">Pool &amp; Spa</option>
+            <option value="appliances">Appliances</option>
+            <option value="parking">Parking</option>
+            <option value="wifi_tech">WiFi &amp; Tech</option>
+            <option value="checkin_checkout">Check-In / Check-Out</option>
+            <option value="emergency">Emergency</option>
+            <option value="pet_policy">Pet Policy</option>
+            <option value="noise_policy">Noise Policy</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="kbQuestion">Question</label>
+          <input type="text" id="kbQuestion" class="form-control"
+            placeholder="e.g. How do I turn on the pool heater?"/>
+        </div>
+        <div class="form-group">
+          <label for="kbAnswer">Answer</label>
+          <textarea id="kbAnswer" class="form-control" rows="4"
+            placeholder="The pool heater thermostat is located..."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="kbKeywords">Keywords (comma-separated)</label>
+          <input type="text" id="kbKeywords" class="form-control"
+            placeholder="pool, heater, temperature, heat"/>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="closeKbModal2">Cancel</button>
+      <button class="btn btn-primary" id="saveKbBtn">Save Entry</button>
+    </div>
+  </div>
+</div>
+
+  <script type="module">
+    /**
+     * Admin Dashboard — Main Controller
+     * ====================================
+     * Handles auth guard, navigation, data loading,
+     * CRUD operations for guests/bookings/KB,
+     * calendar rendering, and chat log management.
+     *
+     * All data operations go through /api/admin/* endpoints
+     * which validate the admin session token server-side.
+     */
+
+    // ── Auth guard — redirect if not logged in ──
+    const adminToken = sessionStorage.getItem('gg_admin_token');
+    const adminRole  = sessionStorage.getItem('gg_admin_role');
+    if (!adminToken) window.location.href = '/admin/login.html';
+
+    // ── Live clock ──
+    function updateClock() {
+      document.getElementById('currentTime').textContent =
+        new Date().toLocaleString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric',
+          hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+        });
+    }
+    updateClock();
+    setInterval(updateClock, 60000);
+
+    // ── Auth headers helper ──
+    function authHeaders() {
+      return {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${adminToken}`,
+      };
+    }
+
+    // ── Load admin info ──
+    async function loadAdminInfo() {
+      try {
+        const res  = await fetch('/api/admin/me', { headers: authHeaders() });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById('adminName').textContent =
+            `${data.first_name} ${data.last_name}`;
+          document.getElementById('adminRole').textContent =
+            data.role.replace('_', ' ').toUpperCase();
+          document.getElementById('adminInitials').textContent =
+            `${data.first_name[0]}${data.last_name[0]}`.toUpperCase();
+          // Hide admin users page for non-super-admins
+          if (data.role !== 'super_admin') {
+            document.querySelector('[data-page="admin-users"]')?.remove();
+          }
+        }
+      } catch { /* silently fail */ }
+    }
+
+    // ── Page navigation ──
+    const pageTitles = {
+      dashboard:   '<em>Dashboard</em>',
+      bookings:    'All <em>Bookings</em>',
+      calendar:    'Availability <em>Calendar</em>',
+      guests:      'Guest <em>Management</em>',
+      'add-guest': 'Add New <em>Guest</em>',
+      knowledge:   'Knowledge <em>Base</em>',
+      'chat-log':  'Chat <em>Log</em>',
+      events:      'Event <em>Sources</em>',
+      'admin-users': 'Admin <em>Users</em>',
+    };
+
+    window.showPage = function(pageId) {
+      document.querySelectorAll('.admin-page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.getElementById(`page-${pageId}`)?.classList.add('active');
+      document.querySelector(`[data-page="${pageId}"]`)?.classList.add('active');
+      document.getElementById('pageTitle').innerHTML = pageTitles[pageId] || pageId;
+      loadPageData(pageId);
+    };
+
+    document.querySelectorAll('.nav-item[data-page]').forEach(btn => {
+      btn.addEventListener('click', () => showPage(btn.dataset.page));
+    });
+
+    // ── Load data for each page ──
+    async function loadPageData(page) {
+      switch (page) {
+        case 'dashboard':   await loadDashboard();  break;
+        case 'bookings':    await loadBookings();   break;
+        case 'calendar':    renderCalendar();       break;
+        case 'guests':      await loadGuests();     break;
+        case 'knowledge':   await loadKnowledge();  break;
+        case 'chat-log':    await loadChatLog();    break;
+        case 'events':      await loadEventSources(); break;
+        case 'admin-users': await loadAdminUsers(); break;
+      }
+    }
+
+    // ── DASHBOARD ──
+    async function loadDashboard() {
+      try {
+        const res  = await fetch('/api/admin/dashboard', { headers: authHeaders() });
+        const data = await res.json();
+        if (!res.ok) return;
+
+        document.getElementById('statInquiries').textContent = data.inquiries  || 0;
+        document.getElementById('statConfirmed').textContent = data.confirmed  || 0;
+        document.getElementById('statGuests').textContent    = data.guests     || 0;
+        document.getElementById('statChats').textContent     = data.unanswered || 0;
+        document.getElementById('inquiryBadge').textContent  = data.inquiries  || 0;
+        document.getElementById('chatBadge').textContent     = data.unanswered || 0;
+
+        // Recent bookings table
+        const tbody = document.getElementById('recentBookingsBody');
+        if (data.recent_bookings?.length) {
+          tbody.innerHTML = data.recent_bookings.map(b => `
+            <tr>
+              <td>${b.guest_first} ${b.guest_last}</td>
+              <td>${formatDate(b.check_in_date)}</td>
+              <td>${formatDate(b.check_out_date)}</td>
+              <td><span class="status status-${b.status}">${b.status}</span></td>
+              <td>
+                <button class="action-btn action-btn-view"
+                  onclick="openBookingModal('${b.id}')">View</button>
+                ${b.status === 'inquiry' ? `
+                  <button class="action-btn action-btn-approve"
+                    onclick="updateBookingStatus('${b.id}','confirmed')">Approve</button>
+                  <button class="action-btn action-btn-decline"
+                    onclick="updateBookingStatus('${b.id}','cancelled')">Decline</button>
+                ` : ''}
+              </td>
+            </tr>`).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem;">No bookings yet</td></tr>';
+        }
+
+        // Chat escalations
+        const chatEl = document.getElementById('chatEscalations');
+        if (data.escalations?.length) {
+          chatEl.innerHTML = data.escalations.map(c => `
+            <div class="chat-item">
+              <div class="chat-item-header">
+                <span class="chat-guest">${c.guest_name || 'Guest'}</span>
+                <span class="chat-time">${timeAgo(c.created_at)}</span>
+              </div>
+              <div class="chat-question">${c.question}</div>
+              <div class="chat-actions">
+                <button class="action-btn action-btn-view"
+                  onclick="resolveChat('${c.id}')">Mark Resolved</button>
+                <button class="action-btn action-btn-approve"
+                  onclick="addToKb('${c.question}')">Add to KB</button>
+              </div>
+            </div>`).join('');
+        } else {
+          chatEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;font-size:0.82rem;">No unanswered questions 🎉</div>';
+        }
+
+      } catch (err) {
+        console.error('Dashboard load error:', err);
+      }
+    }
+
+    // ── BOOKINGS ──
+    async function loadBookings() {
+      try {
+        const status = document.getElementById('bookingFilter').value;
+        const search = document.getElementById('bookingSearch').value;
+        const res    = await fetch(
+          `/api/admin/bookings?status=${status}&search=${encodeURIComponent(search)}`,
+          { headers: authHeaders() }
+        );
+        const data = await res.json();
+        const tbody = document.getElementById('allBookingsBody');
+        if (data.bookings?.length) {
+          tbody.innerHTML = data.bookings.map(b => `
+            <tr>
+              <td>${b.guest_first} ${b.guest_last}</td>
+              <td>${formatDate(b.check_in_date)}</td>
+              <td>${formatDate(b.check_out_date)}</td>
+              <td>${b.num_nights || '—'}</td>
+              <td>${b.num_guests || '—'}</td>
+              <td style="text-transform:capitalize;">${b.booking_source || '—'}</td>
+              <td><span class="status status-${b.status}">${b.status}</span></td>
+              <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+                <button class="action-btn action-btn-view"
+                  onclick="openBookingModal('${b.id}')">View</button>
+                ${b.status === 'inquiry' ? `
+                  <button class="action-btn action-btn-approve"
+                    onclick="updateBookingStatus('${b.id}','confirmed')">✓</button>
+                  <button class="action-btn action-btn-decline"
+                    onclick="updateBookingStatus('${b.id}','cancelled')">✗</button>
+                ` : ''}
+              </td>
+            </tr>`).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;">No bookings found</td></tr>';
+        }
+      } catch (err) {
+        console.error('Bookings load error:', err);
+      }
+    }
+
+    // Filter listeners
+    document.getElementById('bookingFilter').addEventListener('change', loadBookings);
+    document.getElementById('bookingSearch').addEventListener('input',
+      debounce(loadBookings, 400));
+
+    // ── CALENDAR ──
+    let calYear  = new Date().getFullYear();
+    let calMonth = new Date().getMonth();
+    let calBookings = [];
+
+    async function renderCalendar() {
+      try {
+        const res  = await fetch(
+          `/api/admin/bookings?year=${calYear}&month=${calMonth + 1}`,
+          { headers: authHeaders() }
+        );
+        const data = await res.json();
+        calBookings = data.bookings || [];
+      } catch { calBookings = []; }
+
+      const months = ['January','February','March','April','May','June',
+                      'July','August','September','October','November','December'];
+      document.getElementById('calMonthTitle').textContent =
+        `${months[calMonth]} ${calYear}`;
+
+      const grid    = document.getElementById('calGrid');
+      const today   = new Date();
+      const firstDay = new Date(calYear, calMonth, 1).getDay();
+      const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+
+      // Remove old day cells (keep header row)
+      grid.querySelectorAll('.cal-day').forEach(d => d.remove());
+
+      // Empty cells before first day
+      for (let i = 0; i < firstDay; i++) {
+        const empty = document.createElement('div');
+        empty.className = 'cal-day other-month';
+        grid.appendChild(empty);
+      }
+
+      // Day cells
+      for (let d = 1; d <= daysInMonth; d++) {
+        const cell  = document.createElement('div');
+        const isToday = today.getDate() === d &&
+                        today.getMonth() === calMonth &&
+                        today.getFullYear() === calYear;
+
+        // Check booking status for this day
+        const dateStr  = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const booking  = calBookings.find(b =>
+          dateStr >= b.check_in_date && dateStr < b.check_out_date
+        );
+
+        cell.className = 'cal-day' +
+          (isToday ? ' today' : '') +
+          (booking?.status === 'confirmed' ? ' booked'  : '') +
+          (booking?.status === 'inquiry'   ? ' inquiry' : '');
+
+        cell.textContent = d;
+        if (booking) {
+          cell.title = `${booking.guest_first} ${booking.guest_last} — ${booking.status}`;
+          cell.addEventListener('click', () => openBookingModal(booking.id));
+        }
+        grid.appendChild(cell);
+      }
+    }
+
+    document.getElementById('calPrev').addEventListener('click', () => {
+      calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; }
+      renderCalendar();
+    });
+    document.getElementById('calNext').addEventListener('click', () => {
+      calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; }
+      renderCalendar();
+    });
+    document.getElementById('calToday').addEventListener('click', () => {
+      calYear  = new Date().getFullYear();
+      calMonth = new Date().getMonth();
+      renderCalendar();
+    });
+
+    // ── GUESTS ──
+    async function loadGuests() {
+      try {
+        const search = document.getElementById('guestSearch').value;
+        const filter = document.getElementById('guestFilter').value;
+        const res    = await fetch(
+          `/api/admin/guests?search=${encodeURIComponent(search)}&filter=${filter}`,
+          { headers: authHeaders() }
+        );
+        const data  = await res.json();
+        const tbody = document.getElementById('guestListBody');
+        if (data.guests?.length) {
+          tbody.innerHTML = data.guests.map(g => `
+            <tr>
+              <td>${g.first_name} ${g.last_name}
+                ${g.vip_status ? '<span class="badge badge-orange" style="font-size:0.55rem;margin-left:0.3rem;">VIP</span>' : ''}
+              </td>
+              <td>${g.email}</td>
+              <td>${g.phone || '—'}</td>
+              <td>${g.total_stays || 0}</td>
+              <td>${g.last_stay ? formatDate(g.last_stay) : 'Never'}</td>
+              <td><span class="status ${g.is_blacklisted ? 'status-cancelled' : 'status-confirmed'}">
+                ${g.is_blacklisted ? 'Blocked' : 'Active'}
+              </span></td>
+              <td>
+                <button class="action-btn action-btn-view"
+                  onclick="editGuest('${g.id}')">Edit</button>
+              </td>
+            </tr>`).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem;">No guests found</td></tr>';
+        }
+      } catch (err) {
+        console.error('Guests load error:', err);
+      }
+    }
+
+    document.getElementById('guestSearch').addEventListener('input', debounce(loadGuests, 400));
+    document.getElementById('guestFilter').addEventListener('change', loadGuests);
+
+    // ── GUEST FORM ──
+    document.getElementById('guestForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('saveGuestBtn');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
+      const payload = {
+        id:               document.getElementById('guestId').value || null,
+        first_name:       document.getElementById('gFirstName').value.trim(),
+        last_name:        document.getElementById('gLastName').value.trim(),
+        email:            document.getElementById('gEmail').value.trim(),
+        phone:            document.getElementById('gPhone').value.trim() || null,
+        emergency_name:   document.getElementById('gEmergencyName').value.trim() || null,
+        emergency_phone:  document.getElementById('gEmergencyPhone').value.trim() || null,
+        check_in_date:    document.getElementById('gCheckIn').value,
+        check_out_date:   document.getElementById('gCheckOut').value,
+        num_guests:       parseInt(document.getElementById('gNumGuests').value),
+        booking_source:   document.getElementById('gSource').value,
+        pin_code:         document.getElementById('gPin').value,
+        nightly_rate:     parseFloat(document.getElementById('gNightlyRate').value) || null,
+        welcome_note:     document.getElementById('gWelcomeNote').value.trim() || null,
+        guest_notes:      document.getElementById('gGuestNotes').value.trim() || null,
+        maintenance_notes: document.getElementById('gMaintenanceNotes').value.trim() || null,
+        payment_notes:    document.getElementById('gPaymentNotes').value.trim() || null,
+        access_notes:     document.getElementById('gAccessNotes').value.trim() || null,
+        review_notes:     document.getElementById('gReviewNotes').value.trim() || null,
+        general_notes:    document.getElementById('gGeneralNotes').value.trim() || null,
+      };
+
+      try {
+        const res  = await fetch('/api/admin/guests', {
+          method:  payload.id ? 'PUT' : 'POST',
+          headers: authHeaders(),
+          body:    JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById('guestFormAlert').innerHTML =
+            '<div class="alert alert-success">Guest saved successfully!</div>';
+          setTimeout(() => showPage('guests'), 1500);
+        } else {
+          throw new Error(data.error);
+        }
+      } catch (err) {
+        document.getElementById('guestFormAlert').innerHTML =
+          `<div class="alert alert-error">${err.message || 'Save failed.'}</div>`;
+        btn.disabled = false;
+        btn.textContent = 'Save Guest';
+      }
+    });
+
+    // ── AI Generate Welcome Note ──
+    document.getElementById('generateWelcomeBtn').addEventListener('click', async () => {
+      const firstName  = document.getElementById('gFirstName').value.trim();
+      const lastName   = document.getElementById('gLastName').value.trim();
+      const checkIn    = document.getElementById('gCheckIn').value;
+      const checkOut   = document.getElementById('gCheckOut').value;
+      const numGuests  = document.getElementById('gNumGuests').value;
+
+      if (!firstName || !checkIn || !checkOut) {
+        document.getElementById('welcomeNoteAlert').innerHTML =
+          '<div class="alert alert-error" style="font-size:0.78rem;">Please fill in guest name and dates first.</div>';
+        return;
+      }
+
+      const btn = document.getElementById('generateWelcomeBtn');
+      btn.textContent = '✨ Generating...';
+      btn.style.opacity = '0.6';
+
+      try {
+        const res  = await fetch('/api/admin/generate-welcome', {
+          method:  'POST',
+          headers: authHeaders(),
+          body:    JSON.stringify({ first_name: firstName, last_name: lastName, check_in: checkIn, check_out: checkOut, num_guests: numGuests }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById('gWelcomeNote').value = data.welcome_note;
+          document.getElementById('welcomeNoteAlert').innerHTML = '';
+        } else {
+          throw new Error(data.error);
+        }
+      } catch (err) {
+        document.getElementById('welcomeNoteAlert').innerHTML =
+          `<div class="alert alert-error" style="font-size:0.78rem;">${err.message || 'Generation failed.'}</div>`;
+      } finally {
+        btn.textContent = '✨ Generate Welcome Note';
+        btn.style.opacity = '1';
+      }
+    });
+
+    // ── KNOWLEDGE BASE ──
+    async function loadKnowledge() {
+      try {
+        const res  = await fetch('/api/admin/knowledge', { headers: authHeaders() });
+        const data = await res.json();
+        const el   = document.getElementById('kbList');
+        if (data.entries?.length) {
+          el.innerHTML = data.entries.map(e => `
+            <div class="kb-item">
+              <div>
+                <div class="kb-question">${e.question}</div>
+                <div class="kb-category">${e.category.replace('_',' ')} &nbsp;&middot;&nbsp; Used ${e.times_used || 0} times</div>
+              </div>
+              <div style="display:flex;gap:0.5rem;">
+                <button class="action-btn action-btn-view" onclick="editKbEntry('${e.id}')">Edit</button>
+                <button class="action-btn action-btn-decline" onclick="deleteKbEntry('${e.id}')">Delete</button>
+              </div>
+            </div>`).join('');
+        } else {
+          el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;">No KB entries yet — add your first one!</div>';
+        }
+      } catch (err) { console.error(err); }
+    }
+
+    // ── CHAT LOG ──
+    async function loadChatLog() {
+      try {
+        const filter = document.getElementById('chatFilter').value;
+        const res    = await fetch(
+          `/api/admin/chat-logs?filter=${filter}`,
+          { headers: authHeaders() }
+        );
+        const data = await res.json();
+        const el   = document.getElementById('chatLogList');
+        if (data.logs?.length) {
+          el.innerHTML = data.logs.map(c => `
+            <div class="chat-item">
+              <div class="chat-item-header">
+                <span class="chat-guest">${c.guest_name || 'Guest'}</span>
+                <span style="display:flex;align-items:center;gap:0.8rem;">
+                  <span class="status ${c.was_escalated && !c.resolved_at ? 'status-inquiry' : 'status-confirmed'}" style="font-size:0.6rem;">
+                    ${c.was_escalated && !c.resolved_at ? 'Needs Follow-Up' : 'Resolved'}
+                  </span>
+                  <span class="chat-time">${timeAgo(c.created_at)}</span>
+                </span>
+              </div>
+              <div class="chat-question"><strong>Q:</strong> ${c.question}</div>
+              <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.6rem;">
+                <strong style="color:rgba(164,196,224,0.7);">A:</strong> ${c.answer?.substring(0,120)}...
+              </div>
+              ${c.was_escalated && !c.resolved_at ? `
+              <div class="chat-actions">
+                <button class="action-btn action-btn-approve"
+                  onclick="resolveChat('${c.id}')">Mark Resolved</button>
+                <button class="action-btn action-btn-view"
+                  onclick="addToKb('${c.question}')">Add to KB</button>
+              </div>` : ''}
+            </div>`).join('');
+        } else {
+          el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;">No chat messages found</div>';
+        }
+      } catch (err) { console.error(err); }
+    }
+
+    document.getElementById('chatFilter').addEventListener('change', loadChatLog);
+
+    // ── EVENT SOURCES ──
+    async function loadEventSources() {
+      try {
+        const res  = await fetch('/api/admin/event-sources', { headers: authHeaders() });
+        const data = await res.json();
+        const el   = document.getElementById('eventSourceList');
+        const icons = { eventbrite: '🎟', ticketmaster: '🎵', google_events: '🔍', meetup: '👥', manual: '✏️' };
+        if (data.sources?.length) {
+          el.innerHTML = data.sources.map(s => `
+            <div class="source-row">
+              <div class="source-info">
+                <span class="source-icon">${icons[s.source_name] || '📡'}</span>
+                <div>
+                  <div class="source-name" style="text-transform:capitalize;">
+                    ${s.source_name.replace('_',' ')}
+                  </div>
+                  <div class="source-meta">
+                    Syncs every ${s.sync_frequency_hours || '—'}h
+                    ${s.last_synced_at ? `&nbsp;&middot;&nbsp; Last: ${timeAgo(s.last_synced_at)}` : ''}
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:1.5rem;">
+                <div class="source-stats">
+                  <div class="source-count">${s.total_events_pulled || 0} events</div>
+                </div>
+                <label class="toggle" aria-label="Toggle ${s.source_name}">
+                  <input type="checkbox" ${s.is_active ? 'checked' : ''}
+                    onchange="toggleSource('${s.source_name}', this.checked)"
+                    ${s.source_name === 'manual' ? 'disabled' : ''}/>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>`).join('');
+        }
+      } catch (err) { console.error(err); }
+    }
+
+    // ── ADMIN USERS ──
+    async function loadAdminUsers() {
+      try {
+        const res  = await fetch('/api/admin/users', { headers: authHeaders() });
+        const data = await res.json();
+        const tbody = document.getElementById('adminUsersList');
+        if (data.users?.length) {
+          tbody.innerHTML = data.users.map(u => `
+            <tr>
+              <td>${u.first_name} ${u.last_name}</td>
+              <td>${u.email}</td>
+              <td style="text-transform:capitalize;">${u.role.replace('_',' ')}</td>
+              <td><span class="status ${u.totp_verified ? 'status-confirmed' : 'status-inquiry'}">
+                ${u.totp_verified ? 'Enabled' : 'Pending'}
+              </span></td>
+              <td>${u.last_login_at ? timeAgo(u.last_login_at) : 'Never'}</td>
+              <td><span class="status ${u.is_active ? 'status-confirmed' : 'status-cancelled'}">
+                ${u.is_active ? 'Active' : 'Inactive'}
+              </span></td>
+              <td>
+                <button class="action-btn action-btn-${u.is_active ? 'decline' : 'approve'}"
+                  onclick="toggleAdminUser('${u.id}', ${!u.is_active})">
+                  ${u.is_active ? 'Deactivate' : 'Activate'}
+                </button>
+              </td>
+            </tr>`).join('');
+        }
+      } catch (err) { console.error(err); }
+    }
+
+    // ── ACTION HANDLERS ──
+
+    // Update booking status
+    window.updateBookingStatus = async function(bookingId, status) {
+      if (!confirm(`Are you sure you want to ${status === 'confirmed' ? 'approve' : 'decline'} this booking?`)) return;
+      try {
+        const res = await fetch('/api/admin/bookings', {
+          method:  'PATCH',
+          headers: authHeaders(),
+          body:    JSON.stringify({ id: bookingId, status }),
+        });
+        if (res.ok) { loadPageData('dashboard'); loadPageData('bookings'); }
+      } catch (err) { console.error(err); }
+    };
+
+    // Open booking modal
+    window.openBookingModal = async function(bookingId) {
+      document.getElementById('bookingModal').classList.add('open');
+      document.getElementById('bookingModalBody').innerHTML = '<div class="spinner"></div>';
+      try {
+        const res  = await fetch(`/api/admin/bookings/${bookingId}`, { headers: authHeaders() });
+        const data = await res.json();
+        document.getElementById('bookingModalBody').innerHTML = `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;">
+            <div class="form-group"><label>Guest</label>
+              <div style="color:var(--cream);padding:0.5rem 0;">${data.guest_first} ${data.guest_last}</div></div>
+            <div class="form-group"><label>Status</label>
+              <div style="padding:0.5rem 0;"><span class="status status-${data.status}">${data.status}</span></div></div>
+            <div class="form-group"><label>Check-In</label>
+              <div style="color:var(--cream);padding:0.5rem 0;">${formatDate(data.check_in_date)}</div></div>
+            <div class="form-group"><label>Check-Out</label>
+              <div style="color:var(--cream);padding:0.5rem 0;">${formatDate(data.check_out_date)}</div></div>
+            <div class="form-group"><label>Guests</label>
+              <div style="color:var(--cream);padding:0.5rem 0;">${data.num_guests}</div></div>
+            <div class="form-group"><label>Source</label>
+              <div style="color:var(--cream);padding:0.5rem 0;text-transform:capitalize;">${data.booking_source || '—'}</div></div>
+            <div class="form-group"><label>Email</label>
+              <div style="color:var(--sky);padding:0.5rem 0;">${data.guest_email}</div></div>
+            <div class="form-group"><label>Phone</label>
+              <div style="color:var(--cream);padding:0.5rem 0;">${data.guest_phone || '—'}</div></div>
+          </div>
+          ${data.special_requests ? `
+          <div class="form-group" style="margin-top:1rem;"><label>Special Requests</label>
+            <div style="color:rgba(164,196,224,0.8);padding:0.5rem 0;line-height:1.7;">${data.special_requests}</div></div>
+          ` : ''}`;
+        document.getElementById('approveBookingBtn').dataset.id = bookingId;
+        document.getElementById('declineBookingBtn').dataset.id = bookingId;
+      } catch (err) {
+        document.getElementById('bookingModalBody').innerHTML =
+          '<div class="alert alert-error">Failed to load booking details.</div>';
+      }
+    };
+
+    document.getElementById('closeBookingModal').addEventListener('click', () =>
+      document.getElementById('bookingModal').classList.remove('open'));
+    document.getElementById('approveBookingBtn').addEventListener('click', (e) => {
+      updateBookingStatus(e.target.dataset.id, 'confirmed');
+      document.getElementById('bookingModal').classList.remove('open');
+    });
+    document.getElementById('declineBookingBtn').addEventListener('click', (e) => {
+      updateBookingStatus(e.target.dataset.id, 'cancelled');
+      document.getElementById('bookingModal').classList.remove('open');
+    });
+
+    // Resolve chat escalation
+    window.resolveChat = async function(chatId) {
+      try {
+        await fetch('/api/admin/chat-logs', {
+          method:  'PATCH',
+          headers: authHeaders(),
+          body:    JSON.stringify({ id: chatId, resolved: true }),
+        });
+        loadPageData('chat-log');
+        loadPageData('dashboard');
+      } catch (err) { console.error(err); }
+    };
+
+    // Pre-fill KB modal with escalated question
+    window.addToKb = function(question) {
+      document.getElementById('kbQuestion').value = question;
+      document.getElementById('kbModal').classList.add('open');
+    };
+
+    // Toggle event source
+    window.toggleSource = async function(sourceName, isActive) {
+      try {
+        await fetch('/api/admin/event-sources', {
+          method:  'PATCH',
+          headers: authHeaders(),
+          body:    JSON.stringify({ source_name: sourceName, is_active: isActive }),
+        });
+      } catch (err) { console.error(err); }
+    };
+
+    // Toggle admin user active state
+    window.toggleAdminUser = async function(userId, isActive) {
+      if (!confirm(`Are you sure you want to ${isActive ? 'activate' : 'deactivate'} this admin user?`)) return;
+      try {
+        await fetch('/api/admin/users', {
+          method:  'PATCH',
+          headers: authHeaders(),
+          body:    JSON.stringify({ id: userId, is_active: isActive }),
+        });
+        loadAdminUsers();
+      } catch (err) { console.error(err); }
+    };
+
+    // Edit guest — load data into form
+    window.editGuest = async function(guestId) {
+      try {
+        const res  = await fetch(`/api/admin/guests/${guestId}`, { headers: authHeaders() });
+        const data = await res.json();
+        document.getElementById('guestId').value           = data.id;
+        document.getElementById('gFirstName').value        = data.first_name || '';
+        document.getElementById('gLastName').value         = data.last_name  || '';
+        document.getElementById('gEmail').value            = data.email      || '';
+        document.getElementById('gPhone').value            = data.phone      || '';
+        document.getElementById('gEmergencyName').value    = data.emergency_name  || '';
+        document.getElementById('gEmergencyPhone').value   = data.emergency_phone || '';
+        document.getElementById('gGuestNotes').value       = data.guest_notes       || '';
+        document.getElementById('gMaintenanceNotes').value = data.maintenance_notes || '';
+        document.getElementById('gPaymentNotes').value     = data.payment_notes     || '';
+        document.getElementById('gAccessNotes').value      = data.access_notes      || '';
+        document.getElementById('gReviewNotes').value      = data.review_notes      || '';
+        document.getElementById('gGeneralNotes').value     = data.general_notes     || '';
+        document.getElementById('guestFormTitle').textContent = 'Edit Guest';
+        showPage('add-guest');
+      } catch (err) { console.error(err); }
+    };
+
+    // KB modal
+    document.getElementById('addKbBtn').addEventListener('click', () => {
+      document.getElementById('kbId').value = '';
+      document.getElementById('kbQuestion').value = '';
+      document.getElementById('kbAnswer').value   = '';
+      document.getElementById('kbKeywords').value = '';
+      document.getElementById('kbModal').classList.add('open');
+    });
+
+    window.editKbEntry = async function(id) {
+      try {
+        const res  = await fetch(`/api/admin/knowledge/${id}`, { headers: authHeaders() });
+        const data = await res.json();
+        document.getElementById('kbId').value       = data.id;
+        document.getElementById('kbCategory').value = data.category;
+        document.getElementById('kbQuestion').value = data.question;
+        document.getElementById('kbAnswer').value   = data.answer;
+        document.getElementById('kbKeywords').value = (data.keywords || []).join(', ');
+        document.getElementById('kbModal').classList.add('open');
+      } catch (err) { console.error(err); }
+    };
+
+    window.deleteKbEntry = async function(id) {
+      if (!confirm('Delete this knowledge base entry?')) return;
+      try {
+        await fetch(`/api/admin/knowledge/${id}`, {
+          method:  'DELETE',
+          headers: authHeaders(),
+        });
+        loadKnowledge();
+      } catch (err) { console.error(err); }
+    };
+
+    document.getElementById('saveKbBtn').addEventListener('click', async () => {
+      const id       = document.getElementById('kbId').value;
+      const category = document.getElementById('kbCategory').value;
+      const question = document.getElementById('kbQuestion').value.trim();
+      const answer   = document.getElementById('kbAnswer').value.trim();
+      const keywords = document.getElementById('kbKeywords').value
+        .split(',').map(k => k.trim()).filter(Boolean);
+      if (!question || !answer) return;
+      try {
+        await fetch('/api/admin/knowledge', {
+          method:  id ? 'PUT' : 'POST',
+          headers: authHeaders(),
+          body:    JSON.stringify({ id, category, question, answer, keywords }),
+        });
+        document.getElementById('kbModal').classList.remove('open');
+        loadKnowledge();
+      } catch (err) { console.error(err); }
+    });
+
+    ['closeKbModal','closeKbModal2'].forEach(id => {
+      document.getElementById(id)?.addEventListener('click', () =>
+        document.getElementById('kbModal').classList.remove('open'));
+    });
+
+    // Notes tabs
+    document.querySelectorAll('.notes-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.notes-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.notes-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(`notes-${tab.dataset.notes}`)?.classList.add('active');
+      });
+    });
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      sessionStorage.removeItem('gg_admin_token');
+      sessionStorage.removeItem('gg_admin_role');
+      window.location.href = '/admin/login.html';
+    });
+
+    // ── Helpers ──
+    function formatDate(dateStr) {
+      if (!dateStr) return '—';
+      return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric'
+      });
+    }
+
+    function timeAgo(dateStr) {
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1)   return 'just now';
+      if (mins < 60)  return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24)   return `${hrs}h ago`;
+      const days = Math.floor(hrs / 24);
+      return `${days}d ago`;
+    }
+
+    function debounce(fn, delay) {
+      let timer;
+      return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), delay);
+      };
+    }
+
+    // ── Init ──
+    loadAdminInfo();
+    loadDashboard();
+  </script>
+</body>
+</html>
