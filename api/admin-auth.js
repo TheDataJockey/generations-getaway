@@ -84,26 +84,33 @@ async function handleCredentials(req, res) {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    // ── Authenticate with Supabase Auth ──
-    console.log('[admin-auth] Attempting login for:', email.trim().toLowerCase());
-    console.log('[admin-auth] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING');
+    // ── Authenticate via Supabase Auth REST API directly ──
+    // Uses fetch instead of SDK signInWithPassword to avoid URL parsing issues
+    const supabaseUrl  = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+    const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email:    email.trim().toLowerCase(),
-      password,
+    const authResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey':       supabaseAnon,
+      },
+      body: JSON.stringify({
+        email:    email.trim().toLowerCase(),
+        password,
+      }),
     });
 
-    console.log('[admin-auth] Auth error:', authError?.message || 'none');
-    console.log('[admin-auth] Auth user:', authData?.user?.id || 'null');
+    const authData = await authResponse.json();
 
-    if (authError || !authData.user) {
+    if (!authResponse.ok || !authData.user) {
       await supabase.from('audit_logs').insert({
         action:     'failed_login',
         ip_address: ip,
         user_agent: req.headers['user-agent'] || null,
-        notes:      `Failed admin login for: ${email} — ${authError?.message}`,
+        notes:      `Failed admin login for: ${email} — ${authData.error_description || authData.message || 'unknown'}`,
       });
-      return res.status(401).json({ error: authError?.message || 'Invalid email or password.' });
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
     // ── Check admin_users record ──
@@ -112,6 +119,8 @@ async function handleCredentials(req, res) {
       .select('id, role, is_active, totp_verified, totp_secret')
       .eq('supabase_auth_id', authData.user.id)
       .single();
+
+    console.log('[admin-auth] Found admin user:', adminUser?.id || 'NOT FOUND', 'active:', adminUser?.is_active);
 
     if (!adminUser || !adminUser.is_active) {
       return res.status(403).json({ error: 'Access denied. Contact the super admin.' });
