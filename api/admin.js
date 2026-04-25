@@ -547,6 +547,15 @@ function sanitizeGuest(body) {
     check_in_date: s(body.check_in_date), check_out_date: s(body.check_out_date),
     num_guests: parseInt(body.num_guests) || 1, booking_source: s(body.booking_source),
     pin_code: s(body.pin_code), nightly_rate: parseFloat(body.nightly_rate) || null,
+    // Payment fields
+    payment_method:   s(body.payment_method),
+    payment_status:   s(body.payment_status) || 'pending',
+    total_amount:     parseFloat(body.total_amount)    || null,
+    amount_received:  parseFloat(body.amount_received) || null,
+    balance_due:      parseFloat(body.balance_due)     || null,
+    security_deposit: parseFloat(body.security_deposit) || null,
+    payment_note:     s(body.payment_note),
+    // Notes
     welcome_note: s(body.welcome_note), guest_notes: s(body.guest_notes),
     maintenance_notes: s(body.maintenance_notes), payment_notes: s(body.payment_notes),
     access_notes: s(body.access_notes), review_notes: s(body.review_notes),
