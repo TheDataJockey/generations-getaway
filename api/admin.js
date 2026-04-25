@@ -25,8 +25,13 @@
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
+// Strip any trailing /rest/v1 from URL — Vercel env vars sometimes include it
+const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || '')
+  .replace(/\/rest\/v1\/?$/, '')
+  .replace(/\/$/, '');
+
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } }
 );
