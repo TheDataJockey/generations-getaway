@@ -562,6 +562,9 @@
       <button class="nav-item" data-page="admin-users">
         <span class="nav-icon">🔐</span> Admin Users
       </button>
+      <button class="nav-item" data-page="access-codes">
+        <span class="nav-icon">🔑</span> Access Codes
+      </button>
     </nav>
 
     <div class="sidebar-footer">
@@ -1008,7 +1011,53 @@
     <!-- ═══════════════════════════════
          PAGE: ADMIN USERS
          ═══════════════════════════════ -->
-    <div class="admin-page" id="page-admin-users">
+    <div       <!-- ACCESS CODES PAGE -->
+      <div class="admin-page" id="page-access-codes">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
+          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:300;">
+            Access <span style="font-style:italic;color:var(--sky);">Codes</span>
+          </h2>
+          <button class="btn btn-primary" onclick="openAccessCodeModal(null)" style="font-size:0.72rem;">
+            + Set Access Code
+          </button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:2rem;">
+          <div style="background:rgba(27,42,74,0.4);border:1px solid rgba(91,141,217,0.2);border-radius:4px;padding:1.2rem;">
+            <div style="font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);margin-bottom:0.4rem;">Active Codes</div>
+            <div id="acStatActive" style="font-family:var(--font-serif);font-size:2rem;font-weight:300;color:var(--cream);">—</div>
+          </div>
+          <div style="background:rgba(27,42,74,0.4);border:1px solid rgba(91,141,217,0.2);border-radius:4px;padding:1.2rem;">
+            <div style="font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);margin-bottom:0.4rem;">Checking In (3 days)</div>
+            <div id="acStatSoon" style="font-family:var(--font-serif);font-size:2rem;font-weight:300;color:#FFD54F;">—</div>
+          </div>
+          <div style="background:rgba(27,42,74,0.4);border:1px solid rgba(91,141,217,0.2);border-radius:4px;padding:1.2rem;">
+            <div style="font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);margin-bottom:0.4rem;">Checking Out Today</div>
+            <div id="acStatToday" style="font-family:var(--font-serif);font-size:2rem;font-weight:300;color:#EF9A9A;">—</div>
+          </div>
+        </div>
+
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Guest</th>
+                <th>Check-In</th>
+                <th>Check-Out</th>
+                <th>Portal PIN</th>
+                <th>Yale Door Code</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="accessCodesBody">
+              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+class="admin-page" id="page-admin-users">
       <div style="display:flex;justify-content:flex-end;margin-bottom:1.2rem;">
         <button class="btn btn-primary" id="addAdminBtn" style="font-size:0.65rem;">+ Add Admin User</button>
       </div>
@@ -1196,6 +1245,7 @@
         case 'chat-log':    await loadChatLog();    break;
         case 'events':      await loadEventSources(); break;
         case 'admin-users': await loadAdminUsers(); break;
+        case 'access-codes': await loadAccessCodes(); break;
       }
     }
 
@@ -2030,6 +2080,82 @@
           <button class="btn" style="background:rgba(239,154,154,0.15);border:1px solid rgba(239,154,154,0.3);color:#EF9A9A;" id="refundConfirmBtn" onclick="processRefund()">
             Process Refund
           </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACCESS CODE MODAL -->
+  <div class="modal-overlay" id="accessCodeModal">
+    <div class="modal-box" style="max-width:500px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="accessCodeModalTitle">Set Access Code</h3>
+        <button class="modal-close" onclick="closeAccessCodeModal()">&#215;</button>
+      </div>
+      <div class="modal-body" style="padding:1.5rem;">
+
+        <input type="hidden" id="acBookingId"/>
+
+        <!-- Guest info display -->
+        <div id="acGuestInfo" style="padding:0.8rem 1rem;background:rgba(46,95,163,0.1);border:1px solid rgba(46,95,163,0.2);border-radius:4px;margin-bottom:1.2rem;font-size:0.82rem;color:var(--sky);"></div>
+
+        <!-- Portal PIN -->
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label style="display:flex;justify-content:space-between;align-items:center;">
+            Guest Portal PIN <span style="color:var(--muted);font-size:0.7rem;font-weight:300;">(used to log in to portal)</span>
+          </label>
+          <div style="display:flex;gap:0.6rem;align-items:center;">
+            <input type="text" id="acPortalPin" class="form-control" maxlength="4"
+              pattern="[0-9]{4}" placeholder="4 digits" style="max-width:140px;letter-spacing:0.3em;font-size:1.1rem;"/>
+            <button class="btn btn-ghost" onclick="generatePin('acPortalPin')"
+              style="font-size:0.68rem;padding:0.5rem 0.8rem;white-space:nowrap;">
+              &#9881; Generate
+            </button>
+          </div>
+          <span style="font-size:0.68rem;color:var(--muted);margin-top:0.3rem;display:block;">
+            Guest uses this + their last name to access the portal
+          </span>
+        </div>
+
+        <!-- Yale Door Code -->
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label style="display:flex;justify-content:space-between;align-items:center;">
+            Yale Door Code <span style="color:var(--muted);font-size:0.7rem;font-weight:300;">(enter manually in Yale app)</span>
+          </label>
+          <div style="display:flex;gap:0.6rem;align-items:center;">
+            <input type="text" id="acYaleCode" class="form-control" maxlength="8"
+              pattern="[0-9]+" placeholder="4-8 digits" style="max-width:160px;letter-spacing:0.3em;font-size:1.1rem;"/>
+            <button class="btn btn-ghost" onclick="generatePin('acYaleCode')"
+              style="font-size:0.68rem;padding:0.5rem 0.8rem;white-space:nowrap;">
+              &#9881; Generate
+            </button>
+          </div>
+          <span style="font-size:0.68rem;color:var(--muted);margin-top:0.3rem;display:block;">
+            Separate from portal PIN &mdash; add to Yale Access app manually
+          </span>
+        </div>
+
+        <!-- Same code toggle -->
+        <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:1.2rem;padding:0.8rem;background:rgba(27,42,74,0.4);border-radius:4px;">
+          <input type="checkbox" id="acSameCode" style="accent-color:var(--blue-light);cursor:pointer;width:15px;height:15px;"/>
+          <label for="acSameCode" style="font-size:0.78rem;color:rgba(164,196,224,0.85);cursor:pointer;">
+            Use same code for both portal and Yale lock
+          </label>
+        </div>
+
+        <!-- Yale app reminder -->
+        <div style="padding:0.9rem;background:rgba(255,213,79,0.08);border:1px solid rgba(255,213,79,0.2);border-radius:4px;margin-bottom:1.2rem;">
+          <p style="font-size:0.72rem;color:#FFD54F;line-height:1.7;margin:0;">
+            &#9888; Remember to add the Yale door code manually in the Yale Access app after saving.
+            Set it as a <strong>scheduled code</strong> with check-in and check-out dates.
+          </p>
+        </div>
+
+        <div id="acModalError" style="color:#EF9A9A;font-size:0.78rem;min-height:1rem;margin-bottom:0.8rem;"></div>
+
+        <div style="display:flex;gap:0.8rem;justify-content:flex-end;">
+          <button class="btn btn-ghost" onclick="closeAccessCodeModal()">Cancel</button>
+          <button class="btn btn-primary" id="acSaveBtn" onclick="saveAccessCode()">Save Codes</button>
         </div>
       </div>
     </div>
