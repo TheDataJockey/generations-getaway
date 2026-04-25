@@ -85,19 +85,25 @@ async function handleCredentials(req, res) {
     }
 
     // ── Authenticate with Supabase Auth ──
+    console.log('[admin-auth] Attempting login for:', email.trim().toLowerCase());
+    console.log('[admin-auth] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING');
+
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email:    email.trim().toLowerCase(),
       password,
     });
+
+    console.log('[admin-auth] Auth error:', authError?.message || 'none');
+    console.log('[admin-auth] Auth user:', authData?.user?.id || 'null');
 
     if (authError || !authData.user) {
       await supabase.from('audit_logs').insert({
         action:     'failed_login',
         ip_address: ip,
         user_agent: req.headers['user-agent'] || null,
-        notes:      `Failed admin login for: ${email}`,
+        notes:      `Failed admin login for: ${email} — ${authError?.message}`,
       });
-      return res.status(401).json({ error: 'Invalid email or password.' });
+      return res.status(401).json({ error: authError?.message || 'Invalid email or password.' });
     }
 
     // ── Check admin_users record ──
