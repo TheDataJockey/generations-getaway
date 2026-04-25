@@ -648,6 +648,7 @@
                   <th>Check-In</th>
                   <th>Check-Out</th>
                   <th>Status</th>
+                  <th>Payment</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -1283,9 +1284,28 @@
               <td>${b.num_guests || '—'}</td>
               <td style="text-transform:capitalize;">${b.booking_source || '—'}</td>
               <td><span class="status status-${b.status}">${b.status}</span></td>
+              <td>
+                ${b.payment_status === 'paid'
+                  ? '<span class="status" style="background:rgba(52,199,89,0.15);color:#81C784;">Paid</span>'
+                  : b.payment_status === 'refunded'
+                  ? '<span class="status" style="background:rgba(239,154,154,0.15);color:#EF9A9A;">Refunded</span>'
+                  : b.stripe_payment_link_url
+                  ? '<span class="status" style="background:rgba(255,213,79,0.15);color:#FFD54F;">Link Sent</span>'
+                  : '<span class="status" style="background:rgba(142,142,147,0.15);color:#8e8e93;">Unpaid</span>'}
+              </td>
               <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
                 <button class="action-btn action-btn-view"
                   onclick="openBookingModal('${b.id}')">View</button>
+                ${b.status === 'confirmed' && b.payment_status !== 'paid' ? `
+                  <button class="action-btn" style="background:rgba(46,95,163,0.2);border-color:rgba(46,95,163,0.4);color:var(--sky);"
+                    onclick="openStripeModal('${b.id}','${b.guest_first} ${b.guest_last}','${b.total_amount||''}','${b.check_in_date}','${b.stripe_payment_link_url||''}')"
+                    title="Send Payment Link">&#36; Pay</button>
+                ` : ''}
+                ${b.payment_status === 'paid' ? `
+                  <button class="action-btn" style="background:rgba(239,154,154,0.1);border-color:rgba(239,154,154,0.3);color:#EF9A9A;"
+                    onclick="openRefundModal('${b.id}','${b.guest_first} ${b.guest_last}','${b.total_amount||''}','${b.check_in_date}')"
+                    title="Process Refund">&#8617; Refund</button>
+                ` : ''}
                 ${b.status === 'inquiry' ? `
                   <button class="action-btn action-btn-approve"
                     onclick="updateBookingStatus('${b.id}','confirmed')">✓</button>
@@ -1939,5 +1959,80 @@
     loadAdminInfo();
     loadDashboard();
   </script>
+
+  <!-- STRIPE PAYMENT MODAL -->
+  <div class="modal-overlay" id="stripeModal">
+    <div class="modal-box" style="max-width:480px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="stripeModalTitle">Send Payment Link</h3>
+        <button class="modal-close" onclick="closeStripeModal()">&#215;</button>
+      </div>
+      <div class="modal-body" style="padding:1.5rem;">
+        <div id="stripeExistingLink" style="display:none;margin-bottom:1.2rem;padding:1rem;background:rgba(46,95,163,0.1);border:1px solid rgba(46,95,163,0.2);border-radius:4px;">
+          <p style="font-size:0.72rem;color:var(--blue-light);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.5rem;">Existing Payment Link</p>
+          <a id="stripeExistingLinkUrl" href="#" target="_blank" rel="noopener noreferrer"
+            style="font-size:0.8rem;color:var(--sky);word-break:break-all;"></a>
+        </div>
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label>Amount ($)</label>
+          <input type="number" id="stripeAmount" class="form-control" step="0.01" min="0" placeholder="0.00"/>
+          <span style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem;display:block;">Leave blank to use the booking total amount</span>
+        </div>
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label>Security Deposit ($) <span style="color:var(--muted);font-weight:300;">&mdash; optional</span></label>
+          <input type="number" id="stripeDeposit" class="form-control" step="0.01" min="0" placeholder="0.00"/>
+          <span style="font-size:0.7rem;color:var(--muted);margin-top:0.3rem;display:block;">Held on card, not charged unless damage occurs</span>
+        </div>
+        <div id="stripePolicyBox" style="padding:1rem;background:rgba(27,42,74,0.5);border:1px solid rgba(91,141,217,0.15);border-radius:4px;margin-bottom:1.2rem;">
+          <p style="font-size:0.68rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--blue-light);margin-bottom:0.6rem;">Cancellation Policy</p>
+          <div style="font-size:0.78rem;color:rgba(164,196,224,0.8);line-height:1.8;">
+            <div>30+ days before check-in &mdash; <span style="color:#81C784;">Full refund</span></div>
+            <div>14&ndash;29 days &mdash; <span style="color:#FFB74D;">50% refund</span></div>
+            <div>7&ndash;13 days &mdash; <span style="color:#FFB74D;">25% refund</span></div>
+            <div>Under 7 days &mdash; <span style="color:#EF9A9A;">No refund</span></div>
+          </div>
+        </div>
+        <div id="stripeModalError" style="color:#EF9A9A;font-size:0.78rem;min-height:1rem;margin-bottom:0.8rem;"></div>
+        <div style="display:flex;gap:0.8rem;justify-content:flex-end;">
+          <button class="btn btn-ghost" onclick="closeStripeModal()">Cancel</button>
+          <button class="btn btn-primary" id="stripeCreateBtn" onclick="createPaymentLink()">
+            Generate &amp; Copy Link
+          </button>
+        </div>
+        <div id="stripeSuccessBox" style="display:none;margin-top:1rem;padding:1rem;background:rgba(52,199,89,0.1);border:1px solid rgba(52,199,89,0.25);border-radius:4px;">
+          <p style="font-size:0.72rem;color:#81C784;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.5rem;">&#10003; Payment Link Created</p>
+          <a id="stripeNewLinkUrl" href="#" target="_blank" rel="noopener noreferrer"
+            style="font-size:0.8rem;color:var(--sky);word-break:break-all;display:block;margin-bottom:0.8rem;"></a>
+          <button class="btn btn-ghost" style="font-size:0.7rem;padding:0.4rem 0.9rem;" onclick="copyPaymentLink()">
+            &#128203; Copy Link
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REFUND MODAL -->
+  <div class="modal-overlay" id="refundModal">
+    <div class="modal-box" style="max-width:420px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="refundModalTitle">Process Refund</h3>
+        <button class="modal-close" onclick="document.getElementById('refundModal').style.display='none'">&#215;</button>
+      </div>
+      <div class="modal-body" style="padding:1.5rem;">
+        <div id="refundPolicyDisplay" style="padding:1rem;background:rgba(27,42,74,0.5);border:1px solid rgba(91,141,217,0.15);border-radius:4px;margin-bottom:1.2rem;font-size:0.82rem;line-height:1.8;"></div>
+        <div class="form-group" style="margin-bottom:1rem;">
+          <label>Override Refund % <span style="color:var(--muted);font-weight:300;">&mdash; leave blank to apply policy</span></label>
+          <input type="number" id="refundOverridePct" class="form-control" min="0" max="100" placeholder="e.g. 100"/>
+        </div>
+        <div id="refundModalError" style="color:#EF9A9A;font-size:0.78rem;min-height:1rem;margin-bottom:0.8rem;"></div>
+        <div style="display:flex;gap:0.8rem;justify-content:flex-end;">
+          <button class="btn btn-ghost" onclick="document.getElementById('refundModal').style.display='none'">Cancel</button>
+          <button class="btn" style="background:rgba(239,154,154,0.15);border:1px solid rgba(239,154,154,0.3);color:#EF9A9A;" id="refundConfirmBtn" onclick="processRefund()">
+            Process Refund
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
