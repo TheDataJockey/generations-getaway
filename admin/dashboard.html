@@ -1005,7 +1005,7 @@
     // ── Load admin info ──
     async function loadAdminInfo() {
       try {
-        const res  = await fetch('/api/admin/me', { headers: authHeaders() });
+        const res  = await fetch('/api/admin?resource=me', { headers: authHeaders() });
         const data = await res.json();
         if (res.ok) {
           document.getElementById('adminName').textContent =
@@ -1065,7 +1065,7 @@
     // ── DASHBOARD ──
     async function loadDashboard() {
       try {
-        const res  = await fetch('/api/admin/dashboard', { headers: authHeaders() });
+        const res  = await fetch('/api/admin?resource=dashboard', { headers: authHeaders() });
         const data = await res.json();
         if (!res.ok) return;
 
@@ -1318,7 +1318,7 @@
       };
 
       try {
-        const res  = await fetch('/api/admin/guests', {
+        const res  = await fetch('/api/admin?resource=guests', {
           method:  payload.id ? 'PUT' : 'POST',
           headers: authHeaders(),
           body:    JSON.stringify(payload),
@@ -1358,7 +1358,7 @@
       btn.style.opacity = '0.6';
 
       try {
-        const res  = await fetch('/api/admin/generate-welcome', {
+        const res  = await fetch('/api/admin?resource=generate-welcome', {
           method:  'POST',
           headers: authHeaders(),
           body:    JSON.stringify({ first_name: firstName, last_name: lastName, check_in: checkIn, check_out: checkOut, num_guests: numGuests }),
@@ -1382,7 +1382,7 @@
     // ── KNOWLEDGE BASE ──
     async function loadKnowledge() {
       try {
-        const res  = await fetch('/api/admin/knowledge', { headers: authHeaders() });
+        const res  = await fetch('/api/admin?resource=knowledge', { headers: authHeaders() });
         const data = await res.json();
         const el   = document.getElementById('kbList');
         if (data.entries?.length) {
@@ -1448,7 +1448,7 @@
     // ── EVENT SOURCES ──
     async function loadEventSources() {
       try {
-        const res  = await fetch('/api/admin/event-sources', { headers: authHeaders() });
+        const res  = await fetch('/api/admin?resource=event-sources', { headers: authHeaders() });
         const data = await res.json();
         const el   = document.getElementById('eventSourceList');
         const icons = { eventbrite: '🎟', ticketmaster: '🎵', google_events: '🔍', meetup: '👥', manual: '✏️' };
@@ -1486,7 +1486,7 @@
     // ── ADMIN USERS ──
     async function loadAdminUsers() {
       try {
-        const res  = await fetch('/api/admin/users', { headers: authHeaders() });
+        const res  = await fetch('/api/admin?resource=users', { headers: authHeaders() });
         const data = await res.json();
         const tbody = document.getElementById('adminUsersList');
         if (data.users?.length) {
@@ -1519,7 +1519,7 @@
     window.updateBookingStatus = async function(bookingId, status) {
       if (!confirm(`Are you sure you want to ${status === 'confirmed' ? 'approve' : 'decline'} this booking?`)) return;
       try {
-        const res = await fetch('/api/admin/bookings', {
+        const res = await fetch('/api/admin?resource=bookings', {
           method:  'PATCH',
           headers: authHeaders(),
           body:    JSON.stringify({ id: bookingId, status }),
@@ -1580,7 +1580,7 @@
     // Resolve chat escalation
     window.resolveChat = async function(chatId) {
       try {
-        await fetch('/api/admin/chat-logs', {
+        await fetch('/api/admin?resource=chat-logs', {
           method:  'PATCH',
           headers: authHeaders(),
           body:    JSON.stringify({ id: chatId, resolved: true }),
@@ -1599,7 +1599,7 @@
     // Toggle event source
     window.toggleSource = async function(sourceName, isActive) {
       try {
-        await fetch('/api/admin/event-sources', {
+        await fetch('/api/admin?resource=event-sources', {
           method:  'PATCH',
           headers: authHeaders(),
           body:    JSON.stringify({ source_name: sourceName, is_active: isActive }),
@@ -1611,7 +1611,7 @@
     window.toggleAdminUser = async function(userId, isActive) {
       if (!confirm(`Are you sure you want to ${isActive ? 'activate' : 'deactivate'} this admin user?`)) return;
       try {
-        await fetch('/api/admin/users', {
+        await fetch('/api/admin?resource=users', {
           method:  'PATCH',
           headers: authHeaders(),
           body:    JSON.stringify({ id: userId, is_active: isActive }),
@@ -1685,7 +1685,7 @@
         .split(',').map(k => k.trim()).filter(Boolean);
       if (!question || !answer) return;
       try {
-        await fetch('/api/admin/knowledge', {
+        await fetch('/api/admin?resource=knowledge', {
           method:  id ? 'PUT' : 'POST',
           headers: authHeaders(),
           body:    JSON.stringify({ id, category, question, answer, keywords }),
