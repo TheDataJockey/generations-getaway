@@ -8,8 +8,73 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="/css/styles.css"/>
   <style>
+    /* ── Reset & Base (no shared styles.css on admin to avoid conflicts) ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    :root {
+      --navy:       #1B2A4A;
+      --navy-deep:  #0D1B2E;
+      --navy-mid:   #243660;
+      --blue:       #2E5FA3;
+      --blue-light: #5B8DD9;
+      --sky:        #A8C4E0;
+      --cream:      #F4F7FB;
+      --white:      #FFFFFF;
+      --muted:      #7A90AE;
+      --font-serif: 'Cormorant Garamond', serif;
+      --font-sans:  'Montserrat', sans-serif;
+      --transition: 0.3s ease;
+      --radius:     4px;
+    }
+
+    body { font-family: var(--font-sans); color: var(--cream); overflow-x: hidden; }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+
+    /* ── Form controls ── */
+    .form-control {
+      background: rgba(27,42,74,0.6);
+      border: 1px solid rgba(91,141,217,0.3);
+      color: var(--cream); padding: 0.75rem 1rem;
+      font-family: var(--font-sans); font-size: 0.82rem;
+      outline: none; transition: border-color var(--transition);
+      width: 100%; border-radius: var(--radius);
+    }
+    .form-control:focus { border-color: var(--blue-light); }
+    .form-control::placeholder { color: var(--muted); }
+    select.form-control option { background: var(--navy); }
+    textarea.form-control { resize: vertical; min-height: 80px; }
+    .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+    .form-group label { font-size: 0.62rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--blue-light); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 0.5rem; padding: 0.7rem 1.4rem;
+      font-family: var(--font-sans); font-size: 0.65rem;
+      letter-spacing: 0.15em; text-transform: uppercase;
+      cursor: pointer; border: 1px solid transparent;
+      border-radius: var(--radius);
+      transition: background var(--transition), transform var(--transition);
+    }
+    .btn-primary { background: var(--blue); color: var(--white); border-color: var(--blue); }
+    .btn-primary:hover { background: var(--blue-light); border-color: var(--blue-light); }
+    .btn-ghost { background: transparent; color: var(--cream); border-color: rgba(247,243,238,0.3); }
+    .btn-ghost:hover { border-color: var(--sky); color: var(--sky); }
+
+    /* ── Alerts ── */
+    .alert { padding: 0.8rem 1rem; border-radius: var(--radius); font-size: 0.82rem; border: 1px solid; margin-bottom: 0.8rem; }
+    .alert-success { background: rgba(46,125,50,0.15); border-color: rgba(46,125,50,0.4); color: #81C784; }
+    .alert-error   { background: rgba(198,40,40,0.15);  border-color: rgba(198,40,40,0.4);  color: #EF9A9A; }
+    .alert-info    { background: rgba(46,95,163,0.15);  border-color: rgba(46,95,163,0.4);  color: var(--sky); }
+
+    /* ── Spinner ── */
+    .spinner { width: 36px; height: 36px; border: 3px solid rgba(91,141,217,0.2); border-top-color: var(--blue-light); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 2rem auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     /* ── Admin Layout ── */
     body { background: #080f1a; }
 
