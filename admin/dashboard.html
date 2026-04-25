@@ -858,6 +858,58 @@
               </div>
             </div>
 
+            <!-- Payment -->
+            <p class="nav-section-label" style="margin-bottom:1rem;">Payment</p>
+            <div class="guest-form" style="margin-bottom:1.5rem;">
+              <div class="form-group">
+                <label for="gPaymentMethod">Payment Method</label>
+                <select id="gPaymentMethod" class="form-control">
+                  <option value="">— Select —</option>
+                  <option value="stripe">Stripe (Card / Apple Pay / Google Pay)</option>
+                  <option value="venmo">Venmo</option>
+                  <option value="zelle">Zelle</option>
+                  <option value="cash">Cash</option>
+                  <option value="check">Check</option>
+                  <option value="airbnb">Airbnb</option>
+                  <option value="vrbo">VRBO</option>
+                  <option value="comped">Comped (Free Stay)</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="gPaymentStatus">Payment Status</label>
+                <select id="gPaymentStatus" class="form-control">
+                  <option value="pending">Pending</option>
+                  <option value="deposit">Deposit Received</option>
+                  <option value="partial">Partial Payment</option>
+                  <option value="paid">Paid in Full</option>
+                  <option value="refunded">Refunded</option>
+                  <option value="comped">Comped</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="gTotalAmount">Total Amount ($)</label>
+                <input type="number" id="gTotalAmount" class="form-control" min="0" step="0.01" placeholder="0.00"/>
+              </div>
+              <div class="form-group">
+                <label for="gAmountReceived">Amount Received ($)</label>
+                <input type="number" id="gAmountReceived" class="form-control" min="0" step="0.01" placeholder="0.00"/>
+              </div>
+              <div class="form-group">
+                <label>Balance Due</label>
+                <div id="gBalanceDue" style="padding:0.75rem 1rem;background:rgba(27,42,74,0.4);border:1px solid rgba(91,141,217,0.2);border-radius:var(--radius);font-size:0.82rem;color:var(--sky);">$0.00</div>
+              </div>
+              <div class="form-group">
+                <label for="gSecurityDeposit">Security Deposit ($)</label>
+                <input type="number" id="gSecurityDeposit" class="form-control" min="0" step="0.01" placeholder="0.00"/>
+              </div>
+              <div class="form-group full">
+                <label for="gPaymentNoteInternal">Payment Notes</label>
+                <textarea id="gPaymentNoteInternal" class="form-control" rows="2"
+                  placeholder="e.g. Received $500 deposit via Zelle on 4/25, balance due at check-in..."></textarea>
+              </div>
+            </div>
+
             <!-- Welcome Note -->
             <p class="nav-section-label" style="margin-bottom:0.5rem;">Welcome Note</p>
             <div class="form-group full" style="margin-bottom:1.5rem;">
@@ -1399,6 +1451,18 @@
         access_notes:     document.getElementById('gAccessNotes').value.trim() || null,
         review_notes:     document.getElementById('gReviewNotes').value.trim() || null,
         general_notes:    document.getElementById('gGeneralNotes').value.trim() || null,
+        // ── Payment fields ──
+        payment_method:   document.getElementById('gPaymentMethod')?.value || null,
+        payment_status:   document.getElementById('gPaymentStatus')?.value || 'pending',
+        total_amount:     parseFloat(document.getElementById('gTotalAmount')?.value) || null,
+        amount_received:  parseFloat(document.getElementById('gAmountReceived')?.value) || null,
+        balance_due:      (() => {
+          const t = parseFloat(document.getElementById('gTotalAmount')?.value) || 0;
+          const r = parseFloat(document.getElementById('gAmountReceived')?.value) || 0;
+          return t > 0 ? Math.max(0, t - r) : null;
+        })(),
+        security_deposit: parseFloat(document.getElementById('gSecurityDeposit')?.value) || null,
+        payment_note:     document.getElementById('gPaymentNoteInternal')?.value.trim() || null,
       };
 
       try {
@@ -1827,6 +1891,20 @@
         timer = setTimeout(() => fn(...args), delay);
       };
     }
+
+    // ── Payment balance auto-calculator ──
+    function updateBalance() {
+      const total    = parseFloat(document.getElementById('gTotalAmount')?.value)    || 0;
+      const received = parseFloat(document.getElementById('gAmountReceived')?.value) || 0;
+      const balance  = Math.max(0, total - received);
+      const el = document.getElementById('gBalanceDue');
+      if (el) {
+        el.textContent = `$${balance.toFixed(2)}`;
+        el.style.color = balance > 0 ? '#FFD54F' : '#81C784';
+      }
+    }
+    document.getElementById('gTotalAmount')?.addEventListener('input', updateBalance);
+    document.getElementById('gAmountReceived')?.addEventListener('input', updateBalance);
 
     // ── Mobile sidebar toggle ──
     const sidebarToggle = document.getElementById('sidebarToggle');
