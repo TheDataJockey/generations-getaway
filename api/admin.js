@@ -316,13 +316,26 @@ async function handleBookings(req, res, token) {
 
     if (req.method === 'PATCH') {
       if (auth.admin.role === 'maintenance') return res.status(403).json({ error: 'Insufficient permissions.' });
-      const { id, status } = req.body;
-      const valid = ['inquiry','confirmed','cancelled','completed'];
-      if (!id || !valid.includes(status)) return res.status(400).json({ error: 'Valid ID and status required.' });
-      const { error } = await supabase.from('bookings').update({
-        status,
-        ...(status === 'cancelled' ? { cancelled_at: new Date().toISOString() } : {}),
-      }).eq('id', id);
+      const { id, status, pin_code, yale_pin_code } = req.body;
+      if (!id) return res.status(400).json({ error: 'Booking ID required.' });
+
+      // Build update payload — handle status change OR code update
+      const updates = {};
+
+      if (status) {
+        const valid = ['inquiry','confirmed','cancelled','completed'];
+        if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
+        updates.status = status;
+        if (status === 'cancelled') updates.cancelled_at = new Date().toISOString();
+      }
+
+      if (pin_code !== undefined)      updates.pin_code      = pin_code;
+      if (yale_pin_code !== undefined) updates.yale_pin_code = yale_pin_code;
+
+      if (Object.keys(updates).length === 0)
+        return res.status(400).json({ error: 'Nothing to update.' });
+
+      const { error } = await supabase.from('bookings').update(updates).eq('id', id);
       if (error) throw error;
       await logAudit(auth.admin, 'updated', 'bookings', id, `Status → ${status}`);
       return res.status(200).json({ success: true });
