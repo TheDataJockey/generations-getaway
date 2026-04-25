@@ -85,11 +85,11 @@ async function handleCredentials(req, res) {
     }
 
     // ── Authenticate via Supabase Auth REST API directly ──
-    // Uses fetch instead of SDK signInWithPassword to avoid URL parsing issues
-    const supabaseUrl  = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+    // Must use raw env var URL — NOT the supabase client baseURL which appends /rest/v1/
+    const rawUrl       = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
     const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    const authResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+    const authResponse = await fetch(`${rawUrl}/auth/v1/token?grant_type=password`, {
       method:  'POST',
       headers: {
         'Content-Type': 'application/json',
