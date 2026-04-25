@@ -167,6 +167,23 @@ export default async function handler(req, res) {
     // ── TODO Phase 8: Send confirmation email via Resend ──
     // await sendConfirmationEmail(cleanData, numNights);
 
+    // ── Send emails — confirmation to guest + notification to Kyle ──
+    try {
+      const { sendBookingConfirmation, sendKyleNotification } = await import('./email.js');
+      const guestData   = { first_name, last_name, email, phone };
+      const bookingData = {
+        check_in_date, check_out_date, num_guests,
+        booking_source, special_requests
+      };
+      await Promise.all([
+        sendBookingConfirmation({ guest: guestData, booking: bookingData }),
+        sendKyleNotification({ guest: guestData, booking: bookingData }),
+      ]);
+    } catch (emailErr) {
+      // Never block booking confirmation due to email failure
+      console.error('[bookings] Email failed:', emailErr.message);
+    }
+
     return res.status(200).json({
       success:    true,
       booking_id: booking.id,
