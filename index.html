@@ -199,20 +199,28 @@
     }
 
     /* ── Responsive ── */
+    /* ── Tablet ── */
     @media (max-width: 900px) {
       #amenities { grid-template-columns: 1fr; gap: 3rem; }
-      .gallery-grid {
-        grid-template-columns: 1fr 1fr;
-        grid-template-rows: auto;
-      }
-      .gallery-grid div {
-        grid-column: auto !important;
-        grid-row: auto !important;
-        height: 200px;
-      }
+      .gallery-grid { grid-template-columns: 1fr 1fr; grid-template-rows: auto; }
+      .gallery-grid div { grid-column: auto !important; grid-row: auto !important; height: 200px; }
       .attractions-grid { grid-template-columns: 1fr; }
       .amenities-visual { height: 300px; }
       .cta-strip { padding: 4rem 2rem; }
+    }
+    /* ── Mobile ── */
+    @media (max-width: 640px) {
+      .hero h1 { font-size: clamp(2.2rem, 10vw, 3.5rem); }
+      .hero-logo { width: 160px; height: 160px; }
+      .hero-sub { font-size: 0.68rem; letter-spacing: 0.12em; }
+      section { padding: 4rem 1.5rem; }
+      .gallery-grid { grid-template-columns: 1fr; }
+      .gallery-grid div { height: 220px; }
+      .section-title { font-size: clamp(1.8rem, 6vw, 2.5rem); }
+      .amenities-list { grid-template-columns: 1fr; }
+      .cta-strip { padding: 3rem 1.5rem; }
+      .cta-buttons { flex-direction: column; align-items: center; }
+      .btn { width: 100%; max-width: 280px; justify-content: center; }
     }
   </style>
 </head>
