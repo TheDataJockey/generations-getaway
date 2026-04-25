@@ -145,13 +145,25 @@
     }
 
     /* ── Responsive ── */
+    /* ── Tablet ── */
     @media (max-width: 900px) {
-      .booking-layout {
-        grid-template-columns: 1fr;
-        padding: 4rem 2rem;
-      }
+      .booking-layout { grid-template-columns: 1fr; padding: 4rem 2rem; }
       .booking-sidebar { position: static; }
       .page-header { padding: 8rem 2rem 4rem; }
+    }
+    /* ── Mobile ── */
+    @media (max-width: 640px) {
+      .page-header { padding: 6rem 1.5rem 2.5rem; }
+      .page-header h1 { font-size: 2rem; }
+      .booking-layout { padding: 2rem 1.2rem 4rem; }
+      .booking-form-card { padding: 1.8rem 1.2rem; }
+      .form-row { grid-template-columns: 1fr; }
+      .property-photo { aspect-ratio: 16/9; }
+      .sidebar-card { padding: 1.5rem 1.2rem; }
+      .stay-date-block { padding: 0.8rem 1.2rem; }
+      .process-step { gap: 0.7rem; }
+      .step-text { font-size: 0.75rem; }
+      .availability-notice { font-size: 0.72rem; }
     }
   </style>
 </head>
