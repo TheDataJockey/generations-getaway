@@ -224,18 +224,48 @@ export default async function handler(req, res) {
     });
 
     // ── Return safe guest data (no full PIN, no sensitive fields) ──
+    // ── Fetch all bookings for this guest (for stay history) ──
+    const { data: allBookings } = await supabase
+      .from('bookings')
+      .select(`
+        id, check_in_date, check_out_date, num_nights, num_guests,
+        status, booking_source,
+        payment_method, payment_status,
+        total_amount, amount_received, balance_due,
+        nightly_rate, created_at
+      `)
+      .eq('guest_id', matchedGuest.id)
+      .in('status', ['confirmed', 'completed'])
+      .order('check_in_date', { ascending: false });
+
+    // Separate current booking from past stays
+    const today      = new Date().toISOString().split('T')[0];
+    const pastStays  = (allBookings || []).filter(b =>
+      b.check_out_date < today && b.id !== booking?.id
+    );
+
     return res.status(200).json({
       success: true,
       token,
       guest: {
+        id:             matchedGuest.id,
         first_name:     matchedGuest.first_name,
         last_name:      matchedGuest.last_name,
+        email:          matchedGuest.email,
         check_in_date:  booking?.check_in_date  || null,
         check_out_date: booking?.check_out_date || null,
         yale_pin_code:  booking?.yale_pin_code  || null,
         num_nights:     booking?.num_nights     || null,
         num_guests:     booking?.num_guests     || null,
         welcome_note:   booking?.welcome_note   || null,
+        booking_id:     booking?.id             || null,
+        payment_method: booking?.payment_method || null,
+        payment_status: booking?.payment_status || null,
+        total_amount:   booking?.total_amount   || null,
+        amount_received:booking?.amount_received|| null,
+        balance_due:    booking?.balance_due    || null,
+        nightly_rate:   booking?.nightly_rate   || null,
+        past_stays:     pastStays,
       },
     });
 
