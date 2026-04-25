@@ -114,10 +114,14 @@ async function handleCredentials(req, res) {
     }
 
     // ── Check admin_users record ──
+    // REST token response nests user under authData.user
+    const userId = authData.user?.id || authData.id;
+    console.log('[admin-auth] Auth user ID:', userId);
+
     const { data: adminUser } = await supabase
       .from('admin_users')
       .select('id, role, is_active, totp_verified, totp_secret')
-      .eq('supabase_auth_id', authData.user.id)
+      .eq('supabase_auth_id', userId)
       .single();
 
     console.log('[admin-auth] Found admin user:', adminUser?.id || 'NOT FOUND', 'active:', adminUser?.is_active);
