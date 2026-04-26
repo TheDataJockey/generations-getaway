@@ -327,6 +327,17 @@ async function handleBookings(req, res, token) {
         if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
         updates.status = status;
         if (status === 'cancelled') updates.cancelled_at = new Date().toISOString();
+
+        // Activate guest record when booking is confirmed
+        if (status === 'confirmed') {
+          const { data: bk } = await supabase
+            .from('bookings').select('guest_id').eq('id', id).single();
+          if (bk?.guest_id) {
+            await supabase.from('guests')
+              .update({ is_active: true })
+              .eq('id', bk.guest_id);
+          }
+        }
       }
 
       if (pin_code !== undefined)      updates.pin_code      = pin_code;
