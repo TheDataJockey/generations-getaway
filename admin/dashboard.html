@@ -565,6 +565,10 @@
       <button class="nav-item" data-page="access-codes">
         <span class="nav-icon">🔑</span> Access Codes
       </button>
+      <button class="nav-item" data-page="requests">
+        <span class="nav-icon">&#9998;</span> Requests
+        <span class="nav-badge urgent" id="requestsBadge" style="display:none;">0</span>
+      </button>
     </nav>
 
     <div class="sidebar-footer">
@@ -1057,6 +1061,40 @@
         </div>
       </div>
 
+      <!-- REQUESTS PAGE -->
+      <div class="admin-page" id="page-requests">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
+          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:300;">
+            Reservation <span style="font-style:italic;color:var(--sky);">Requests</span>
+          </h2>
+          <select class="form-control" id="requestStatusFilter" style="max-width:160px;"
+            onchange="loadRequests()">
+            <option value="pending">Pending</option>
+            <option value="">All Requests</option>
+            <option value="approved">Approved</option>
+            <option value="declined">Declined</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Request #</th>
+                <th>Guest</th>
+                <th>Type</th>
+                <th>Details</th>
+                <th>Submitted</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="requestsBody">
+              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
 class="admin-page" id="page-admin-users">
       <div style="display:flex;justify-content:flex-end;margin-bottom:1.2rem;">
         <button class="btn btn-primary" id="addAdminBtn" style="font-size:0.65rem;">+ Add Admin User</button>
@@ -1246,6 +1284,7 @@ class="admin-page" id="page-admin-users">
         case 'events':      await loadEventSources(); break;
         case 'admin-users': await loadAdminUsers(); break;
         case 'access-codes': await loadAccessCodes(); break;
+        case 'requests':      await loadRequests();     break;
       }
     }
 
@@ -1327,7 +1366,10 @@ class="admin-page" id="page-admin-users">
         if (data.bookings?.length) {
           tbody.innerHTML = data.bookings.map(b => `
             <tr>
-              <td>${b.guest_first} ${b.guest_last}</td>
+              <td>
+                ${b.guest_first} ${b.guest_last}
+                ${b.modification_requested ? '<span title="' + (b.modification_request_type||'request') + ' request pending" style="display:inline-block;margin-left:0.4rem;padding:0.1rem 0.45rem;background:rgba(255,213,79,0.15);border:1px solid rgba(255,213,79,0.4);border-radius:3px;font-size:0.58rem;letter-spacing:0.08em;color:#FFD54F;text-transform:uppercase;vertical-align:middle;cursor:default;">&#9888; ' + (b.modification_request_type||'request') + '</span>' : ''}
+              </td>
               <td>${formatDate(b.check_in_date)}</td>
               <td>${formatDate(b.check_out_date)}</td>
               <td>${b.num_nights || '—'}</td>
@@ -2156,6 +2198,40 @@ class="admin-page" id="page-admin-users">
         <div style="display:flex;gap:0.8rem;justify-content:flex-end;">
           <button class="btn btn-ghost" onclick="closeAccessCodeModal()">Cancel</button>
           <button class="btn btn-primary" id="acSaveBtn" onclick="saveAccessCode()">Save Codes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESOLVE REQUEST MODAL -->
+  <div class="modal-overlay" id="resolveRequestModal">
+    <div class="modal-box" style="max-width:520px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="resolveModalTitle">Review Request</h3>
+        <button class="modal-close" onclick="closeResolveModal()">&#215;</button>
+      </div>
+      <div class="modal-body" style="padding:1.5rem;">
+        <input type="hidden" id="resolveRequestId"/>
+
+        <!-- Request summary -->
+        <div id="resolveRequestSummary" style="padding:1rem;background:rgba(27,42,74,0.5);border:1px solid rgba(91,141,217,0.15);border-radius:4px;margin-bottom:1.2rem;font-size:0.82rem;line-height:1.9;"></div>
+
+        <!-- Admin notes -->
+        <div class="form-group" style="margin-bottom:1.2rem;">
+          <label>Response to Guest <span style="color:var(--muted);font-weight:300;">&mdash; optional</span></label>
+          <textarea id="resolveAdminNotes" class="form-control" rows="3"
+            placeholder="e.g. Approved — updated your booking to May 5-8. or Sorry, those dates are unavailable."></textarea>
+        </div>
+
+        <div id="resolveModalError" style="color:#EF9A9A;font-size:0.78rem;min-height:1rem;margin-bottom:0.8rem;"></div>
+
+        <div style="display:flex;gap:0.8rem;justify-content:flex-end;flex-wrap:wrap;">
+          <button class="btn btn-ghost" onclick="closeResolveModal()">Cancel</button>
+          <button class="btn" id="resolveDeclineBtn"
+            style="background:rgba(239,154,154,0.1);border:1px solid rgba(239,154,154,0.3);color:#EF9A9A;"
+            onclick="resolveRequest('declined')">Decline</button>
+          <button class="btn btn-primary" id="resolveApproveBtn"
+            onclick="resolveRequest('approved')">Approve</button>
         </div>
       </div>
     </div>
