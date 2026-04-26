@@ -200,12 +200,12 @@ export default async function handler(req, res) {
 
     const { data: booking } = await supabase
       .from('bookings')
-      .select('check_in_date, check_out_date, yale_pin_code, num_nights, num_guests, welcome_note')
+      .select('id, check_in_date, check_out_date, yale_pin_code, num_nights, num_guests, welcome_note, payment_method, payment_status, total_amount, amount_received, balance_due, nightly_rate')
       .eq('guest_id', matchedGuest.id)
       .in('status', ['confirmed', 'completed'])
       .order('check_in_date', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     // ── Generate a simple session token ──
     const token = crypto
