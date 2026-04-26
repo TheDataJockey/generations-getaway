@@ -1127,7 +1127,7 @@
       } catch {}
     }
 
-    function selectResType(type) {
+    window.selectResType = function(type) {
       _resType = type;
       // Highlight selected button
       document.querySelectorAll('.res-type-btn').forEach(b => b.classList.remove('active'));
@@ -1148,7 +1148,7 @@
       else document.getElementById('resSubmitBtn').style.background = '';
     }
 
-    function selectCheckoutTime(time) {
+    window.selectCheckoutTime = function(time) {
       _resCheckoutTime = time;
       document.querySelectorAll('.res-time-btn').forEach(b => b.classList.remove('active'));
       document.querySelector(`[data-time="${time}"]`)?.classList.add('active');
@@ -1160,7 +1160,7 @@
       document.getElementById('resNewCheckOut').min = this.value || document.getElementById('resNewCheckIn').min;
     });
 
-    async function submitReservationRequest() {
+    window.submitReservationRequest = async function() {
       const btn    = document.getElementById('resSubmitBtn');
       const errEl  = document.getElementById('resSubmitError');
       const succEl = document.getElementById('resSubmitSuccess');
