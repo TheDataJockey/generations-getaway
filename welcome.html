@@ -167,6 +167,33 @@
       .review-buttons { flex-direction: column; }
       .review-buttons .btn { width: 100%; justify-content: center; }
     }
+
+    /* ── Reservation Tab ── */
+    .res-type-btn {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 0.4rem; padding: 1.1rem 0.8rem;
+      background: rgba(27,42,74,0.4);
+      border: 1px solid rgba(91,141,217,0.2);
+      border-radius: 4px; color: var(--cream);
+      font-family: var(--font-sans); font-size: 0.72rem;
+      letter-spacing: 0.08em; cursor: pointer;
+      transition: background var(--transition), border-color var(--transition);
+    }
+    .res-type-btn:hover { background: rgba(46,95,163,0.2); border-color: var(--blue-light); }
+    .res-type-btn.active { background: rgba(46,95,163,0.25); border-color: var(--sky); color: var(--sky); }
+    .res-time-btn {
+      padding: 1rem; background: rgba(27,42,74,0.4);
+      border: 1px solid rgba(91,141,217,0.2); border-radius: 4px;
+      color: var(--cream); font-family: var(--font-sans); cursor: pointer;
+      transition: background var(--transition), border-color var(--transition);
+      text-align: center;
+    }
+    .res-time-btn:hover { background: rgba(46,95,163,0.2); border-color: var(--blue-light); }
+    .res-time-btn.active { background: rgba(46,95,163,0.25); border-color: var(--sky); color: var(--sky); }
+    input[type="date"].res-date-input::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.5; }
+    @media (max-width:640px) {
+      #resTypeGrid { grid-template-columns: 1fr 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -253,6 +280,7 @@
       <button class="portal-tab"        role="tab" aria-selected="false" data-tab="rules"   >&#128203; House Rules</button>
       <button class="portal-tab"        role="tab" aria-selected="false" data-tab="safety"  >&#128680; Safety</button>
       <button class="portal-tab"        role="tab" aria-selected="false" data-tab="checkout">&#9989; Checkout</button>
+      <button class="portal-tab"        role="tab" aria-selected="false" data-tab="reservation">&#128197; My Reservation</button>
       <button class="portal-tab"        role="tab" aria-selected="false" data-tab="chat"    >&#128172; Ask Us</button>
       <button class="portal-tab"        role="tab" aria-selected="false" data-tab="history" >&#128220; My Stays</button>
     </nav>
@@ -549,6 +577,174 @@
       </div>
     </section>
 
+    <!-- ── TAB: MY RESERVATION ── -->
+    <section class="portal-section" id="tab-reservation" role="tabpanel" style="display:none;">
+      <div class="portal-content">
+
+        <!-- No active booking message -->
+        <div id="resNoBooking" style="display:none;text-align:center;padding:3rem 1rem;color:var(--muted);font-size:0.85rem;line-height:1.9;">
+          <div style="font-size:2.5rem;margin-bottom:1rem;">&#128197;</div>
+          No upcoming reservation found.<br/>
+          <a href="/booking.html" style="color:var(--sky);text-decoration:none;">Book a stay &rarr;</a>
+        </div>
+
+        <!-- Active booking panel -->
+        <div id="resBookingPanel">
+
+          <!-- Current booking summary -->
+          <div class="info-card open" id="resCurrentCard">
+            <div class="info-card-header" role="button" tabindex="0" aria-expanded="true">
+              <span class="info-card-icon">&#128197;</span>
+              <span class="info-card-title">Your Reservation</span>
+              <span class="info-card-chevron">&#9660;</span>
+            </div>
+            <div class="info-card-body">
+              <div id="resCurrentSummary"></div>
+            </div>
+          </div>
+
+          <!-- Request type selector -->
+          <div class="info-card open">
+            <div class="info-card-header" role="button" tabindex="0" aria-expanded="true">
+              <span class="info-card-icon">&#9998;</span>
+              <span class="info-card-title">Request a Change</span>
+              <span class="info-card-chevron">&#9660;</span>
+            </div>
+            <div class="info-card-body">
+
+              <!-- Pending requests -->
+              <div id="resPendingWrap" style="display:none;margin-bottom:1.2rem;">
+                <p style="font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);margin-bottom:0.6rem;">Pending Requests</p>
+                <div id="resPendingList"></div>
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.5rem;" id="resTypeGrid">
+                <button class="res-type-btn" data-type="dates" onclick="selectResType('dates')">
+                  <span style="font-size:1.4rem;">&#128197;</span>
+                  <span>Change Dates</span>
+                </button>
+                <button class="res-type-btn" data-type="guests" onclick="selectResType('guests')">
+                  <span style="font-size:1.4rem;">&#128101;</span>
+                  <span>Change Guests</span>
+                </button>
+                <button class="res-type-btn" data-type="checkout" onclick="selectResType('checkout')">
+                  <span style="font-size:1.4rem;">&#128336;</span>
+                  <span>Early/Late Checkout</span>
+                </button>
+                <button class="res-type-btn" data-type="cancel" onclick="selectResType('cancel')" style="border-color:rgba(239,154,154,0.3);color:#EF9A9A;">
+                  <span style="font-size:1.4rem;">&#10060;</span>
+                  <span>Cancel Reservation</span>
+                </button>
+              </div>
+
+              <!-- Change Dates form -->
+              <div id="resFormDates" class="res-form" style="display:none;">
+                <p style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem;line-height:1.7;">
+                  Select your preferred new dates below. Blocked dates are already booked.
+                  All date changes are subject to availability and host approval.
+                </p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+                  <div>
+                    <label style="font-size:0.62rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);display:block;margin-bottom:0.4rem;">New Check-In</label>
+                    <input type="date" id="resNewCheckIn" class="form-control res-date-input"
+                      style="background:rgba(27,42,74,0.6);border:1px solid rgba(91,141,217,0.25);color:var(--cream);padding:0.75rem;width:100%;border-radius:3px;font-family:var(--font-sans);font-size:0.82rem;outline:none;box-sizing:border-box;"/>
+                  </div>
+                  <div>
+                    <label style="font-size:0.62rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);display:block;margin-bottom:0.4rem;">New Check-Out</label>
+                    <input type="date" id="resNewCheckOut" class="form-control res-date-input"
+                      style="background:rgba(27,42,74,0.6);border:1px solid rgba(91,141,217,0.25);color:var(--cream);padding:0.75rem;width:100%;border-radius:3px;font-family:var(--font-sans);font-size:0.82rem;outline:none;box-sizing:border-box;"/>
+                  </div>
+                </div>
+                <div style="margin-bottom:1rem;">
+                  <label style="font-size:0.62rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);display:block;margin-bottom:0.4rem;">Additional Notes</label>
+                  <textarea id="resDateNotes" rows="2"
+                    style="width:100%;background:rgba(27,42,74,0.6);border:1px solid rgba(91,141,217,0.25);color:var(--cream);padding:0.75rem;border-radius:3px;font-family:var(--font-sans);font-size:0.82rem;outline:none;resize:vertical;box-sizing:border-box;"
+                    placeholder="Any flexibility on dates? Special circumstances?"></textarea>
+                </div>
+                <div id="resBlockedDates" style="font-size:0.72rem;color:#FFD54F;margin-bottom:1rem;min-height:1rem;"></div>
+              </div>
+
+              <!-- Change Guests form -->
+              <div id="resFormGuests" class="res-form" style="display:none;">
+                <p style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem;line-height:1.7;">
+                  Maximum occupancy is 4 guests. Changes are subject to host approval.
+                </p>
+                <div style="margin-bottom:1rem;">
+                  <label style="font-size:0.62rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);display:block;margin-bottom:0.4rem;">New Number of Guests</label>
+                  <select id="resNewGuests"
+                    style="background:rgba(27,42,74,0.7);border:1px solid rgba(91,141,217,0.25);color:var(--cream);padding:0.75rem;border-radius:3px;font-family:var(--font-sans);font-size:0.82rem;outline:none;width:100%;box-sizing:border-box;">
+                    <option value="1">1 Guest</option>
+                    <option value="2">2 Guests</option>
+                    <option value="3">3 Guests</option>
+                    <option value="4">4 Guests</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:0.62rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);display:block;margin-bottom:0.4rem;">Notes</label>
+                  <textarea id="resGuestNotes" rows="2"
+                    style="width:100%;background:rgba(27,42,74,0.6);border:1px solid rgba(91,141,217,0.25);color:var(--cream);padding:0.75rem;border-radius:3px;font-family:var(--font-sans);font-size:0.82rem;outline:none;resize:vertical;box-sizing:border-box;"
+                    placeholder="e.g. adding a child, noting ages..."></textarea>
+                </div>
+              </div>
+
+              <!-- Early/Late Checkout form -->
+              <div id="resFormCheckout" class="res-form" style="display:none;">
+                <p style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem;line-height:1.7;">
+                  Standard checkout is 11:00 AM. Early/late checkout is subject to availability.
+                </p>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+                  <button class="res-time-btn" data-time="early" onclick="selectCheckoutTime('early')">
+                    <span style="font-size:1.1rem;">&#127748;</span>
+                    <div style="font-size:0.75rem;margin-top:0.3rem;">Early Checkout</div>
+                    <div style="font-size:0.65rem;color:var(--muted);">Before 11 AM</div>
+                  </button>
+                  <button class="res-time-btn" data-time="late" onclick="selectCheckoutTime('late')">
+                    <span style="font-size:1.1rem;">&#127774;</span>
+                    <div style="font-size:0.75rem;margin-top:0.3rem;">Late Checkout</div>
+                    <div style="font-size:0.65rem;color:var(--muted);">After 11 AM</div>
+                  </button>
+                </div>
+                <div>
+                  <label style="font-size:0.62rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);display:block;margin-bottom:0.4rem;">Preferred Time &amp; Notes</label>
+                  <textarea id="resCheckoutNotes" rows="2"
+                    style="width:100%;background:rgba(27,42,74,0.6);border:1px solid rgba(91,141,217,0.25);color:var(--cream);padding:0.75rem;border-radius:3px;font-family:var(--font-sans);font-size:0.82rem;outline:none;resize:vertical;box-sizing:border-box;"
+                    placeholder="e.g. Need to leave by 9 AM, or hoping to stay until 2 PM..."></textarea>
+                </div>
+              </div>
+
+              <!-- Cancel form -->
+              <div id="resFormCancel" class="res-form" style="display:none;">
+                <div id="resCancelPolicy" style="padding:1rem;background:rgba(27,42,74,0.5);border:1px solid rgba(91,141,217,0.15);border-radius:4px;margin-bottom:1rem;font-size:0.82rem;line-height:1.9;"></div>
+                <div style="padding:0.9rem;background:rgba(239,154,154,0.08);border:1px solid rgba(239,154,154,0.2);border-radius:4px;margin-bottom:1rem;">
+                  <p style="font-size:0.75rem;color:#EF9A9A;margin:0;line-height:1.7;">
+                    Cancellations are not processed automatically. Your request will be reviewed and you will receive a confirmation email within 24 hours.
+                  </p>
+                </div>
+                <div>
+                  <label style="font-size:0.62rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);display:block;margin-bottom:0.4rem;">Reason for Cancellation <span style="color:var(--muted);font-weight:300;">&mdash; optional</span></label>
+                  <textarea id="resCancelReason" rows="2"
+                    style="width:100%;background:rgba(27,42,74,0.6);border:1px solid rgba(91,141,217,0.25);color:var(--cream);padding:0.75rem;border-radius:3px;font-family:var(--font-sans);font-size:0.82rem;outline:none;resize:vertical;box-sizing:border-box;"
+                    placeholder="Help us understand why you&apos;re cancelling..."></textarea>
+                </div>
+              </div>
+
+              <!-- Submit button -->
+              <div id="resSubmitWrap" style="display:none;margin-top:1.2rem;">
+                <div id="resSubmitError" style="color:#EF9A9A;font-size:0.78rem;min-height:1rem;margin-bottom:0.5rem;"></div>
+                <div id="resSubmitSuccess" style="display:none;padding:1rem;background:rgba(52,199,89,0.1);border:1px solid rgba(52,199,89,0.25);border-radius:4px;margin-bottom:0.8rem;font-size:0.82rem;color:#81C784;line-height:1.7;"></div>
+                <button id="resSubmitBtn" onclick="submitReservationRequest()"
+                  class="btn btn-primary" style="width:100%;padding:0.85rem;">
+                  Send Request
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
     <div class="portal-footer">
       <button class="logout-btn" id="logoutBtn" aria-label="Sign out of guest portal">Sign Out</button>
     </div>
@@ -657,6 +853,7 @@
         document.getElementById('reviewCard').style.display = 'block';
       addChatMessage('bot', `Welcome, ${guest.first_name}! I&rsquo;m here to help make your stay at Generations Getaway LLC wonderful. Feel free to ask me anything &mdash; about the pool, WiFi, local restaurants, appliances, or anything else you need.`);
       populateStayHistory(guest);
+      initReservationTab(guest);
     }
 
     // TAB NAVIGATION
@@ -827,6 +1024,259 @@
       c.style.transform = open ? '' : 'rotate(180deg)';
     };
 
+
+    // ════════════════════════════════════════
+    // MY RESERVATION TAB
+    // ════════════════════════════════════════
+
+    let _resGuest        = null;
+    let _resType         = null;
+    let _resCheckoutTime = null;
+    let _blockedDates    = [];
+
+    function initReservationTab(guest) {
+      _resGuest = guest;
+      loadPendingRequests(guest);
+      const today = new Date().toISOString().split('T')[0];
+      const hasBooking = guest.check_in_date && guest.check_out_date;
+      const isPast     = hasBooking && guest.check_out_date < today;
+
+      if (!hasBooking || isPast) {
+        document.getElementById('resNoBooking').style.display  = 'block';
+        document.getElementById('resBookingPanel').style.display = 'none';
+        return;
+      }
+
+      document.getElementById('resNoBooking').style.display   = 'none';
+      document.getElementById('resBookingPanel').style.display = 'block';
+
+      // Show booking summary
+      const isInFlight = guest.check_in_date <= today && guest.check_out_date >= today;
+      const fmt = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+      const nights = guest.num_nights || Math.round((new Date(guest.check_out_date) - new Date(guest.check_in_date)) / 86400000);
+
+      document.getElementById('resCurrentSummary').innerHTML = `
+        <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:1rem;">
+          <span style="padding:0.25rem 0.7rem;border-radius:100px;font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;
+            background:${isInFlight ? 'rgba(52,199,89,0.15)' : 'rgba(255,213,79,0.12)'};
+            color:${isInFlight ? '#81C784' : '#FFD54F'};">
+            ${isInFlight ? '&#9679; Checked In' : '&#9679; Upcoming'}
+          </span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;">
+          <div>
+            <div style="font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);margin-bottom:0.2rem;">Check-In</div>
+            <div style="color:var(--cream);font-size:0.88rem;">${fmt(guest.check_in_date)}</div>
+          </div>
+          <div>
+            <div style="font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);margin-bottom:0.2rem;">Check-Out</div>
+            <div style="color:var(--cream);font-size:0.88rem;">${fmt(guest.check_out_date)}</div>
+          </div>
+          <div>
+            <div style="font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);margin-bottom:0.2rem;">Nights</div>
+            <div style="color:var(--cream);font-size:0.88rem;">${nights}</div>
+          </div>
+          <div>
+            <div style="font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);margin-bottom:0.2rem;">Guests</div>
+            <div style="color:var(--cream);font-size:0.88rem;">${guest.num_guests || 1}</div>
+          </div>
+        </div>`;
+
+      // Hide cancel button if already checked in
+      const cancelBtn = document.querySelector('[data-type="cancel"]');
+      if (isInFlight && cancelBtn) cancelBtn.style.display = 'none';
+
+      // Show early/late checkout only if checked in
+      const checkoutBtn = document.querySelector('[data-type="checkout"]');
+      if (!isInFlight && checkoutBtn) checkoutBtn.style.display = 'none';
+
+      // Set cancellation policy text
+      const daysUntil = Math.ceil((new Date(guest.check_in_date + 'T15:00:00') - new Date()) / 86400000);
+      const pct = daysUntil >= 30 ? 100 : daysUntil >= 14 ? 50 : daysUntil >= 7 ? 25 : 0;
+      const pctColor = pct === 100 ? '#81C784' : pct > 0 ? '#FFB74D' : '#EF9A9A';
+      document.getElementById('resCancelPolicy').innerHTML = `
+        <div style="margin-bottom:0.5rem;color:var(--cream);">Check-in is in <strong>${daysUntil}</strong> day${daysUntil !== 1 ? 's' : ''}.</div>
+        <div style="margin-bottom:0.8rem;">Cancellation policy: <span style="color:${pctColor};font-weight:500;">${pct}% refund</span></div>
+        <div style="font-size:0.72rem;color:var(--muted);line-height:1.8;">
+          30+ days before check-in &mdash; <span style="color:#81C784;">Full refund</span><br/>
+          14&ndash;29 days &mdash; <span style="color:#FFB74D;">50% refund</span><br/>
+          7&ndash;13 days &mdash; <span style="color:#FFB74D;">25% refund</span><br/>
+          Under 7 days &mdash; <span style="color:#EF9A9A;">No refund</span>
+        </div>`;
+
+      // Set date input min dates and pre-set guest count
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+      document.getElementById('resNewCheckIn').min  = tomorrowStr;
+      document.getElementById('resNewCheckOut').min = tomorrowStr;
+      document.getElementById('resNewGuests').value = guest.num_guests || 1;
+
+      // Fetch blocked dates
+      fetchBlockedDates();
+    }
+
+    async function fetchBlockedDates() {
+      try {
+        const res  = await fetch('/api/guest-auth', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ action: 'blocked_dates' }),
+        });
+        // Silently fail — blocked dates are advisory only
+      } catch {}
+    }
+
+    function selectResType(type) {
+      _resType = type;
+      // Highlight selected button
+      document.querySelectorAll('.res-type-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector(`[data-type="${type}"]`)?.classList.add('active');
+      // Hide all forms
+      document.querySelectorAll('.res-form').forEach(f => f.style.display = 'none');
+      // Show selected form
+      const formEl = document.getElementById(`resForm${type.charAt(0).toUpperCase() + type.slice(1)}`);
+      if (formEl) formEl.style.display = 'block';
+      // Show submit button
+      document.getElementById('resSubmitWrap').style.display  = 'block';
+      document.getElementById('resSubmitSuccess').style.display = 'none';
+      document.getElementById('resSubmitError').textContent   = '';
+      // Update submit button label
+      const labels = { dates:'Request Date Change', guests:'Request Guest Change', checkout:'Request Checkout Change', cancel:'Request Cancellation' };
+      document.getElementById('resSubmitBtn').textContent = labels[type] || 'Send Request';
+      if (type === 'cancel') document.getElementById('resSubmitBtn').style.background = 'rgba(198,40,40,0.5)';
+      else document.getElementById('resSubmitBtn').style.background = '';
+    }
+
+    function selectCheckoutTime(time) {
+      _resCheckoutTime = time;
+      document.querySelectorAll('.res-time-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector(`[data-time="${time}"]`)?.classList.add('active');
+    }
+
+    // Validate date input against blocked dates
+    document.getElementById('resNewCheckIn')?.addEventListener('change', function() {
+      validateResDate(this.value, 'resNewCheckOut');
+      document.getElementById('resNewCheckOut').min = this.value || document.getElementById('resNewCheckIn').min;
+    });
+
+    async function submitReservationRequest() {
+      const btn    = document.getElementById('resSubmitBtn');
+      const errEl  = document.getElementById('resSubmitError');
+      const succEl = document.getElementById('resSubmitSuccess');
+      errEl.textContent = '';
+      succEl.style.display = 'none';
+
+      if (!_resType) { errEl.textContent = 'Please select a request type.'; return; }
+      if (!_resGuest?.booking_id) { errEl.textContent = 'No booking found.'; return; }
+
+      // Build request payload
+      let details = {};
+      let subject = '';
+
+      if (_resType === 'dates') {
+        const ci = document.getElementById('resNewCheckIn').value;
+        const co = document.getElementById('resNewCheckOut').value;
+        if (!ci || !co) { errEl.textContent = 'Please select both new check-in and check-out dates.'; return; }
+        if (co <= ci) { errEl.textContent = 'Check-out must be after check-in.'; return; }
+        details = { new_check_in: ci, new_check_out: co, notes: document.getElementById('resDateNotes').value };
+        subject = 'Date Change Request';
+      } else if (_resType === 'guests') {
+        details = { new_num_guests: document.getElementById('resNewGuests').value, notes: document.getElementById('resGuestNotes').value };
+        subject = 'Guest Count Change Request';
+      } else if (_resType === 'checkout') {
+        if (!_resCheckoutTime) { errEl.textContent = 'Please select early or late checkout.'; return; }
+        details = { checkout_type: _resCheckoutTime, notes: document.getElementById('resCheckoutNotes').value };
+        subject = _resCheckoutTime === 'early' ? 'Early Checkout Request' : 'Late Checkout Request';
+      } else if (_resType === 'cancel') {
+        details = { reason: document.getElementById('resCancelReason').value };
+        subject = 'Cancellation Request';
+      }
+
+      btn.disabled = true; btn.textContent = 'Sending...';
+
+      try {
+        const res  = await fetch('/api/guest-auth', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            action:       'reservation_request',
+            session_token: sessionStorage.getItem('gg_session_token'),
+            booking_id:   _resGuest.booking_id,
+            guest_name:   `${_resGuest.first_name} ${_resGuest.last_name}`,
+            request_type: _resType,
+            subject,
+            details,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Request failed.');
+
+        const reqNum = data.request_number || '';
+        succEl.innerHTML = `&#10003; Your ${subject.toLowerCase()} has been submitted.
+          ${reqNum ? `<br/><strong style="color:var(--sky);">Reference: ${reqNum}</strong>` : ''}
+          <br/><span style="font-size:0.75rem;color:var(--muted);">We will review and respond within 24 hours.</span>`;
+        succEl.style.display = 'block';
+        btn.style.display = 'none';
+        document.querySelectorAll('.res-type-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.res-form').forEach(f => f.style.display = 'none');
+        _resType = null;
+
+      } catch (err) {
+        errEl.textContent = err.message;
+        btn.disabled = false;
+        btn.textContent = subject || 'Send Request';
+      }
+    }
+
+    function validateResDate(checkIn, checkOutId) {
+      // Basic advisory — could extend to mark blocked dates
+      const co = document.getElementById(checkOutId);
+      if (co && checkIn >= co.value) co.value = '';
+    }
+
+    async function loadPendingRequests(guest) {
+      if (!guest.booking_id) return;
+      try {
+        const res  = await fetch('/api/guest-auth', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            action:        'get_requests',
+            session_token: sessionStorage.getItem('gg_session_token'),
+            booking_id:    guest.booking_id,
+          }),
+        });
+        const data = await res.json();
+        const requests = data.requests || [];
+        const pending  = requests.filter(r => r.status === 'pending');
+        const wrap     = document.getElementById('resPendingWrap');
+        const list     = document.getElementById('resPendingList');
+        if (!pending.length) { wrap.style.display = 'none'; return; }
+
+        wrap.style.display = 'block';
+        const typeLabels = { dates:'Date Change', guests:'Guest Change', checkout:'Checkout Change', cancel:'Cancellation', other:'Other' };
+        list.innerHTML = pending.map(r => {
+          const submitted = new Date(r.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+          return `<div style="display:flex;justify-content:space-between;align-items:center;
+            padding:0.7rem 0.9rem;background:rgba(255,213,79,0.07);
+            border:1px solid rgba(255,213,79,0.2);border-radius:4px;margin-bottom:0.5rem;font-size:0.78rem;">
+            <div>
+              <span style="color:#FFD54F;font-weight:500;">${r.request_number}</span>
+              <span style="color:var(--muted);margin:0 0.5rem;">&mdash;</span>
+              <span style="color:var(--cream);">${typeLabels[r.request_type] || r.request_type}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.6rem;">
+              <span style="color:var(--muted);font-size:0.7rem;">${submitted}</span>
+              <span style="padding:0.15rem 0.5rem;background:rgba(255,213,79,0.15);
+                border-radius:3px;font-size:0.6rem;letter-spacing:0.1em;color:#FFD54F;text-transform:uppercase;">
+                Pending
+              </span>
+            </div>
+          </div>`;
+        }).join('');
+      } catch {}
+    }
   </script>
 </body>
 </html>
