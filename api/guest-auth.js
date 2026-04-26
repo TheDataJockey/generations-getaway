@@ -220,7 +220,6 @@ export default async function handler(req, res) {
       record_id:  matchedGuest.id,
       ip_address: ip,
       user_agent: req.headers['user-agent'] || null,
-      notes:      'Guest portal login',
     });
 
     // ── Return safe guest data (no full PIN, no sensitive fields) ──
