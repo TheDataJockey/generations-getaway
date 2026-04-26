@@ -121,24 +121,44 @@ export default async function handler(req, res) {
     };
 
     // ── Upsert guest record ──
-    const { data: guest, error: guestError } = await supabase
+    // First try to find existing guest by email
+    let guest;
+    const { data: existingGuest } = await supabase
       .from('guests')
-      .upsert(
-        {
+      .select('id')
+      .eq('email', cleanData.email)
+      .single();
+
+    if (existingGuest) {
+      // Update existing guest
+      const { data: updatedGuest, error: updateError } = await supabase
+        .from('guests')
+        .update({
+          first_name: cleanData.first_name,
+          last_name:  cleanData.last_name,
+          phone:      cleanData.phone,
+        })
+        .eq('email', cleanData.email)
+        .select('id')
+        .single();
+      if (updateError) throw new Error(`Failed to update guest: ${updateError.message}`);
+      guest = updatedGuest;
+    } else {
+      // Insert new guest
+      const { data: newGuest, error: insertError } = await supabase
+        .from('guests')
+        .insert({
           email:      cleanData.email,
           first_name: cleanData.first_name,
           last_name:  cleanData.last_name,
           phone:      cleanData.phone,
-        },
-        {
-          onConflict:        'email',
-          ignoreDuplicates:  false,
-        }
-      )
-      .select('id')
-      .single();
-
-    if (guestError) throw new Error('Failed to create guest record.');
+          is_active:  true,
+        })
+        .select('id')
+        .single();
+      if (insertError) throw new Error(`Failed to create guest: ${insertError.message} (code: ${insertError.code})`);
+      guest = newGuest;
+    }
 
     // ── Create booking inquiry ──
     const numNights = Math.round(
@@ -162,7 +182,7 @@ export default async function handler(req, res) {
       .select('id')
       .single();
 
-    if (bookingError) throw new Error('Failed to create booking record.');
+    if (bookingError) throw new Error(`Failed to create booking record: ${bookingError.message} (code: ${bookingError.code})`);
 
     // ── TODO Phase 8: Send confirmation email via Resend ──
     // await sendConfirmationEmail(cleanData, numNights);
