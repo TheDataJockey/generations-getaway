@@ -162,9 +162,7 @@ async function handleDashboard(req, res, token) {
         guest_first:          b.guests?.first_name || '—',
         guest_last:           b.guests?.last_name  || '',
         confirmation_number:  b.confirmation_number || '',
-        modification_request_type:    b.modification_request_type   || null,
-        modification_request_details: b.modification_request_details || null,
-        modification_requested_at:    b.modification_requested_at   || null,
+
       })),
       escalations: (escalations || []).map(c => ({
         id: c.id, question: c.question, created_at: c.created_at,
@@ -292,7 +290,7 @@ async function handleBookings(req, res, token) {
       const { status = '', search = '', year, month } = req.query;
       let query = supabase
         .from('bookings')
-        .select('id, status, check_in_date, check_out_date, num_nights, num_guests, booking_source, created_at, guests(first_name, last_name, email, phone)')
+        .select('id, status, confirmation_number, check_in_date, check_out_date, num_nights, num_guests, booking_source, total_amount, amount_received, balance_due, payment_method, payment_status, stripe_payment_link_url, created_at, guests(first_name, last_name, email, phone)')
         .order('check_in_date', { ascending: false });
       if (status) query = query.eq('status', status);
       if (year && month) {
