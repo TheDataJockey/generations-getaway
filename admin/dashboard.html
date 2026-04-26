@@ -1095,7 +1095,7 @@
         </div>
       </div>
 
-class="admin-page" id="page-admin-users">
+      <div class="admin-page" id="page-admin-users">
       <div style="display:flex;justify-content:flex-end;margin-bottom:1.2rem;">
         <button class="btn btn-primary" id="addAdminBtn" style="font-size:0.65rem;">+ Add Admin User</button>
       </div>
@@ -1368,7 +1368,7 @@ class="admin-page" id="page-admin-users">
             <tr>
               <td>
                 ${b.guest_first} ${b.guest_last}
-                ${b.modification_requested ? '<span title="' + (b.modification_request_type||'request') + ' request pending" style="display:inline-block;margin-left:0.4rem;padding:0.1rem 0.45rem;background:rgba(255,213,79,0.15);border:1px solid rgba(255,213,79,0.4);border-radius:3px;font-size:0.58rem;letter-spacing:0.08em;color:#FFD54F;text-transform:uppercase;vertical-align:middle;cursor:default;">&#9888; ' + (b.modification_request_type||'request') + '</span>' : ''}
+
               </td>
               <td>${formatDate(b.check_in_date)}</td>
               <td>${formatDate(b.check_out_date)}</td>
