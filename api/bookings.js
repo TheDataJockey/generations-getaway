@@ -120,31 +120,20 @@ export default async function handler(req, res) {
       special_requests: sanitize(special_requests),
     };
 
-    // ── Upsert guest record ──
-    // First try to find existing guest by email
+    // ── Upsert guest record (inquiry stage) ──
+    // Guest records ARE created at inquiry stage so we can track them,
+    // but portal access is blocked until booking is CONFIRMED —
+    // guest-auth only grants access when status = confirmed/completed.
     let guest;
     const { data: existingGuest } = await supabase
       .from('guests')
       .select('id')
       .eq('email', cleanData.email)
-      .single();
+      .maybeSingle();
 
     if (existingGuest) {
-      // Update existing guest
-      const { data: updatedGuest, error: updateError } = await supabase
-        .from('guests')
-        .update({
-          first_name: cleanData.first_name,
-          last_name:  cleanData.last_name,
-          phone:      cleanData.phone,
-        })
-        .eq('email', cleanData.email)
-        .select('id')
-        .single();
-      if (updateError) throw new Error(`Failed to update guest: ${updateError.message}`);
-      guest = updatedGuest;
+      guest = existingGuest;
     } else {
-      // Insert new guest
       const { data: newGuest, error: insertError } = await supabase
         .from('guests')
         .insert({
@@ -152,11 +141,11 @@ export default async function handler(req, res) {
           first_name: cleanData.first_name,
           last_name:  cleanData.last_name,
           phone:      cleanData.phone,
-          is_active:  true,
+          is_active:  false, // inactive until booking confirmed
         })
         .select('id')
         .single();
-      if (insertError) throw new Error(`Failed to create guest: ${insertError.message} (code: ${insertError.code})`);
+      if (insertError) throw new Error(`Failed to create guest: ${insertError.message}`);
       guest = newGuest;
     }
 
