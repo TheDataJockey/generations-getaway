@@ -112,6 +112,7 @@ export default async function handler(req, res) {
     case 'knowledge':        return handleKnowledge(req, res, token);
     case 'chat-logs':        return handleChatLogs(req, res, token);
     case 'event-sources':    return handleEventSources(req, res, token);
+    case 'requests':         return handleRequests(req, res, auth);
     case 'users':            return handleUsers(req, res, token);
     default:
       return res.status(400).json({ error: 'Missing or invalid resource parameter.' });
@@ -158,8 +159,12 @@ async function handleDashboard(req, res, token) {
         id: b.id, status: b.status,
         check_in_date: b.check_in_date, check_out_date: b.check_out_date,
         num_guests: b.num_guests, booking_source: b.booking_source,
-        guest_first: b.guests?.first_name || '—',
-        guest_last:  b.guests?.last_name  || '',
+        guest_first:          b.guests?.first_name || '—',
+        guest_last:           b.guests?.last_name  || '',
+        confirmation_number:  b.confirmation_number || '',
+        modification_request_type:    b.modification_request_type   || null,
+        modification_request_details: b.modification_request_details || null,
+        modification_requested_at:    b.modification_requested_at   || null,
       })),
       escalations: (escalations || []).map(c => ({
         id: c.id, question: c.question, created_at: c.created_at,
@@ -526,6 +531,81 @@ async function handleEventSources(req, res, token) {
 // ════════════════════════════════════
 // ADMIN USERS
 // ════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// RESOURCE: Reservation Requests
+// ════════════════════════════════════════════════════════════════
+async function handleRequests(req, res, auth) {
+  // GET — list requests
+  if (req.method === 'GET') {
+    const { status } = req.query;
+
+    let query = supabase
+      .from('reservation_requests')
+      .select(`
+        id, request_number, request_type, status,
+        requested_details, guest_notes, admin_notes,
+        created_at, updated_at, resolved_at,
+        bookings(confirmation_number, check_in_date, check_out_date),
+        guests(first_name, last_name, email)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (status) query = query.eq('status', status);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return res.status(200).json({
+      requests: (data || []).map(r => ({
+        id:                   r.id,
+        request_number:       r.request_number,
+        request_type:         r.request_type,
+        status:               r.status,
+        requested_details:    r.requested_details,
+        guest_notes:          r.guest_notes,
+        admin_notes:          r.admin_notes,
+        created_at:           r.created_at,
+        resolved_at:          r.resolved_at,
+        guest_first:          r.guests?.first_name || '—',
+        guest_last:           r.guests?.last_name  || '',
+        guest_email:          r.guests?.email      || '',
+        confirmation_number:  r.bookings?.confirmation_number || '',
+        check_in_date:        r.bookings?.check_in_date || '',
+        check_out_date:       r.bookings?.check_out_date || '',
+      })),
+    });
+  }
+
+  // PATCH — resolve a request (approve or decline)
+  if (req.method === 'PATCH') {
+    const { id, status, admin_notes } = req.body;
+    if (!id || !['approved','declined','cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Valid request ID and status required.' });
+    }
+
+    const { error } = await supabase
+      .from('reservation_requests')
+      .update({
+        status,
+        admin_notes: admin_notes || null,
+        resolved_at: new Date().toISOString(),
+        resolved_by: auth.admin.id,
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+
+    await logAudit(auth.admin, status === 'approved' ? 'updated' : 'updated',
+      'reservation_requests', id, null, { status, admin_notes });
+
+    return res.status(200).json({ success: true });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed.' });
+}
+
+
 async function handleUsers(req, res, token) {
   const auth = await validateAdminToken(token, 'super_admin');
   if (auth.error) return res.status(auth.status).json({ error: auth.error });
