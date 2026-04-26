@@ -18,6 +18,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 // Strip any trailing /rest/v1 from URL — Vercel env vars sometimes include it
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || '')
@@ -29,7 +30,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } }
 );
-import crypto from 'crypto';
 
 // ── Supabase admin client (service role — server only) ──
 
@@ -196,8 +196,6 @@ export default async function handler(req, res) {
       .eq('id', matchedGuest.id);
 
     // ── Fetch current booking for this guest ──
-    const today = new Date().toISOString().split('T')[0];
-
     const { data: booking } = await supabase
       .from('bookings')
       .select('id, check_in_date, check_out_date, yale_pin_code, num_nights, num_guests, welcome_note, payment_method, payment_status, total_amount, amount_received, balance_due, nightly_rate')
@@ -238,9 +236,9 @@ export default async function handler(req, res) {
       .order('check_in_date', { ascending: false });
 
     // Separate current booking from past stays
-    const today      = new Date().toISOString().split('T')[0];
-    const pastStays  = (allBookings || []).filter(b =>
-      b.check_out_date < today && b.id !== booking?.id
+    const todayStr  = new Date().toISOString().split('T')[0];
+    const pastStays = (allBookings || []).filter(b =>
+      b.check_out_date < todayStr && b.id !== booking?.id
     );
 
     return res.status(200).json({
