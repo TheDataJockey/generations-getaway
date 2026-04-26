@@ -43,6 +43,118 @@ const LOCKOUT_RULES = [
 // ── Max attempts before permanent lock ──
 const HARD_LOCK_ATTEMPTS = 15;
 
+
+
+// ── Get requests handler ──
+async function handleGetRequests(req, res, supabase) {
+  const { session_token, booking_id } = req.body;
+  if (!session_token || !booking_id) return res.status(400).json({ error: 'Missing parameters.' });
+
+  const { data: requests } = await supabase
+    .from('reservation_requests')
+    .select('id, request_number, request_type, status, requested_details, guest_notes, admin_notes, created_at, resolved_at')
+    .eq('booking_id', booking_id)
+    .order('created_at', { ascending: false });
+
+  return res.status(200).json({ requests: requests || [] });
+}
+
+// ── Reservation request handler ──
+async function handleReservationRequest(req, res, supabase) {
+  const { session_token, booking_id, guest_name, request_type, subject, details } = req.body;
+
+  // Validate session token
+  if (!session_token) return res.status(401).json({ error: 'Not authenticated.' });
+
+  // Fetch booking to verify it belongs to this session
+  const { data: booking } = await supabase
+    .from('bookings')
+    .select('id, check_in_date, check_out_date, guest_id, guests(first_name, last_name, email)')
+    .eq('id', booking_id)
+    .in('status', ['confirmed', 'completed'])
+    .maybeSingle();
+
+  if (!booking) return res.status(404).json({ error: 'Booking not found.' });
+
+  const guest = booking.guests;
+  const fmt   = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+
+  // Build email body
+  let detailsHtml = '';
+  if (request_type === 'dates') {
+    detailsHtml = `
+      <div style="margin:0 0 8px;"><strong>New Check-In:</strong> ${fmt(details.new_check_in)}</div>
+      <div style="margin:0 0 8px;"><strong>New Check-Out:</strong> ${fmt(details.new_check_out)}</div>
+      ${details.notes ? `<div><strong>Notes:</strong> ${details.notes}</div>` : ''}`;
+  } else if (request_type === 'guests') {
+    detailsHtml = `
+      <div style="margin:0 0 8px;"><strong>New Guest Count:</strong> ${details.new_num_guests}</div>
+      ${details.notes ? `<div><strong>Notes:</strong> ${details.notes}</div>` : ''}`;
+  } else if (request_type === 'checkout') {
+    detailsHtml = `
+      <div style="margin:0 0 8px;"><strong>Type:</strong> ${details.checkout_type === 'early' ? 'Early Checkout' : 'Late Checkout'}</div>
+      ${details.notes ? `<div><strong>Notes:</strong> ${details.notes}</div>` : ''}`;
+  } else if (request_type === 'cancel') {
+    detailsHtml = details.reason
+      ? `<div><strong>Reason:</strong> ${details.reason}</div>`
+      : `<div>No reason provided.</div>`;
+  }
+
+  // Send email via Resend
+  const RESEND_API_KEY = process.env.RESEND_API_KEY;
+  if (RESEND_API_KEY) {
+    await fetch('https://api.resend.com/emails', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_API_KEY}` },
+      body: JSON.stringify({
+        from:    'Generations Getaway LLC <bookings@generationsgetawayfl.com>',
+        to:      'kyle@generationsgetawayfl.com',
+        subject: `🔔 Guest Request: ${subject} — ${guest_name}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#1B2A4A;color:#A8C4E0;padding:32px;border-radius:8px;">
+            <h2 style="color:#F4F7FB;font-weight:300;margin-bottom:4px;">Guest Reservation Request</h2>
+            <p style="color:#7A90AE;font-size:12px;margin-bottom:24px;text-transform:uppercase;letter-spacing:0.15em;">${subject}</p>
+            <div style="background:rgba(13,27,46,0.6);border:1px solid rgba(91,141,217,0.2);border-radius:6px;padding:20px;margin-bottom:20px;">
+              <div style="margin-bottom:8px;"><strong style="color:#F4F7FB;">Guest:</strong> ${guest.first_name} ${guest.last_name}</div>
+              <div style="margin-bottom:8px;"><strong style="color:#F4F7FB;">Email:</strong> ${guest.email || 'N/A'}</div>
+              <div style="margin-bottom:8px;"><strong style="color:#F4F7FB;">Current Check-In:</strong> ${fmt(booking.check_in_date)}</div>
+              <div><strong style="color:#F4F7FB;">Current Check-Out:</strong> ${fmt(booking.check_out_date)}</div>
+            </div>
+            <div style="background:rgba(13,27,46,0.6);border:1px solid rgba(91,141,217,0.2);border-radius:6px;padding:20px;margin-bottom:24px;">
+              <p style="color:#7A90AE;font-size:11px;text-transform:uppercase;letter-spacing:0.15em;margin-bottom:12px;">Request Details</p>
+              ${detailsHtml}
+            </div>
+            <a href="https://www.generationsgetawayfl.com/admin/dashboard.html"
+              style="display:inline-block;background:#2E5FA3;color:#fff;text-decoration:none;padding:12px 24px;border-radius:4px;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;">
+              Review in Dashboard
+            </a>
+          </div>`,
+      }),
+    });
+  }
+
+  // Insert into reservation_requests table
+  const { data: reqRow, error: reqError } = await supabase
+    .from('reservation_requests')
+    .insert({
+      booking_id:        booking_id,
+      guest_id:          booking.guest_id,
+      request_type:      request_type,
+      status:            'pending',
+      requested_details: details,
+      guest_notes:       details.notes || null,
+    })
+    .select('request_number')
+    .single();
+
+  if (reqError) {
+    console.error('[guest-auth/reservation_request] Insert error:', reqError.message);
+    return res.status(500).json({ error: 'Failed to submit request. Please try again.' });
+  }
+
+  return res.status(200).json({ success: true, request_number: reqRow.request_number });
+}
+
 export default async function handler(req, res) {
   // ── CORS ──
   // Allow both www and non-www
@@ -56,6 +168,14 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')    return res.status(405).json({ error: 'Method not allowed.' });
+
+  // ── Route reservation requests separately ──
+  if (req.body?.action === 'reservation_request') {
+    return handleReservationRequest(req, res, supabase);
+  }
+  if (req.body?.action === 'get_requests') {
+    return handleGetRequests(req, res, supabase);
+  }
 
   // ── IP-level rate limit: max 20 attempts per hour ──
   const ip         = req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
