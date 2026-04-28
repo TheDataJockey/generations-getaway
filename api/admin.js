@@ -287,10 +287,21 @@ async function handleBookings(req, res, token) {
 
   try {
     if (req.method === 'GET') {
-      const { status = '', search = '', year, month } = req.query;
+      const { status = '', search = '', year, month, id } = req.query;
+
+      // Single booking lookup
+      if (id) {
+        const { data, error } = await supabase
+          .from('bookings')
+          .select('*, guests(first_name, last_name, email, phone)')
+          .eq('id', id)
+          .single();
+        if (error) throw error;
+        return res.status(200).json({ booking: data });
+      }
       let query = supabase
         .from('bookings')
-        .select('id, status, confirmation_number, check_in_date, check_out_date, num_nights, num_guests, booking_source, total_amount, amount_received, balance_due, payment_method, payment_status, stripe_payment_link_url, created_at, guests(first_name, last_name, email, phone)')
+        .select('id, status, check_in_date, check_out_date, num_nights, num_guests, booking_source, total_amount, amount_received, balance_due, payment_method, payment_status, stripe_payment_link_url, created_at, guests(first_name, last_name, email, phone)')
         .order('check_in_date', { ascending: false });
       if (status) query = query.eq('status', status);
       if (year && month) {
