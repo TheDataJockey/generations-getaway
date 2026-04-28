@@ -1305,7 +1305,7 @@
       switch (page) {
         case 'dashboard':   await loadDashboard();  break;
         case 'bookings':    await loadBookings();   break;
-        case 'calendar':    renderCalendar();       break;
+        case 'calendar':    await renderCalendar(); break;
         case 'guests':      await loadGuests();     break;
         case 'knowledge':   await loadKnowledge();  break;
         case 'chat-log':    await loadChatLog();    break;
@@ -1598,18 +1598,18 @@
       }
     }
 
-    document.getElementById('calPrev').addEventListener('click', () => {
+    document.getElementById('calPrev')?.addEventListener('click', async () => {
       calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; }
-      renderCalendar();
+      await renderCalendar();
     });
-    document.getElementById('calNext').addEventListener('click', () => {
+    document.getElementById('calNext')?.addEventListener('click', async () => {
       calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; }
-      renderCalendar();
+      await renderCalendar();
     });
-    document.getElementById('calToday').addEventListener('click', () => {
+    document.getElementById('calToday')?.addEventListener('click', async () => {
       calYear  = new Date().getFullYear();
       calMonth = new Date().getMonth();
-      renderCalendar();
+      await renderCalendar();
     });
 
     // ── GUESTS ──
