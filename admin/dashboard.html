@@ -359,28 +359,56 @@
     .cal-nav-btn:hover { background: rgba(46,95,163,0.3); }
     .cal-month-title { font-family: var(--font-serif); font-size: 1.2rem; font-weight: 300; }
 
-    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; grid-auto-rows: minmax(80px, auto); }
     .cal-dow {
       text-align: center; font-size: 0.6rem; letter-spacing: 0.15em;
       text-transform: uppercase; color: var(--muted); padding: 0.5rem 0;
     }
     .cal-day {
-      aspect-ratio: 1; display: flex; flex-direction: column;
-      align-items: center; justify-content: flex-start; padding: 0.3rem;
-      border-radius: 3px; cursor: pointer; position: relative;
-      font-size: 0.78rem; color: rgba(164,196,224,0.7);
+      min-height: 80px; display: flex; flex-direction: column;
+      align-items: flex-start; justify-content: flex-start;
+      padding: 0.4rem 0.3rem 0.3rem; border-radius: 3px;
+      position: relative; font-size: 0.78rem;
+      color: rgba(164,196,224,0.7);
       transition: background var(--transition);
+      overflow: visible; border: 1px solid transparent;
     }
-    .cal-day:hover { background: rgba(46,95,163,0.12); }
-    .cal-day.today { color: var(--sky); font-weight: 500; }
-    .cal-day.today::after {
-      content: ''; position: absolute; bottom: 4px;
-      width: 4px; height: 4px; border-radius: 50%; background: var(--blue-light);
+    .cal-day:hover { background: rgba(46,95,163,0.1); border-color: rgba(91,141,217,0.15); }
+    .cal-day.today .cal-day-num { color: var(--sky); font-weight: 600; }
+    .cal-day.today { border-color: rgba(91,141,217,0.3); }
+    .cal-day.other-month { opacity: 0.3; pointer-events: none; }
+    .cal-day-num { font-size: 0.75rem; line-height: 1; margin-bottom: 0.3rem; padding-left: 0.1rem; }
+    /* Day type shading */
+    .cal-day.day-checkin   { background: rgba(46,125,50,0.12); }
+    .cal-day.day-checkout  { background: rgba(198,40,40,0.08); }
+    .cal-day.day-turnover  { background: rgba(255,160,0,0.1); }
+    .cal-day.day-occupied  { background: rgba(27,54,90,0.35); }
+    .cal-day.day-inquiry   { background: rgba(255,213,79,0.08); }
+    /* Day type indicator dot row */
+    .cal-day-tags { display: flex; gap: 3px; margin-bottom: 2px; flex-wrap: wrap; }
+    .cal-day-tag {
+      font-size: 0.5rem; letter-spacing: 0.06em; text-transform: uppercase;
+      padding: 1px 4px; border-radius: 2px; font-weight: 600; line-height: 1.4;
     }
-    .cal-day.booked { background: rgba(46,125,50,0.15); color: #81C784; }
-    .cal-day.inquiry { background: rgba(255,213,79,0.1); color: #FFD54F; }
-    .cal-day.blocked { background: rgba(198,40,40,0.1); color: #EF9A9A; }
-    .cal-day.other-month { opacity: 0.3; }
+    .cal-day-tag.tag-in       { background: rgba(46,125,50,0.3);  color: #81C784; }
+    .cal-day-tag.tag-out      { background: rgba(198,40,40,0.25); color: #EF9A9A; }
+    .cal-day-tag.tag-turnover { background: rgba(255,160,0,0.25); color: #FFB74D; }
+    .cal-day-tag.tag-inquiry  { background: rgba(255,213,79,0.2); color: #FFD54F; }
+    /* Booking bars */
+    .cal-bars { position: absolute; left: 0; right: 0; bottom: 6px; display: flex; flex-direction: column; gap: 2px; padding: 0 2px; }
+    .cal-bar {
+      height: 14px; border-radius: 2px; display: flex;
+      align-items: center; padding: 0 5px;
+      font-size: 0.55rem; font-weight: 500; letter-spacing: 0.04em;
+      color: rgba(0,0,0,0.75); white-space: nowrap; overflow: hidden;
+      text-overflow: ellipsis; cursor: pointer;
+      transition: opacity var(--transition);
+    }
+    .cal-bar:hover { opacity: 0.85; }
+    .cal-bar.bar-start { border-radius: 3px 2px 2px 3px; margin-left: 4px; }
+    .cal-bar.bar-end   { border-radius: 2px 3px 3px 2px; margin-right: 4px; }
+    .cal-bar.bar-mid   { border-radius: 1px; margin: 0; }
+    .cal-bar.bar-solo  { border-radius: 3px; margin: 0 4px; }
 
     /* ── Knowledge base ── */
     .kb-item {
@@ -1424,6 +1452,29 @@
     let calMonth = new Date().getMonth();
     let calBookings = [];
 
+    async // Palette of bar colors that fit the navy/blue theme
+    const BAR_COLORS = [
+      '#5B8DD9', // sky blue
+      '#4CAF82', // seafoam green
+      '#E07B54', // terracotta
+      '#9B6ED4', // soft purple
+      '#E0A44A', // warm gold
+      '#4DB8C4', // teal
+      '#D45E87', // rose
+      '#7FB069', // sage green
+      '#5E9ECF', // steel blue
+      '#C47E5A', // sienna
+    ];
+
+    function getBarColor(bookingId) {
+      // Deterministic color per booking based on id
+      let hash = 0;
+      for (let i = 0; i < bookingId.length; i++) {
+        hash = bookingId.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      return BAR_COLORS[Math.abs(hash) % BAR_COLORS.length];
+    }
+
     async function renderCalendar() {
       try {
         const res  = await fetch(
@@ -1431,20 +1482,20 @@
           { headers: authHeaders() }
         );
         const data = await res.json();
-        calBookings = data.bookings || [];
+        calBookings = (data.bookings || []).filter(b =>
+          b.status === 'confirmed' || b.status === 'inquiry' || b.status === 'completed'
+        );
       } catch { calBookings = []; }
 
       const months = ['January','February','March','April','May','June',
                       'July','August','September','October','November','December'];
-      document.getElementById('calMonthTitle').textContent =
-        `${months[calMonth]} ${calYear}`;
+      document.getElementById('calMonthTitle').textContent = `${months[calMonth]} ${calYear}`;
 
-      const grid    = document.getElementById('calGrid');
-      const today   = new Date();
-      const firstDay = new Date(calYear, calMonth, 1).getDay();
+      const grid        = document.getElementById('calGrid');
+      const today       = new Date();
+      const firstDay    = new Date(calYear, calMonth, 1).getDay();
       const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
 
-      // Remove old day cells (keep header row)
       grid.querySelectorAll('.cal-day').forEach(d => d.remove());
 
       // Empty cells before first day
@@ -1454,29 +1505,95 @@
         grid.appendChild(empty);
       }
 
-      // Day cells
+      // Build day cells
       for (let d = 1; d <= daysInMonth; d++) {
-        const cell  = document.createElement('div');
-        const isToday = today.getDate() === d &&
-                        today.getMonth() === calMonth &&
-                        today.getFullYear() === calYear;
+        const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const isToday = today.getDate() === d && today.getMonth() === calMonth && today.getFullYear() === calYear;
 
-        // Check booking status for this day
-        const dateStr  = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-        const booking  = calBookings.find(b =>
+        // Classify what type of day this is
+        const checkIns  = calBookings.filter(b => b.check_in_date  === dateStr);
+        const checkOuts = calBookings.filter(b => b.check_out_date === dateStr);
+        const occupied  = calBookings.filter(b => dateStr > b.check_in_date && dateStr < b.check_out_date);
+        const inquiries = calBookings.filter(b => b.status === 'inquiry' && dateStr >= b.check_in_date && dateStr <= b.check_out_date);
+
+        const isTurnover = checkIns.length > 0 && checkOuts.length > 0;
+        const isCheckIn  = checkIns.length > 0 && !isTurnover;
+        const isCheckOut = checkOuts.length > 0 && !isTurnover;
+        const isOccupied = occupied.length > 0;
+        const isInquiry  = inquiries.length > 0 && checkIns.length === 0 && checkOuts.length === 0 && !isOccupied;
+
+        const cell = document.createElement('div');
+        let cls = 'cal-day';
+        if (isToday)    cls += ' today';
+        if (isTurnover) cls += ' day-turnover';
+        else if (isCheckIn)  cls += ' day-checkin';
+        else if (isCheckOut) cls += ' day-checkout';
+        else if (isOccupied) cls += ' day-occupied';
+        else if (isInquiry)  cls += ' day-inquiry';
+        cell.className = cls;
+
+        // Day number
+        const numEl = document.createElement('div');
+        numEl.className = 'cal-day-num';
+        numEl.textContent = d;
+        cell.appendChild(numEl);
+
+        // Day type tags
+        const allEvents = [...checkIns, ...checkOuts, ...occupied];
+        if (checkIns.length || checkOuts.length || isTurnover) {
+          const tagRow = document.createElement('div');
+          tagRow.className = 'cal-day-tags';
+          if (isTurnover) {
+            tagRow.innerHTML = '<span class="cal-day-tag tag-turnover">IN/OUT</span>';
+          } else if (isCheckIn) {
+            tagRow.innerHTML = '<span class="cal-day-tag tag-in">Check-In</span>';
+          } else if (isCheckOut) {
+            tagRow.innerHTML = '<span class="cal-day-tag tag-out">Check-Out</span>';
+          }
+          if (inquiries.length && !isTurnover && !isCheckIn && !isCheckOut) {
+            tagRow.innerHTML += '<span class="cal-day-tag tag-inquiry">Inquiry</span>';
+          }
+          cell.appendChild(tagRow);
+        }
+
+        // Booking bars — one per booking that spans this day
+        const barsForDay = calBookings.filter(b =>
+          b.status !== 'inquiry' &&
           dateStr >= b.check_in_date && dateStr < b.check_out_date
         );
 
-        cell.className = 'cal-day' +
-          (isToday ? ' today' : '') +
-          (booking?.status === 'confirmed' ? ' booked'  : '') +
-          (booking?.status === 'inquiry'   ? ' inquiry' : '');
-
-        cell.textContent = d;
-        if (booking) {
-          cell.title = `${booking.guest_first} ${booking.guest_last} — ${booking.status}`;
-          cell.addEventListener('click', () => openBookingModal(booking.id));
+        if (barsForDay.length > 0) {
+          const barsEl = document.createElement('div');
+          barsEl.className = 'cal-bars';
+          barsForDay.slice(0, 3).forEach(b => { // max 3 bars per day
+            const isStart = b.check_in_date  === dateStr;
+            const isEnd   = b.check_out_date === dateStr;  // won't happen due to filter above
+            const color   = getBarColor(b.id);
+            const bar     = document.createElement('div');
+            bar.className = 'cal-bar ' + (isStart ? 'bar-start' : 'bar-mid');
+            bar.style.background = color;
+            bar.style.marginLeft  = isStart ? '4px' : '0';
+            bar.style.borderRadius = isStart ? '3px 2px 2px 3px' : '0';
+            // Check if this bar ends tomorrow (last day in month or booking checkout tomorrow)
+            const tomorrow = new Date(calYear, calMonth, d + 1).toISOString().split('T')[0];
+            if (b.check_out_date === tomorrow || d === daysInMonth) {
+              bar.style.marginRight  = '4px';
+              bar.style.borderRadius = isStart ? '3px' : '0 3px 3px 0';
+            }
+            // Show guest name only on start day
+            if (isStart) {
+              bar.textContent = `${b.guest_first} ${b.guest_last}`;
+            }
+            bar.title = `${b.guest_first} ${b.guest_last} · ${b.check_in_date} – ${b.check_out_date}`;
+            bar.addEventListener('click', (e) => {
+              e.stopPropagation();
+              openBookingModal(b.id);
+            });
+            barsEl.appendChild(bar);
+          });
+          cell.appendChild(barsEl);
         }
+
         grid.appendChild(cell);
       }
     }
