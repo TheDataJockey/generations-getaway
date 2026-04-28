@@ -1358,7 +1358,7 @@
         const status = document.getElementById('bookingFilter').value;
         const search = document.getElementById('bookingSearch').value;
         const res    = await fetch(
-          `/api/admin/bookings?status=${status}&search=${encodeURIComponent(search)}`,
+          `/api/admin?resource=bookings&status=${status}&search=${encodeURIComponent(search)}`,
           { headers: authHeaders() }
         );
         const data = await res.json();
@@ -1427,7 +1427,7 @@
     async function renderCalendar() {
       try {
         const res  = await fetch(
-          `/api/admin/bookings?year=${calYear}&month=${calMonth + 1}`,
+          `/api/admin?resource=bookings&year=${calYear}&month=${calMonth + 1}`,
           { headers: authHeaders() }
         );
         const data = await res.json();
@@ -1501,7 +1501,7 @@
         const search = document.getElementById('guestSearch').value;
         const filter = document.getElementById('guestFilter').value;
         const res    = await fetch(
-          `/api/admin/guests?search=${encodeURIComponent(search)}&filter=${filter}`,
+          `/api/admin?resource=guests&search=${encodeURIComponent(search)}&filter=${filter}`,
           { headers: authHeaders() }
         );
         const data  = await res.json();
@@ -1668,7 +1668,7 @@
       try {
         const filter = document.getElementById('chatFilter').value;
         const res    = await fetch(
-          `/api/admin/chat-logs?filter=${filter}`,
+          `/api/admin?resource=chat-logs&filter=${filter}`,
           { headers: authHeaders() }
         );
         const data = await res.json();
@@ -1793,7 +1793,7 @@
       document.getElementById('bookingModal').classList.add('open');
       document.getElementById('bookingModalBody').innerHTML = '<div class="spinner"></div>';
       try {
-        const res  = await fetch(`/api/admin/bookings/${bookingId}`, { headers: authHeaders() });
+        const res  = await fetch(`/api/admin?resource=bookings&id=${bookingId}`, { headers: authHeaders() });
         const data = await res.json();
         document.getElementById('bookingModalBody').innerHTML = `
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;">
@@ -1883,7 +1883,7 @@
     // Edit guest — load data into form
     window.editGuest = async function(guestId) {
       try {
-        const res  = await fetch(`/api/admin/guests/${guestId}`, { headers: authHeaders() });
+        const res  = await fetch(`/api/admin?resource=guests&id=${guestId}`, { headers: authHeaders() });
         const data = await res.json();
         document.getElementById('guestId').value           = data.id;
         document.getElementById('gFirstName').value        = data.first_name || '';
