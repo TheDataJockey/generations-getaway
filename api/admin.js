@@ -305,9 +305,13 @@ async function handleBookings(req, res, token) {
         .order('check_in_date', { ascending: false });
       if (status) query = query.eq('status', status);
       if (year && month) {
+        const y = parseInt(year), m = parseInt(month);
+        const monthStart = `${y}-${String(m).padStart(2,'0')}-01`;
+        const monthEnd   = new Date(y, m, 0).toISOString().split('T')[0]; // last day of month
+        // Fetch bookings that overlap with this month at all
         query = query
-          .gte('check_in_date', `${year}-${String(month).padStart(2,'0')}-01`)
-          .lte('check_out_date', new Date(year, month, 0).toISOString().split('T')[0]);
+          .lte('check_in_date',  monthEnd)    // starts on or before last day
+          .gte('check_out_date', monthStart); // ends on or after first day
       }
       const { data, error } = await query;
       if (error) throw error;
