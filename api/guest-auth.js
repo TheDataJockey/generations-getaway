@@ -1,20 +1,38 @@
 /**
- * Generations Getaway LLC
- * POST /api/guest-auth
- * =====================
- * Authenticates a guest by last name + PIN.
- * Returns a signed session token and safe guest
- * data on success. Tracks failed attempts and
- * applies progressive lockouts server-side.
+ * FILE: api/guest-auth.js
+ * ENDPOINT: POST /api/guest-auth
+ * USED BY: Guest Portal (welcome.html)
+ * ============================================================
+ * PURPOSE:
+ *   Authenticates guests trying to log into the Guest Portal.
+ *   Also handles reservation modification and cancellation
+ *   requests submitted by guests.
  *
- * Security:
- *  - PIN compared using timing-safe method
- *  - Failed attempts tracked in Supabase per guest
- *  - Progressive lockouts: 2min → 15min → 60min
- *  - Admin notified after 10 failed attempts
- *  - Session token is a signed JWT (via Supabase Auth)
- *  - No sensitive data (full PIN, ID) returned to client
- *  - Rate limited by IP via visitor_logs
+ * HOW GUEST LOGIN WORKS:
+ *   1. Guest enters last name and 4-digit PIN
+ *   2. Looks up guest by last name (must be is_active=true)
+ *   3. Compares PIN using a secure timing-safe method
+ *   4. If correct: returns guest data, booking details, and
+ *      a session token stored only in the guest's browser
+ *   5. If wrong: increments failed attempts and applies
+ *      progressive lockouts (2 min, 15 min, 60 min)
+ *
+ * SECURITY FEATURES:
+ *   - Only guests with is_active=true can log in
+ *   - Max 20 attempts per IP address per hour
+ *   - Timing-safe PIN comparison prevents timing attacks
+ *   - Account locks after repeated wrong PINs
+ *
+ * ALSO HANDLES:
+ *   action='reservation_request' - Guest submits a date change,
+ *     guest count change, checkout change, or cancellation.
+ *     Creates a record in reservation_requests and emails Kyle.
+ *   action='get_requests' - Returns the guest's pending requests
+ *     to show in the My Reservation tab.
+ *
+ * DATABASE TABLES USED:
+ *   - guests, bookings, reservation_requests,
+ *     audit_logs, visitor_logs
  */
 
 import { createClient } from '@supabase/supabase-js';
