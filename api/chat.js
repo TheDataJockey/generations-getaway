@@ -1,21 +1,24 @@
 /**
- * Generations Getaway LLC
- * POST /api/chat
- * ==============
- * Handles guest chatbot questions.
- * Flow:
- *  1. Validate session token
- *  2. Search knowledge base for matching answer
- *  3. If found → return KB answer
- *  4. If not found → call Claude AI for general guidance
- *     + return escalation message + notify admin
- *  5. Log all questions to chat_logs for owner review
+ * FILE: api/chat.js
+ * ENDPOINT: POST /api/chat
+ * USED BY: Guest Portal - Ask Us Tab (welcome.html)
+ * ============================================================
+ * PURPOSE:
+ *   Powers the AI chatbot in the Ask Us tab of the Guest Portal.
  *
- * Security:
- *  - Session token validated on every request
- *  - Rate limited per guest session
- *  - All input sanitized before KB search or AI prompt
- *  - Claude API key stored in env var, never exposed
+ * HOW IT WORKS:
+ *   1. Guest types a question (e.g. 'What is the WiFi password?')
+ *   2. First searches the Knowledge Base for a matching answer
+ *      that Kyle has written
+ *   3. If good match found: returns that answer directly
+ *   4. If no match: asks Claude AI with property context
+ *   5. If AI cannot answer: flags for Kyle follow-up
+ *   6. Saves all conversations to chat_logs for Kyle to review
+ *
+ * DATABASE TABLES USED:
+ *   - knowledge_base (searches for Q&A matches)
+ *   - chat_logs      (saves all conversations)
+ *   - guests         (identifies which guest is chatting)
  */
 
 import { createClient } from '@supabase/supabase-js';
