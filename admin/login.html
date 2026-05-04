@@ -1,3 +1,22 @@
+<!--
+  FILE: admin/login.html
+  PAGE: Admin Login Page
+  URL:  generationsgetawayfl.com/admin/login.html
+  ============================================================
+  PURPOSE:
+    Secure two-step login page for Kyle (the property owner)
+    to access the Admin Dashboard. Not visible to guests.
+
+  HOW LOGIN WORKS (2 steps):
+    Step 1 - Email and password (verified against Supabase)
+    Step 2 - 6-digit TOTP code from Microsoft Authenticator app
+             on Kyle's phone (two-factor authentication)
+    First time only: QR code shown to set up Authenticator app
+
+  CONNECTS TO:
+    - /api/admin-auth   Handles both login steps (server-side)
+    - /admin/dashboard.html  Redirects here on success
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
