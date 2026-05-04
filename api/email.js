@@ -1,22 +1,40 @@
 /**
- * Generations Getaway LLC
- * Email Service — Templates & Sending
- * =====================================
- * Handles all outbound emails via Resend.
- * Called by:
- *   - /api/bookings.js  (booking confirmation + Kyle notification)
- *   - /api/cron.js      (scheduled welcome, reminder, checkout, review)
+ * FILE: api/email.js
+ * NOT A DIRECT ENDPOINT - imported by api/bookings.js and api/cron.js
+ * USED BY: All automated email sending
+ * ============================================================
+ * PURPOSE:
+ *   Contains all 6 email templates and the email sending logic.
+ *   Emails are sent via Resend using the domain
+ *   generationsgetawayfl.com as the sender.
  *
- * All emails are HTML with plain-text fallback.
- * Sender: welcome@ for guest emails, bookings@ for admin notifications.
+ * THE 6 EMAIL TEMPLATES:
  *
- * Templates:
- *   1. bookingConfirmation  — instant on inquiry
- *   2. kyleNotification     — instant on inquiry
- *   3. welcomeEmail         — 3 days before check-in
- *   4. dayBeforeReminder    — 1 day before check-in
- *   5. checkoutReminder     — morning of checkout
- *   6. reviewRequest        — 1 day after checkout
+ *   1. sendBookingConfirmation - Instant on inquiry submission
+ *      To: guest | From: bookings@generationsgetawayfl.com
+ *      Content: Booking dates, what happens next
+ *
+ *   2. sendKyleNotification - Instant on inquiry submission
+ *      To: kyle@ | From: bookings@generationsgetawayfl.com
+ *      Content: Guest info, dates, link to dashboard
+ *
+ *   3. sendWelcomeEmail - 3 days before check-in
+ *      To: guest | From: welcome@generationsgetawayfl.com
+ *      Content: Door PIN, guest portal link, property info
+ *
+ *   4. sendDayBeforeReminder - Day before check-in
+ *      To: guest | From: welcome@generationsgetawayfl.com
+ *      Content: Door PIN, directions, parking
+ *
+ *   5. sendCheckoutReminder - Morning of checkout
+ *      To: guest | From: welcome@generationsgetawayfl.com
+ *      Content: Checkout checklist
+ *
+ *   6. sendReviewRequest - 1 day after checkout
+ *      To: guest | From: welcome@generationsgetawayfl.com
+ *      Content: Google review link
+ *
+ * REQUIRES: RESEND_API_KEY environment variable in Vercel
  */
 
 const RESEND_API_KEY  = process.env.RESEND_API_KEY;
