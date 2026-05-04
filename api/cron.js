@@ -1,22 +1,35 @@
 /**
- * Generations Getaway LLC
- * GET /api/cron
- * ==============
- * Daily email automation — runs at 8:00 AM EST via Vercel cron.
- * Queries Supabase for bookings due for each email type and sends them.
+ * FILE: api/cron.js
+ * ENDPOINT: GET /api/cron
+ * USED BY: Vercel Cron Scheduler - runs automatically daily
+ * ============================================================
+ * PURPOSE:
+ *   Runs every day at 8:00 AM Eastern time (configured in
+ *   vercel.json). Checks all confirmed bookings and sends
+ *   the appropriate automated email for that day.
  *
- * Email schedule:
- *   - Welcome email    → guests checking in exactly 3 days from today
- *   - Day-before       → guests checking in exactly 1 day from today
- *   - Checkout remind  → guests checking out today
- *   - Review request   → guests who checked out yesterday
+ * DAILY SCHEDULE:
+ *   - Guests checking in 3 days from now: send Welcome Email
+ *     (includes door PIN and guest portal link)
+ *   - Guests checking in tomorrow: send Day Before Reminder
+ *     (includes directions and door PIN)
+ *   - Guests checking out today: send Checkout Reminder
+ *     (includes checkout checklist)
+ *   - Guests who checked out yesterday: send Review Request
+ *     (includes Google review link)
  *
- * Each booking tracks which emails have been sent via boolean flags
- * to prevent duplicate sends if the cron runs multiple times.
+ * DUPLICATE PREVENTION:
+ *   Each email type has a boolean flag in the bookings table.
+ *   Once an email is sent the flag is set to true, so the
+ *   same email is never sent twice even if the cron runs twice.
  *
- * Security:
- *   - Protected by CRON_SECRET env var
- *   - Vercel automatically sets Authorization header on cron calls
+ * SECURITY:
+ *   Protected by CRON_SECRET environment variable.
+ *   Only Vercel's internal scheduler can call this.
+ *
+ * DATABASE TABLES USED:
+ *   - bookings (reads dates, updates email_*_sent flags)
+ *   - guests   (reads email address for sending)
  */
 
 import { createClient } from '@supabase/supabase-js';
