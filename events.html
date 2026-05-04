@@ -1,3 +1,29 @@
+<!--
+  FILE: events.html
+  PAGE: Local Events Page
+  URL:  generationsgetawayfl.com/events.html
+  ============================================================
+  PURPOSE:
+    Shows local events near the property in Fort Lauderdale.
+    Helps guests discover things to do during their stay.
+
+  WHAT IS ON THIS PAGE:
+    - Monthly calendar view with events shown on each day
+    - Weekly drill-down view for more detail
+    - Event list view
+    - Filters: keyword, date, event type, source, radius
+    - Event detail popup/modal when you click an event
+
+  WHERE EVENTS COME FROM:
+    - Manual events added by Kyle via the Admin Dashboard
+    - Recurring events (Taco Tuesday, Farmers Market, etc.)
+    - Future: Eventbrite, Ticketmaster, Google Events APIs
+
+  CONNECTS TO:
+    - /api/events      Fetches events from the database
+    - /css/styles.css  Shared styles
+    - /js/main.js      Shared scripts
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -85,8 +111,8 @@
 
     /* ── Main Layout ── */
     .events-layout {
-      max-width: 1200px; margin: 0 auto;
-      padding: 2.5rem 4rem 5rem;
+      max-width: 100%; margin: 0 auto;
+      padding: 2.5rem 1.5rem 5rem;
     }
 
     /* ── View Toggle ── */
@@ -146,9 +172,10 @@
       background: rgba(27,42,74,0.3);
       border: 1px solid rgba(46,95,163,0.2);
       border-radius: 4px; overflow: hidden;
+      width: 100%; table-layout: fixed;
     }
     .cal-dow-row {
-      display: grid; grid-template-columns: repeat(7, 1fr);
+      display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
       border-bottom: 1px solid rgba(46,95,163,0.15);
     }
     .cal-dow {
@@ -157,14 +184,18 @@
       text-transform: uppercase; color: var(--muted);
     }
     .cal-days-grid {
-      display: grid; grid-template-columns: repeat(7, 1fr);
+      display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+      table-layout: fixed;
     }
     .cal-day {
-      min-height: 100px; padding: 0.5rem;
+      height: 120px; min-height: unset; max-height: 120px;
+      width: 100%; box-sizing: border-box;
+      padding: 0.5rem; overflow: hidden;
       border-right: 1px solid rgba(46,95,163,0.1);
       border-bottom: 1px solid rgba(46,95,163,0.1);
       cursor: pointer; position: relative;
       transition: background var(--transition);
+      word-break: break-word;
     }
     .cal-day:nth-child(7n) { border-right: none; }
     .cal-day:hover { background: rgba(46,95,163,0.08); }
@@ -181,12 +212,13 @@
       margin-bottom: 0.3rem; width: 24px; height: 24px;
       display: flex; align-items: center; justify-content: center;
     }
-    .cal-day-events { display: flex; flex-direction: column; gap: 2px; }
+    .cal-day-events { display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
     .cal-event-pill {
       padding: 1px 5px; border-radius: 2px;
-      font-size: 0.62rem; white-space: nowrap;
+      font-size: 0.6rem; white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis;
-      cursor: pointer; line-height: 1.5;
+      cursor: pointer; line-height: 1.45;
+      display: block;
     }
     .cal-event-pill:hover { opacity: 0.8; }
     .cal-more-btn {
@@ -895,7 +927,7 @@
         const eventsWrap = document.createElement('div');
         eventsWrap.className = 'cal-day-events';
 
-        const showCount = 3;
+        const showCount = 2;
         dayEvents.slice(0, showCount).forEach(evt => {
           const type = EVENT_TYPES[evt.event_type] || EVENT_TYPES.other;
           const pill = document.createElement('div');
