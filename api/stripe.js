@@ -1,38 +1,32 @@
 /**
- * Generations Getaway LLC
- * Stripe Payment API — /api/stripe
- * ==================================
- * All Stripe operations via ?action= param:
+ * FILE: api/stripe.js
+ * ENDPOINT: /api/stripe?action=[action]
+ * USED BY: Admin Dashboard - All Bookings (admin/dashboard.html)
+ * ============================================================
+ * PURPOSE:
+ *   All Stripe payment processing. Kyle uses this to send
+ *   payment links to guests and process refunds.
  *
- *   POST ?action=create_payment_link
- *     Creates a Stripe Payment Link for a booking.
- *     Called from admin dashboard after booking confirmation.
- *     Returns a shareable URL emailed to the guest.
+ * ACTIONS:
+ *   create_payment_link  - Creates a Stripe link Kyle sends to guest
+ *                         Guest pays by card, Apple Pay, Google Pay
+ *   create_deposit_auth  - Places an authorization hold for security
+ *                         deposit (card not charged yet)
+ *   capture_deposit      - Charges the security deposit (e.g. damage)
+ *   release_deposit      - Releases hold, guest card never charged
+ *   refund_payment       - Refunds based on cancellation policy:
+ *                         30+ days = 100%, 14-29 days = 50%,
+ *                         7-13 days = 25%, under 7 days = 0%
+ *   payment_status       - Returns payment status for a booking
+ *   webhook              - Called by Stripe when payment completes
+ *                         Updates booking status automatically
  *
- *   POST ?action=create_deposit_auth
- *     Creates a SetupIntent to authorize (not charge)
- *     the security deposit on guest's card.
+ * REQUIRES in Vercel:
+ *   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
  *
- *   POST ?action=webhook
- *     Handles Stripe webhook events:
- *       - payment_intent.succeeded  → mark booking paid
- *       - payment_intent.canceled   → mark booking unpaid
- *       - setup_intent.succeeded    → mark deposit authorized
- *
- *   GET  ?action=payment_status&booking_id=xxx
- *     Returns current payment status for a booking.
- *
- * Security:
- *   - Admin actions require valid session token
- *   - Webhook validated via Stripe signature
- *   - All amounts in cents (Stripe standard)
- *
- * Refund Policy (enforced in Stripe & tracked in DB):
- *   30+ days before check-in  → 100% refund
- *   14–29 days before check-in → 50% refund
- *   7–13 days before check-in  → 25% refund
- *   <7 days before check-in    → No refund
- *   No-show                    → No refund
+ * DATABASE TABLES USED:
+ *   - bookings (reads/updates payment status)
+ *   - audit_logs (records all payment events)
  */
 
 import { createClient } from '@supabase/supabase-js';
