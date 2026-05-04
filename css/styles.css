@@ -1,9 +1,37 @@
 /*
- * Generations Getaway LLC
- * Shared Stylesheet
- * =====================
- * Design tokens, typography, layout utilities,
- * navigation, footer, and reusable components.
+ * FILE: css/styles.css
+ * USED BY: All public-facing pages
+ *   - index.html           Home Page
+ *   - booking.html         Booking Inquiry Page
+ *   - events.html          Events Page
+ *   - recommendations.html Explore Page
+ *   - welcome.html         Guest Portal
+ * ============================================================
+ * PURPOSE:
+ *   The shared design system for the entire public website.
+ *   Contains all colors, fonts, spacing, and reusable styles.
+ *   Changing something here affects all public pages at once.
+ *
+ * WHAT IS DEFINED HERE:
+ *   - Color palette (navy, sky blue, cream, gold)
+ *   - Typography: Cormorant Garamond (headings) + Montserrat (body)
+ *   - Navigation bar styles (logo, links, mobile hamburger)
+ *   - Button styles (primary, outline, ghost)
+ *   - Form input styles
+ *   - Alert boxes (success / error)
+ *   - Footer layout
+ *   - Utility classes used across pages
+ *
+ * COLOR SCHEME:
+ *   --navy-deep:  #0D1B2E  Darkest background
+ *   --navy:       #1B2A4A  Mid background
+ *   --blue-light: #5B8DD9  Accent blue
+ *   --sky:        #A8C4E0  Light blue text
+ *   --cream:      #F4F7FB  Near-white text
+ *   --gold:       #C9A84C  Gold accent
+ *
+ * NOTE: The Admin Dashboard (admin/dashboard.html) does NOT
+ * load this file. It has all styles built in to avoid conflicts.
  */
 
 /* ============================================
@@ -291,14 +319,14 @@ footer {
 
 .btn-outline {
   background: transparent;
-  color: var(--blue-light);
-  border: 1px solid var(--blue-light);
+  color: var(--white);
+  border: 1px solid var(--white);
 }
 
 .btn-outline:hover {
-  background: var(--blue);
+  background: rgba(255,255,255,0.15);
   color: var(--white);
-  border-color: var(--blue);
+  border-color: var(--white);
 }
 
 .btn-ghost {
