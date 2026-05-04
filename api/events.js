@@ -1,32 +1,20 @@
 /**
- * Generations Getaway LLC
- * GET /api/events
- * ================
- * Returns events for a given month from Supabase,
- * filtered by type, source, and radius from the property.
+ * FILE: api/events.js
+ * ENDPOINT: GET /api/events
+ * USED BY: Events Page (events.html)
+ * ============================================================
+ * PURPOSE:
+ *   Returns local events near the property for the events calendar.
  *
- * Also contains placeholder stub functions for future
- * integration with Eventbrite, Ticketmaster, and Google Events.
- * These stubs are wired in but return empty arrays until
- * API keys are configured in Vercel environment variables.
+ * WHERE EVENTS COME FROM:
+ *   - Supabase database: events added by Kyle in Admin Dashboard
+ *     plus recurring events (Taco Tuesday, Farmers Market, etc.)
+ *   - Future: Eventbrite, Ticketmaster, Google Events (stubbed)
+ *     Requires API keys added as Vercel environment variables
  *
- * Property: 647 NE 16th Terrace, Fort Lauderdale FL 33304
- * Coordinates: 26.1420, -80.1278
- *
- * Query params:
- *   year    — 4-digit year (default: current)
- *   month   — 1-12 (default: current)
- *   type    — event_type filter (optional)
- *   source  — source filter (optional)
- *   radius  — miles from property (optional)
- *   lat     — requester latitude (optional, defaults to property)
- *   lng     — requester longitude (optional, defaults to property)
- *
- * Security:
- *  - Read-only, public endpoint
- *  - Only returns active events with active sources
- *  - API keys stored in env vars, never exposed
- *  - CORS open for public event browsing
+ * DATABASE TABLES USED:
+ *   - events               (all active events)
+ *   - event_source_settings (which APIs are enabled)
  */
 
 import { createClient } from '@supabase/supabase-js';
