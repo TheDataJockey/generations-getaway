@@ -1,25 +1,36 @@
 /**
- * Generations Getaway LLC
- * /api/admin
- * ===========
- * Consolidated admin API handler.
- * Routes by ?resource= query parameter:
+ * FILE: api/admin.js
+ * ENDPOINT: /api/admin?resource=[name]
+ * USED BY: Admin Dashboard (admin/dashboard.html)
+ * ============================================================
+ * PURPOSE:
+ *   The main API file for the Admin Dashboard. Every action
+ *   Kyle takes in the dashboard goes through this single file.
+ *   All requests require a valid admin session token.
  *
- *  GET  /api/admin?resource=dashboard
- *  GET  /api/admin?resource=me
- *  GET|POST|PUT  /api/admin?resource=guests
- *  GET|PATCH     /api/admin?resource=bookings
- *  POST          /api/admin?resource=generate-welcome
- *  GET|POST|PUT|DELETE /api/admin?resource=knowledge
- *  GET|PATCH     /api/admin?resource=chat-logs
- *  GET|PATCH     /api/admin?resource=event-sources
- *  GET|PATCH     /api/admin?resource=users
+ * ROUTES (the ?resource= parameter selects the action):
+ *   dashboard     GET  - Summary stats, recent bookings, alerts
+ *   me            GET  - Current admin user info
+ *   bookings      GET  - List all bookings with guest details
+ *                PATCH - Update status or set PIN codes
+ *   guests        GET  - List all guests
+ *                POST  - Add guest manually (phone/email booking)
+ *                PUT   - Edit existing guest
+ *   generate-welcome POST - AI writes a personalized welcome note
+ *   knowledge     GET/POST/PUT/DELETE - Manage chatbot Q&A pairs
+ *   chat-logs     GET  - Guest chat history
+ *                PATCH - Mark chat as resolved
+ *   event-sources GET  - List event API sources
+ *                PATCH - Toggle source on/off
+ *   requests      GET  - Reservation change/cancel requests
+ *                PATCH - Approve or decline a request
+ *   users         GET  - Admin user list (super_admin only)
+ *                PATCH - Enable/disable admin user
  *
- * Security:
- *  - All routes validate admin session token
- *  - Role-based access enforced per resource
- *  - All mutations logged to audit_logs
- *  - Service role key never exposed to client
+ * DATABASE TABLES USED:
+ *   - admin_users, guests, bookings, knowledge_base,
+ *     chat_logs, event_source_settings, reservation_requests,
+ *     audit_logs
  */
 
 import { createClient } from '@supabase/supabase-js';
