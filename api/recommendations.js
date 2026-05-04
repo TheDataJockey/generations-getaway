@@ -1,15 +1,16 @@
 /**
- * Generations Getaway LLC
- * GET /api/recommendations
- * =========================
- * Returns all active recommendations from Supabase,
- * sorted by featured status then our_rating.
- * Data is managed entirely via the admin dashboard.
+ * FILE: api/recommendations.js
+ * ENDPOINT: GET /api/recommendations
+ * USED BY: Explore Page (recommendations.html)
+ * ============================================================
+ * PURPOSE:
+ *   Returns local recommendations (restaurants, bars, beaches,
+ *   shopping, spas, etc.) for the Explore page.
+ *   All data is managed by Kyle in the Admin Dashboard.
+ *   Results are cached for 10 minutes for performance.
  *
- * Security:
- *  - Read-only public endpoint
- *  - Only returns active records
- *  - 10 min cache for performance
+ * DATABASE TABLES USED:
+ *   - recommendations (all active entries, featured first)
  */
 
 import { createClient } from '@supabase/supabase-js';
