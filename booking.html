@@ -1,3 +1,26 @@
+<!--
+  FILE: booking.html
+  PAGE: Booking Inquiry Page
+  URL:  generationsgetawayfl.com/booking.html
+  ============================================================
+  PURPOSE:
+    Allows potential guests to submit a booking inquiry.
+    No payment is collected here - this just sends a request
+    to Kyle for review and confirmation.
+
+  WHAT IS ON THIS PAGE:
+    - Inquiry form: guest name, email, phone, dates, guests
+    - Property details sidebar (bedrooms, pool, check-in time)
+    - Form submits to /api/bookings which:
+        1. Saves the inquiry to the database
+        2. Sends a confirmation email to the guest
+        3. Sends a notification email to Kyle
+
+  CONNECTS TO:
+    - /api/bookings    Handles form submission (server-side)
+    - /css/styles.css  Shared styles
+    - /js/main.js      Shared scripts
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
