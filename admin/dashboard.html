@@ -1,3 +1,54 @@
+<!--
+  FILE: admin/dashboard.html
+  PAGE: Admin Dashboard
+  URL:  generationsgetawayfl.com/admin/dashboard.html
+  ============================================================
+  PURPOSE:
+    The main control center for Kyle to manage everything.
+    Only accessible after logging in through admin/login.html.
+    Guests cannot access this page.
+
+  SECTIONS (left sidebar navigation):
+
+    OVERVIEW:
+      Dashboard      - Summary stats, recent bookings, escalated chats
+
+    BOOKINGS:
+      All Bookings   - Full list of all inquiries and confirmed bookings
+                       Approve/decline inquiries, send Stripe payment links,
+                       process refunds
+      Calendar       - Visual monthly calendar showing all bookings as
+                       colored bars with guest names
+
+    GUESTS:
+      Guest List     - All guests with search and filter
+      Add Guest      - Add a new guest and booking manually (for direct
+                       bookings via phone, email, Venmo, Zelle, etc.)
+                       Includes payment tracking section
+
+    CONTENT:
+      Knowledge Base - Q&A pairs that power the guest portal chatbot
+      Chat Log       - History of guest chatbot conversations,
+                       flag questions that need follow-up
+      Event Sources  - Toggle which event APIs are active (Eventbrite,
+                       Ticketmaster, Google Events)
+
+    SYSTEM:
+      Admin Users    - Manage who has admin access
+      Access Codes   - Set portal PINs and Yale door codes for guests
+      Requests       - Review and approve/decline reservation change
+                       or cancellation requests from guests
+
+  CONNECTS TO:
+    - /api/admin         Most dashboard data and actions
+    - /api/admin-auth    Session validation
+    - /api/stripe        Payment links and refunds
+    - /api/guest-auth    Reservation request approvals
+  ============================================================
+  NOTE: This file does NOT use the shared /css/styles.css file.
+  It has all its own styles built in to avoid conflicts with the
+  public-facing website navigation styles.
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -754,9 +805,9 @@
           <div class="cal-header">
             <div class="cal-month-title" id="calMonthTitle">Loading...</div>
             <div class="cal-nav">
-              <button class="cal-nav-btn" id="calPrev" aria-label="Previous month">&larr;</button>
-              <button class="cal-nav-btn" id="calToday" style="width:auto;padding:0 0.8rem;font-size:0.65rem;">Today</button>
-              <button class="cal-nav-btn" id="calNext" aria-label="Next month">&rarr;</button>
+              <button class="cal-nav-btn" id="calPrev" onclick="window._calPrev?.()" aria-label="Previous month">&larr;</button>
+              <button class="cal-nav-btn" id="calToday" onclick="window._calToday?.()" style="width:auto;padding:0 0.8rem;font-size:0.65rem;">Today</button>
+              <button class="cal-nav-btn" id="calNext" onclick="window._calNext?.()" aria-label="Next month">&rarr;</button>
             </div>
           </div>
           <div class="cal-grid" id="calGrid">
@@ -1598,19 +1649,14 @@
       }
     }
 
-    document.getElementById('calPrev')?.addEventListener('click', async () => {
-      calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; }
-      await renderCalendar();
-    });
-    document.getElementById('calNext')?.addEventListener('click', async () => {
-      calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; }
-      await renderCalendar();
-    });
-    document.getElementById('calToday')?.addEventListener('click', async () => {
-      calYear  = new Date().getFullYear();
-      calMonth = new Date().getMonth();
-      await renderCalendar();
-    });
+    // Calendar navigation — using onclick on elements directly for reliability
+    window._calPrev  = async function() { calMonth--; if (calMonth < 0)  { calMonth = 11; calYear--; } await renderCalendar(); };
+    window._calNext  = async function() { calMonth++; if (calMonth > 11) { calMonth = 0;  calYear++; } await renderCalendar(); };
+    window._calToday = async function() { calYear = new Date().getFullYear(); calMonth = new Date().getMonth(); await renderCalendar(); };
+
+    document.getElementById('calPrev')?.addEventListener('click',  window._calPrev);
+    document.getElementById('calNext')?.addEventListener('click',  window._calNext);
+    document.getElementById('calToday')?.addEventListener('click', window._calToday);
 
     // ── GUESTS ──
     async function loadGuests() {
