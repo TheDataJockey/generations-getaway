@@ -1,14 +1,14 @@
 /**
- * Generations Getaway LLC
- * POST /api/chat-feedback
- * ========================
- * Records guest thumbs up/down feedback on
- * chatbot responses so the owner can identify
- * which answers are helpful vs. need improvement.
+ * FILE: api/chat-feedback.js
+ * ENDPOINT: POST /api/chat-feedback
+ * USED BY: Guest Portal - Ask Us Tab (welcome.html)
+ * ============================================================
+ * PURPOSE:
+ *   Records thumbs up or thumbs down feedback on chatbot answers.
+ *   Helps Kyle identify weak answers to improve in Knowledge Base.
  *
- * Security:
- *  - Session token required
- *  - Insert only — no reads exposed
+ * DATABASE TABLES USED:
+ *   - chat_logs (updates was_helpful flag on the conversation)
  */
 
 import { createClient } from '@supabase/supabase-js';
