@@ -1,14 +1,21 @@
 /**
- * Generations Getaway LLC
- * POST /api/visitor-log
- * ======================
- * Logs anonymous visitor data to Supabase.
- * Silently fails — never impacts UX.
+ * FILE: api/visitor-log.js
+ * ENDPOINT: POST /api/visitor-log
+ * USED BY: All public pages via /js/main.js (runs silently)
+ * ============================================================
+ * PURPOSE:
+ *   Basic anonymous analytics. Records page visits without
+ *   using any third-party tracking services.
+ *   Visitors are not aware this is running.
  *
- * Security:
- *  - Insert-only, no reads exposed
- *  - No PII beyond IP (which is hashed)
- *  - Rate limited to prevent log flooding
+ * WHAT IS RECORDED:
+ *   - Which page was visited
+ *   - Browser and device type
+ *   - IP address (also used for rate limiting in guest-auth)
+ *   - Where the visitor came from (referrer)
+ *
+ * DATABASE TABLES USED:
+ *   - visitor_logs (one row inserted per page visit)
  */
 
 import { createClient } from '@supabase/supabase-js';
