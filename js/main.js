@@ -1,10 +1,35 @@
 /**
- * Generations Getaway LLC
- * Shared Utilities (main.js)
- * ==========================
- * Navigation, scroll reveal, scroll effects,
- * visitor logging, and shared helpers.
- * Runs on every page.
+ * FILE: js/main.js
+ * USED BY: All public-facing pages
+ *   - index.html           Home Page
+ *   - booking.html         Booking Inquiry Page
+ *   - events.html          Events Page
+ *   - recommendations.html Explore Page
+ *   - welcome.html         Guest Portal
+ * ============================================================
+ * PURPOSE:
+ *   Shared JavaScript that runs on every public page.
+ *   Handles common behaviour that is the same across all pages.
+ *
+ * WHAT IT DOES:
+ *   Navigation bar:
+ *     Adds a solid background when you scroll down so the nav
+ *     is always readable over background images.
+ *
+ *   Mobile menu:
+ *     Handles the hamburger button that opens and closes the
+ *     navigation links on phones and tablets.
+ *
+ *   Scroll reveal animations:
+ *     Fades page sections in as you scroll down for a smooth
+ *     and polished appearance.
+ *
+ *   Visitor logging:
+ *     Silently records that the page was visited by sending
+ *     a request to /api/visitor-log in the background.
+ *     No personal information is collected.
+ *
+ * NOTE: The Admin Dashboard does NOT use this file.
  */
 
 /* ── Scroll-aware navbar ── */
