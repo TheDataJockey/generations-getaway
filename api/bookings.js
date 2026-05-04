@@ -1,17 +1,28 @@
 /**
- * Generations Getaway LLC
- * POST /api/bookings
- * ====================
- * Receives booking inquiry from booking.html,
- * validates input server-side, upserts guest record,
- * creates booking inquiry in Supabase, and triggers
- * confirmation email via Resend.
+ * FILE: api/bookings.js
+ * ENDPOINT: POST /api/bookings
+ * USED BY: Booking Inquiry Page (booking.html)
+ * ============================================================
+ * PURPOSE:
+ *   Handles the booking inquiry form on the public website.
+ *   When a potential guest fills out the form and clicks Submit,
+ *   this file runs on the server.
  *
- * Security:
- *  - Input sanitized and validated server-side
- *  - Uses service role key (server only, never exposed)
- *  - Rate limiting via IP tracking in Supabase
- *  - CORS restricted to own domain
+ * WHAT IT DOES:
+ *   1. Validates all form fields (name, email, dates, guest count)
+ *   2. Creates a guest record in the database marked as inactive
+ *      (guest cannot log into portal until Kyle confirms booking)
+ *   3. Creates a booking inquiry record in the database
+ *   4. Sends a confirmation email to the guest
+ *   5. Sends a notification email to Kyle
+ *
+ * IMPORTANT:
+ *   No payment is collected here. Guest portal access is blocked
+ *   until Kyle approves the booking in the Admin Dashboard.
+ *
+ * DATABASE TABLES USED:
+ *   - guests   (creates guest record, is_active=false)
+ *   - bookings (creates booking with status='inquiry')
  */
 
 import { createClient } from '@supabase/supabase-js';
