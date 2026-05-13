@@ -674,6 +674,19 @@
   <script src="/js/main.js" type="module"></script>
   <script type="module">
 
+    // ── Constants ──
+    const MAX_ATTEMPTS    = 10;
+    const LOCKOUT_STAGES  = [
+      { attempts: 3,  minutes: 2  },
+      { attempts: 5,  minutes: 15 },
+      { attempts: 10, minutes: 60 },
+    ];
+
+    // ── State ──
+    let attemptCount = parseInt(sessionStorage.getItem('gg_attempts') || '0');
+    let lockedUntil  = parseInt(sessionStorage.getItem('gg_locked')   || '0');
+
+    // ── DOM references ──
     const loginScreen    = document.getElementById('loginScreen');
     const portalScreen   = document.getElementById('portalScreen');
     const loginForm      = document.getElementById('loginForm');
@@ -692,6 +705,15 @@
         if (e.key === 'Backspace' && !e.target.value && i > 0) pinDigits[i - 1].focus();
       });
     });
+
+    // ── Restore session if already logged in ──
+    (function checkExistingSession() {
+      const token = sessionStorage.getItem('gg_session_token');
+      const guest = sessionStorage.getItem('gg_guest');
+      if (token && guest) {
+        try { showPortal(JSON.parse(guest)); } catch { sessionStorage.clear(); }
+      }
+    })();
 
     if (lockedUntil && Date.now() < lockedUntil) applyLockout(lockedUntil);
 
@@ -723,6 +745,7 @@
         if (res.ok && data.success) {
           sessionStorage.removeItem('gg_attempts'); sessionStorage.removeItem('gg_locked');
           sessionStorage.setItem('gg_session_token', data.token);
+          sessionStorage.setItem('gg_guest', JSON.stringify(data.guest));
           showPortal(data.guest);
         } else if (res.status === 423) {
           lockoutMsg.style.display = 'block'; lockoutMsg.textContent = data.error || 'Account temporarily locked.'; loginBtn.disabled = true;
