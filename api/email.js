@@ -229,7 +229,7 @@ export async function sendWelcomeEmail({ guest, booking }) {
       <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)} after 3:00 PM</span></div>
       <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)} by 11:00 AM</span></div>
       <div class="info-row"><span class="info-label">Address</span><span class="info-value">${PROPERTY_ADDRESS}</span></div>
-      <div class="info-row"><span class="info-label">Parking</span><span class="info-value">Driveway — fits 2 cars</span></div>
+      <div class="info-row"><span class="info-label">Parking</span><span class="info-value">Driveway only — no street parking</span></div>
     </div>
 
     ${booking.yale_pin_code ? `
@@ -288,7 +288,7 @@ export async function sendDayBeforeReminder({ guest, booking }) {
     <div class="info-card">
       <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">Tomorrow, ${formatDate(booking.check_in_date)} after 3:00 PM</span></div>
       <div class="info-row"><span class="info-label">Address</span><span class="info-value">${PROPERTY_ADDRESS}</span></div>
-      <div class="info-row"><span class="info-label">Parking</span><span class="info-value">Driveway — fits 2 cars</span></div>
+      <div class="info-row"><span class="info-label">Parking</span><span class="info-value">Driveway only — no street parking</span></div>
     </div>
 
     ${booking.yale_pin_code ? `
