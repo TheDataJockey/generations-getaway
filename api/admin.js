@@ -33,32 +33,14 @@
  *     audit_logs
  */
 
-import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { supabase } from './_lib/supabase.js';
+import { setCors } from './_lib/cors.js';
 
-// Strip any trailing /rest/v1 from URL — Vercel env vars sometimes include it
-const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || '')
-  .replace(/\/rest\/v1\/?$/, '')
-  .replace(/\/$/, '');
-
-const supabase = createClient(
-  SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-);
-
-// ── CORS helper ──
-function setCors(req, res) {
-  const origin = req.headers.origin || '';
-  if (origin.includes('generationsgetawayfl.com') ||
-      origin.includes('localhost') ||
-      origin.includes('vercel.app')) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-}
+const ADMIN_CORS_OPTS = {
+  methods: 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  headers: 'Content-Type, Authorization',
+};
 
 // ── Extract Bearer token ──
 function extractToken(req) {
@@ -106,7 +88,7 @@ async function logAudit(admin, action, tableName, recordId = null, notes = null)
 
 // ── Main router ──
 export default async function handler(req, res) {
-  setCors(req, res);
+  setCors(req, res, ADMIN_CORS_OPTS);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const resource = req.query.resource ||

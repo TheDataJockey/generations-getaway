@@ -22,32 +22,9 @@
  *   - admin_users (reads/writes TOTP secret and session)
  */
 
-import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
-
-// Strip any trailing /rest/v1 from URL — Vercel env vars sometimes include it
-const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || '')
-  .replace(/\/rest\/v1\/?$/, '')
-  .replace(/\/$/, '');
-
-const supabase = createClient(
-  SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-);
-
-// ── CORS helper ──
-function setCors(req, res) {
-  const origin = req.headers.origin || '';
-  if (origin.includes('generationsgetawayfl.com') ||
-      origin.includes('localhost') ||
-      origin.includes('vercel.app')) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
+import { supabase } from './_lib/supabase.js';
+import { setCors } from './_lib/cors.js';
 
 export default async function handler(req, res) {
   setCors(req, res);

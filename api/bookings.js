@@ -25,34 +25,14 @@
  *   - bookings (creates booking with status='inquiry')
  */
 
-import { createClient } from '@supabase/supabase-js';
-
-// Strip any trailing /rest/v1 from URL — Vercel env vars sometimes include it
-const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || '')
-  .replace(/\/rest\/v1\/?$/, '')
-  .replace(/\/$/, '');
-
-const supabase = createClient(
-  SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-);
-
-// ── Supabase admin client (service role — server only) ──
+import { supabase } from './_lib/supabase.js';
+import { setCors } from './_lib/cors.js';
 
 // ── Rate limit: max 5 inquiries per IP per hour ──
 const RATE_LIMIT = 5;
 
 export default async function handler(req, res) {
-  // ── CORS ──
-  // Allow both www and non-www
-  const origin = req.headers.origin || '';
-  if (origin.includes('generationsgetawayfl.com') || origin.includes('localhost') || origin.includes('vercel.app')) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setCors(req, res);
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') {

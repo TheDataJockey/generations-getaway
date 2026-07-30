@@ -13,24 +13,11 @@
  *   - recommendations (all active entries, featured first)
  */
 
-import { createClient } from '@supabase/supabase-js';
-
-// Strip any trailing /rest/v1 from URL
-const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || '')
-  .replace(/\/rest\/v1\/?$/, '')
-  .replace(/\/$/, '');
-
-const supabase = createClient(
-  SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-);
+import { supabase } from './_lib/supabase.js';
+import { setPublicCors } from './_lib/cors.js';
 
 export default async function handler(req, res) {
-  // ── CORS — public endpoint ──
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setPublicCors(res);
   res.setHeader('Cache-Control', 'public, max-age=600'); // 10 min cache
 
   if (req.method === 'OPTIONS') return res.status(200).end();

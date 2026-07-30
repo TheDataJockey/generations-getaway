@@ -17,28 +17,15 @@
  *   - event_source_settings (which APIs are enabled)
  */
 
-import { createClient } from '@supabase/supabase-js';
-
-// Strip any trailing /rest/v1 from URL
-const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || '')
-  .replace(/\/rest\/v1\/?$/, '')
-  .replace(/\/$/, '');
-
-const supabase = createClient(
-  SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { persistSession: false } }
-);
+import { supabase } from './_lib/supabase.js';
+import { setPublicCors } from './_lib/cors.js';
 
 // ── Property coordinates ──
 const PROPERTY_LAT = 26.1420;
 const PROPERTY_LNG = -80.1278;
 
 export default async function handler(req, res) {
-  // ── CORS — public endpoint ──
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setPublicCors(res);
   res.setHeader('Cache-Control', 'public, max-age=300'); // 5 min cache
 
   if (req.method === 'OPTIONS') return res.status(200).end();
