@@ -61,23 +61,49 @@ if (navToggle && navLinks) {
 }
 
 /* ── Scroll reveal ── */
-// Observe all .reveal elements and animate them into view
-// when they enter the viewport, with a staggered delay per item.
-const revealObserver = new IntersectionObserver((entries) => {
-  entries.forEach((entry, i) => {
-    if (entry.isIntersecting) {
-      setTimeout(
-        () => entry.target.classList.add('visible'),
-        i * 80
-      );
-      revealObserver.unobserve(entry.target);
-    }
-  });
-}, { threshold: 0.12 });
+// Content is visible by default in CSS. We only arm the hide-then-
+// animate behaviour here, once we know this script is executing.
+// If anything below fails, the page stays readable.
+(function initReveal() {
+  const items = document.querySelectorAll('.reveal');
+  if (!items.length) return;
 
-document.querySelectorAll('.reveal').forEach(el => {
-  revealObserver.observe(el);
-});
+  const showAll = () =>
+    items.forEach(el => el.classList.add('visible'));
+
+  // No IntersectionObserver support -> just show everything.
+  if (!('IntersectionObserver' in window)) return;
+
+  // Arm the animation: CSS now hides .reveal items.
+  document.documentElement.classList.add('js-reveal');
+
+  // Hard safety net: if for any reason items are still hidden
+  // after 3s, reveal them so nothing is ever stuck invisible.
+  const safety = setTimeout(showAll, 3000);
+
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        setTimeout(() => entry.target.classList.add('visible'), i * 80);
+        revealObserver.unobserve(entry.target);
+      }
+    });
+  }, {
+    // threshold 0 + rootMargin fires reliably even for sections
+    // taller than the viewport (e.g. the stacked mobile gallery),
+    // which a percentage threshold can never satisfy.
+    threshold: 0,
+    rootMargin: '0px 0px -10% 0px'
+  });
+
+  items.forEach(el => revealObserver.observe(el));
+
+  // Once the first item shows, the observer is working; drop the net.
+  window.addEventListener('scroll', function once() {
+    clearTimeout(safety);
+    window.removeEventListener('scroll', once);
+  }, { passive: true, once: true });
+})();
 
 /* ── Active nav link ── */
 // Highlight the nav link that matches the current page URL.
@@ -152,7 +178,7 @@ window.addEventListener('load', logVisit);
  * @param {string} dateStr - ISO date string
  * @returns {string}
  */
-export function formatDate(dateStr) {
+function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString('en-US', {
     weekday: 'long',
     year:    'numeric',
@@ -166,7 +192,7 @@ export function formatDate(dateStr) {
  * @param {number} amount
  * @returns {string}
  */
-export function formatCurrency(amount) {
+function formatCurrency(amount) {
   return new Intl.NumberFormat('en-US', {
     style:    'currency',
     currency: 'USD',
@@ -178,7 +204,7 @@ export function formatCurrency(amount) {
  * @param {Function} fn
  * @param {number} delay
  */
-export function debounce(fn, delay = 300) {
+function debounce(fn, delay = 300) {
   let timer;
   return (...args) => {
     clearTimeout(timer);
@@ -191,7 +217,7 @@ export function debounce(fn, delay = 300) {
  * @param {string} str
  * @returns {string}
  */
-export function sanitize(str) {
+function sanitize(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
@@ -203,7 +229,7 @@ export function sanitize(str) {
  * @param {string} message
  * @param {'success'|'error'|'info'} type
  */
-export function showAlert(container, message, type = 'info') {
+function showAlert(container, message, type = 'info') {
   const alert = document.createElement('div');
   alert.className = `alert alert-${type}`;
   alert.textContent = message;
@@ -211,3 +237,6 @@ export function showAlert(container, message, type = 'info') {
   container.appendChild(alert);
   container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
+
+/* Expose shared helpers globally (no ES modules required) */
+window.GG = { formatDate, formatCurrency, debounce, sanitize, showAlert };
