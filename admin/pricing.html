@@ -1,0 +1,711 @@
+<!--
+  FILE: admin/pricing.html
+  PAGE: Admin — Pricing & Discounts
+  URL:  generationsgetawayfl.com/admin/pricing.html
+  ============================================================
+  PURPOSE:
+    Lets Kyle set nightly rates, override pricing for specific
+    dates or ranges (holidays, events, blackouts), and manage
+    discount codes — without editing any code.
+
+  ACCESS:
+    Requires an admin session. Redirects to admin/login.html if
+    not signed in. Writes require family_admin or higher.
+
+  TALKS TO:
+    /api/pricing-admin  (all reads and writes)
+    /api/pricing        (live preview of a quote)
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="robots" content="noindex, nofollow"/>
+<title>Pricing &amp; Discounts — Generations Getaway Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --navy-deep:#0D1B2E; --navy:#132339; --navy-light:#1B2A4A;
+    --blue:#2E5FA3; --blue-light:#5B8DD9; --sky:#A8C4E0;
+    --cream:#F4F7FB; --muted:#7A90AE; --white:#fff;
+    --good:#7FD1A4; --warn:#FFD54F; --bad:#E8A0A0;
+    --font-serif:'Cormorant Garamond',Georgia,serif;
+    --font-sans:'Montserrat',-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{
+    background:var(--navy-deep); color:var(--cream);
+    font-family:var(--font-sans); font-size:14px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--blue-light);text-decoration:none;}
+
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:1rem; flex-wrap:wrap;
+    padding:1.1rem 1.5rem; background:var(--navy);
+    border-bottom:1px solid rgba(46,95,163,.3);
+    position:sticky; top:0; z-index:20;
+  }
+  header h1{font-family:var(--font-serif);font-size:1.5rem;font-weight:400;}
+  .header-actions{display:flex;gap:.6rem;align-items:center;}
+
+  .wrap{max-width:1100px;margin:0 auto;padding:1.5rem;}
+  .card{
+    background:var(--navy); border:1px solid rgba(46,95,163,.25);
+    border-radius:6px; padding:1.4rem; margin-bottom:1.5rem;
+  }
+  .card h2{
+    font-family:var(--font-serif); font-size:1.3rem; font-weight:400;
+    margin-bottom:.35rem;
+  }
+  .card p.hint{font-size:.78rem;color:var(--muted);margin-bottom:1.1rem;}
+
+  label{
+    display:block; font-size:.68rem; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--sky); margin-bottom:.4rem;
+  }
+  input,select,textarea{
+    width:100%; padding:.6rem .75rem;
+    background:var(--navy-light); color:var(--cream);
+    border:1px solid rgba(46,95,163,.35); border-radius:4px;
+    font-family:var(--font-sans); font-size:.85rem;
+  }
+  input:focus,select:focus,textarea:focus{
+    outline:none;border-color:var(--blue-light);
+  }
+  input[type=checkbox]{width:auto;margin-right:.45rem;}
+
+  .grid{display:grid;gap:.9rem;}
+  .g2{grid-template-columns:repeat(2,1fr);}
+  .g3{grid-template-columns:repeat(3,1fr);}
+  .g4{grid-template-columns:repeat(4,1fr);}
+  @media(max-width:760px){.g2,.g3,.g4{grid-template-columns:1fr;}}
+
+  .btn{
+    padding:.6rem 1.1rem; border:none; border-radius:4px;
+    font-family:var(--font-sans); font-size:.72rem; font-weight:500;
+    letter-spacing:.12em; text-transform:uppercase; cursor:pointer;
+  }
+  .btn-primary{background:var(--blue);color:var(--white);}
+  .btn-primary:hover{background:var(--blue-light);}
+  .btn-ghost{background:transparent;color:var(--sky);border:1px solid rgba(46,95,163,.45);}
+  .btn-danger{background:transparent;color:var(--bad);border:1px solid rgba(200,80,80,.4);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-sm{padding:.4rem .7rem;font-size:.65rem;}
+
+  table{width:100%;border-collapse:collapse;margin-top:.9rem;}
+  th,td{
+    text-align:left; padding:.6rem .5rem; font-size:.8rem;
+    border-bottom:1px solid rgba(46,95,163,.18);
+  }
+  th{
+    font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--sky);font-weight:500;
+  }
+  td.actions{text-align:right;white-space:nowrap;}
+  .table-scroll{overflow-x:auto;}
+
+  .pill{
+    display:inline-block;padding:.15rem .5rem;border-radius:99px;
+    font-size:.64rem;letter-spacing:.08em;text-transform:uppercase;
+  }
+  .pill-on{background:rgba(127,209,164,.15);color:var(--good);}
+  .pill-off{background:rgba(122,144,174,.15);color:var(--muted);}
+  .pill-block{background:rgba(232,160,160,.15);color:var(--bad);}
+
+  .alert{padding:.8rem 1rem;border-radius:4px;font-size:.82rem;margin-bottom:1rem;}
+  .alert-ok{background:rgba(127,209,164,.12);border:1px solid rgba(127,209,164,.35);color:var(--good);}
+  .alert-err{background:rgba(232,160,160,.12);border:1px solid rgba(232,160,160,.35);color:var(--bad);}
+
+  .row-actions{display:flex;gap:.5rem;justify-content:flex-end;}
+  .muted{color:var(--muted);font-size:.76rem;}
+  .preview-total{font-family:var(--font-serif);font-size:1.6rem;color:var(--cream);}
+  .season-row{
+    display:grid;grid-template-columns:1fr 130px 2fr;gap:.9rem;
+    align-items:end;margin-bottom:1rem;
+  }
+  @media(max-width:760px){.season-row{grid-template-columns:1fr;}}
+  .months{display:flex;flex-wrap:wrap;gap:.3rem;}
+  .month-chip{
+    padding:.25rem .5rem;border-radius:3px;font-size:.68rem;cursor:pointer;
+    background:var(--navy-light);border:1px solid rgba(46,95,163,.3);
+    color:var(--muted);user-select:none;
+  }
+  .month-chip.on{background:var(--blue);color:var(--white);border-color:var(--blue);}
+  #loading{padding:3rem;text-align:center;color:var(--muted);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pricing &amp; Discounts</h1>
+  <div class="header-actions">
+    <a class="btn btn-ghost" href="/admin/dashboard.html">&larr; Dashboard</a>
+    <button class="btn btn-ghost" id="logoutBtn">Log out</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="alertBox"></div>
+  <div id="loading">Loading pricing…</div>
+
+  <div id="content" hidden>
+
+    <!-- ── Base rates ── -->
+    <section class="card">
+      <h2>Base Nightly Rates</h2>
+      <p class="hint">
+        The standard rate for each season. Click months to change which
+        months belong to a season. Rates include cleaning.
+      </p>
+      <div id="seasonList"></div>
+      <button class="btn btn-primary" id="saveSeasons">Save Rates</button>
+    </section>
+
+    <!-- ── Global settings ── -->
+    <section class="card">
+      <h2>Booking Settings</h2>
+      <p class="hint">
+        Minimum stay applies site-wide unless a date override sets a longer one.
+        Tax is Broward County combined lodging tax.
+      </p>
+      <div class="grid g2">
+        <div>
+          <label for="minNights">Minimum Nights</label>
+          <input type="number" id="minNights" min="1" max="30"/>
+        </div>
+        <div>
+          <label for="taxRate">Tax Rate (%)</label>
+          <input type="number" id="taxRate" min="0" max="100" step="0.01"/>
+        </div>
+      </div>
+      <br/>
+      <button class="btn btn-primary" id="saveSettings">Save Settings</button>
+    </section>
+
+    <!-- ── Date overrides ── -->
+    <section class="card">
+      <h2>Date Overrides</h2>
+      <p class="hint">
+        Set a different rate for specific dates — holidays, events, or a
+        one-off deal. You can also block dates so they can't be booked.
+        If ranges overlap, the higher priority wins.
+      </p>
+
+      <div class="grid g4">
+        <div>
+          <label for="ovLabel">Label</label>
+          <input type="text" id="ovLabel" placeholder="New Year week"/>
+        </div>
+        <div>
+          <label for="ovStart">Start Date</label>
+          <input type="date" id="ovStart"/>
+        </div>
+        <div>
+          <label for="ovEnd">End Date (inclusive)</label>
+          <input type="date" id="ovEnd"/>
+        </div>
+        <div>
+          <label for="ovRate">Nightly Rate ($)</label>
+          <input type="number" id="ovRate" min="0" step="1" placeholder="900"/>
+        </div>
+      </div>
+      <div class="grid g3" style="margin-top:.9rem">
+        <div>
+          <label for="ovMin">Min Nights (optional)</label>
+          <input type="number" id="ovMin" min="1" max="30" placeholder="5"/>
+        </div>
+        <div>
+          <label for="ovPriority">Priority</label>
+          <input type="number" id="ovPriority" value="0"/>
+        </div>
+        <div>
+          <label>Block These Dates</label>
+          <label style="text-transform:none;letter-spacing:0;font-size:.82rem;color:var(--cream);">
+            <input type="checkbox" id="ovBlocked"/> Not bookable
+          </label>
+        </div>
+      </div>
+      <br/>
+      <button class="btn btn-primary" id="addOverride">Add Override</button>
+      <button class="btn btn-ghost" id="cancelOverride" hidden>Cancel Edit</button>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Label</th><th>Dates</th><th>Rate</th><th>Min</th><th>Priority</th><th></th></tr>
+          </thead>
+          <tbody id="overrideRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── Discount codes ── -->
+    <section class="card">
+      <h2>Discount Codes</h2>
+      <p class="hint">
+        Percent codes take a percentage off. Flat-rate codes replace the
+        nightly rate per season, and can comp a number of nights.
+        Codes are checked on the server and never exposed to guests.
+      </p>
+
+      <div class="grid g3">
+        <div>
+          <label for="cdCode">Code</label>
+          <input type="text" id="cdCode" placeholder="FAMILY" style="text-transform:uppercase"/>
+        </div>
+        <div>
+          <label for="cdLabel">Label (shown to guest)</label>
+          <input type="text" id="cdLabel" placeholder="Family rate"/>
+        </div>
+        <div>
+          <label for="cdKind">Type</label>
+          <select id="cdKind">
+            <option value="percent">Percent off</option>
+            <option value="rates">Flat nightly rate</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid g4" id="percentFields" style="margin-top:.9rem">
+        <div>
+          <label for="cdPercent">Percent Off (%)</label>
+          <input type="number" id="cdPercent" min="0" max="100" step="1"/>
+        </div>
+      </div>
+
+      <div id="rateFields" hidden style="margin-top:.9rem">
+        <div class="grid g4">
+          <div><label for="cdHigh">High Season Rate ($)</label><input type="number" id="cdHigh" min="0"/></div>
+          <div><label for="cdMed">Medium Season Rate ($)</label><input type="number" id="cdMed" min="0"/></div>
+          <div><label for="cdLow">Low Season Rate ($)</label><input type="number" id="cdLow" min="0"/></div>
+          <div><label for="cdFree">Free Nights</label><input type="number" id="cdFree" min="0" value="0"/></div>
+        </div>
+        <div style="margin-top:.9rem">
+          <label>Free Nights Apply To</label>
+          <label style="text-transform:none;letter-spacing:0;font-size:.82rem;color:var(--cream);display:inline-block;margin-right:1rem;">
+            <input type="checkbox" class="freeSeason" value="high"/> High</label>
+          <label style="text-transform:none;letter-spacing:0;font-size:.82rem;color:var(--cream);display:inline-block;margin-right:1rem;">
+            <input type="checkbox" class="freeSeason" value="medium"/> Medium</label>
+          <label style="text-transform:none;letter-spacing:0;font-size:.82rem;color:var(--cream);display:inline-block;">
+            <input type="checkbox" class="freeSeason" value="low"/> Low</label>
+          <p class="muted" style="margin-top:.4rem">Leave all unchecked to allow any season.</p>
+        </div>
+      </div>
+
+      <div class="grid g4" style="margin-top:.9rem">
+        <div><label for="cdFrom">Valid From (optional)</label><input type="date" id="cdFrom"/></div>
+        <div><label for="cdUntil">Valid Until (optional)</label><input type="date" id="cdUntil"/></div>
+        <div><label for="cdMax">Max Uses (optional)</label><input type="number" id="cdMax" min="1"/></div>
+        <div>
+          <label>Active</label>
+          <label style="text-transform:none;letter-spacing:0;font-size:.82rem;color:var(--cream);">
+            <input type="checkbox" id="cdActive" checked/> Code is usable
+          </label>
+        </div>
+      </div>
+      <br/>
+      <button class="btn btn-primary" id="saveCode">Add Code</button>
+      <button class="btn btn-ghost" id="cancelCode" hidden>Cancel Edit</button>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Code</th><th>Label</th><th>Effect</th><th>Limits</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody id="codeRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── Live preview ── -->
+    <section class="card">
+      <h2>Preview a Quote</h2>
+      <p class="hint">
+        Check what a guest would actually see. Uses the live pricing
+        endpoint, so save your changes first.
+      </p>
+      <div class="grid g4">
+        <div><label for="pvIn">Check-In</label><input type="date" id="pvIn"/></div>
+        <div><label for="pvOut">Check-Out</label><input type="date" id="pvOut"/></div>
+        <div><label for="pvCode">Code (optional)</label><input type="text" id="pvCode" style="text-transform:uppercase"/></div>
+        <div style="display:flex;align-items:flex-end;">
+          <button class="btn btn-primary" id="runPreview" style="width:100%">Preview</button>
+        </div>
+      </div>
+      <div id="previewOut" style="margin-top:1rem"></div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  var token = sessionStorage.getItem('gg_admin_token');
+  if (!token) { window.location.href = '/admin/login.html'; return; }
+
+  function headers() {
+    return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+    });
+  }
+  function money(n) {
+    return '$' + Number(n).toLocaleString('en-US',
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function notify(msg, ok) {
+    document.getElementById('alertBox').innerHTML =
+      '<div class="alert ' + (ok ? 'alert-ok' : 'alert-err') + '">' + esc(msg) + '</div>';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (ok) setTimeout(function(){
+      document.getElementById('alertBox').innerHTML = '';
+    }, 4000);
+  }
+  async function api(path, opts) {
+    var res = await fetch('/api/pricing-admin' + path,
+      Object.assign({ headers: headers() }, opts || {}));
+    if (res.status === 401) { window.location.href = '/admin/login.html'; return null; }
+    var data = await res.json().catch(function(){ return {}; });
+    if (!res.ok) throw new Error(data.error || 'Request failed.');
+    return data;
+  }
+
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var state = { seasons: [], overrides: [], codes: [], settings: {} };
+  var editingOverride = null;
+  var editingCode = null;
+
+  /* ── Render ── */
+  function renderSeasons() {
+    document.getElementById('seasonList').innerHTML = state.seasons.map(function (s) {
+      var chips = MONTHS.map(function (m, i) {
+        var on = (s.months || []).indexOf(i + 1) !== -1;
+        return '<span class="month-chip' + (on ? ' on' : '') +
+               '" data-season="' + esc(s.id) + '" data-month="' + (i+1) + '">' + m + '</span>';
+      }).join('');
+      return '<div class="season-row">' +
+        '<div><label>Season</label><input type="text" value="' + esc(s.label) +
+          '" data-field="label" data-id="' + esc(s.id) + '"/></div>' +
+        '<div><label>Rate ($)</label><input type="number" min="0" value="' +
+          Number(s.nightly_rate) + '" data-field="rate" data-id="' + esc(s.id) + '"/></div>' +
+        '<div><label>Months</label><div class="months">' + chips + '</div></div>' +
+      '</div>';
+    }).join('');
+
+    document.querySelectorAll('.month-chip').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        var sid = chip.dataset.season, m = parseInt(chip.dataset.month, 10);
+        // A month belongs to exactly one season.
+        state.seasons.forEach(function (s) {
+          s.months = (s.months || []).filter(function (x) { return x !== m; });
+          if (s.id === sid) s.months.push(m);
+        });
+        renderSeasons();
+      });
+    });
+  }
+
+  function renderOverrides() {
+    var rows = state.overrides;
+    document.getElementById('overrideRows').innerHTML = rows.length ? rows.map(function (o) {
+      return '<tr>' +
+        '<td>' + esc(o.label) + '</td>' +
+        '<td>' + esc(o.start_date) + ' → ' + esc(o.end_date) + '</td>' +
+        '<td>' + (o.is_blocked
+            ? '<span class="pill pill-block">Blocked</span>'
+            : money(o.nightly_rate)) + '</td>' +
+        '<td>' + (o.min_nights || '—') + '</td>' +
+        '<td>' + (o.priority || 0) + '</td>' +
+        '<td class="actions"><div class="row-actions">' +
+          '<button class="btn btn-ghost btn-sm" data-edit-ov="' + esc(o.id) + '">Edit</button>' +
+          '<button class="btn btn-danger btn-sm" data-del-ov="' + esc(o.id) + '">Delete</button>' +
+        '</div></td></tr>';
+    }).join('') : '<tr><td colspan="6" class="muted">No overrides yet.</td></tr>';
+
+    document.querySelectorAll('[data-del-ov]').forEach(function (b) {
+      b.addEventListener('click', function () { delOverride(b.dataset.delOv); });
+    });
+    document.querySelectorAll('[data-edit-ov]').forEach(function (b) {
+      b.addEventListener('click', function () { editOverride(b.dataset.editOv); });
+    });
+  }
+
+  function renderCodes() {
+    var rows = state.codes;
+    document.getElementById('codeRows').innerHTML = rows.length ? rows.map(function (c) {
+      var effect = c.kind === 'percent'
+        ? c.percent + '% off'
+        : ['H ' + (c.rate_high != null ? money(c.rate_high) : '—'),
+           'M ' + (c.rate_medium != null ? money(c.rate_medium) : '—'),
+           'L ' + (c.rate_low != null ? money(c.rate_low) : '—')].join(' · ') +
+          (c.free_nights ? ' · ' + c.free_nights + ' free' : '');
+      var limits = [];
+      if (c.valid_from)  limits.push('from ' + c.valid_from);
+      if (c.valid_until) limits.push('until ' + c.valid_until);
+      if (c.max_uses != null) limits.push(c.times_used + '/' + c.max_uses + ' used');
+      return '<tr>' +
+        '<td><strong>' + esc(c.code) + '</strong></td>' +
+        '<td>' + esc(c.label) + '</td>' +
+        '<td class="muted">' + esc(effect) + '</td>' +
+        '<td class="muted">' + (limits.join(', ') || '—') + '</td>' +
+        '<td>' + (c.is_active
+            ? '<span class="pill pill-on">Active</span>'
+            : '<span class="pill pill-off">Off</span>') + '</td>' +
+        '<td class="actions"><div class="row-actions">' +
+          '<button class="btn btn-ghost btn-sm" data-edit-cd="' + esc(c.code) + '">Edit</button>' +
+          '<button class="btn btn-danger btn-sm" data-del-cd="' + esc(c.code) + '">Delete</button>' +
+        '</div></td></tr>';
+    }).join('') : '<tr><td colspan="6" class="muted">No codes yet.</td></tr>';
+
+    document.querySelectorAll('[data-del-cd]').forEach(function (b) {
+      b.addEventListener('click', function () { delCode(b.dataset.delCd); });
+    });
+    document.querySelectorAll('[data-edit-cd]').forEach(function (b) {
+      b.addEventListener('click', function () { editCode(b.dataset.editCd); });
+    });
+  }
+
+  /* ── Load ── */
+  async function load() {
+    try {
+      var d = await api('?resource=all');
+      if (!d) return;
+      state = d;
+      document.getElementById('minNights').value = d.settings.min_nights;
+      document.getElementById('taxRate').value =
+        (Number(d.settings.tax_rate) * 100).toFixed(2);
+      renderSeasons(); renderOverrides(); renderCodes();
+      document.getElementById('loading').hidden = true;
+      document.getElementById('content').hidden = false;
+    } catch (e) {
+      document.getElementById('loading').textContent = e.message;
+    }
+  }
+
+  /* ── Seasons ── */
+  document.getElementById('saveSeasons').addEventListener('click', async function () {
+    var btn = this; btn.disabled = true;
+    try {
+      for (var s of state.seasons) {
+        var rate = document.querySelector('[data-field=rate][data-id="' + s.id + '"]').value;
+        var label = document.querySelector('[data-field=label][data-id="' + s.id + '"]').value;
+        await api('?resource=season', {
+          method: 'PUT',
+          body: JSON.stringify({ id: s.id, nightly_rate: rate, months: s.months, label: label })
+        });
+      }
+      notify('Rates saved.', true); await load();
+    } catch (e) { notify(e.message, false); }
+    btn.disabled = false;
+  });
+
+  /* ── Settings ── */
+  document.getElementById('saveSettings').addEventListener('click', async function () {
+    var btn = this; btn.disabled = true;
+    try {
+      await api('?resource=settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          min_nights: document.getElementById('minNights').value,
+          tax_rate: Number(document.getElementById('taxRate').value) / 100
+        })
+      });
+      notify('Settings saved.', true); await load();
+    } catch (e) { notify(e.message, false); }
+    btn.disabled = false;
+  });
+
+  /* ── Overrides ── */
+  function ovForm() {
+    return {
+      id: editingOverride,
+      label: document.getElementById('ovLabel').value,
+      start_date: document.getElementById('ovStart').value,
+      end_date: document.getElementById('ovEnd').value,
+      nightly_rate: document.getElementById('ovRate').value,
+      is_blocked: document.getElementById('ovBlocked').checked,
+      min_nights: document.getElementById('ovMin').value,
+      priority: document.getElementById('ovPriority').value
+    };
+  }
+  function clearOv() {
+    ['ovLabel','ovStart','ovEnd','ovRate','ovMin'].forEach(function(i){
+      document.getElementById(i).value = '';
+    });
+    document.getElementById('ovPriority').value = 0;
+    document.getElementById('ovBlocked').checked = false;
+    editingOverride = null;
+    document.getElementById('addOverride').textContent = 'Add Override';
+    document.getElementById('cancelOverride').hidden = true;
+  }
+  function editOverride(id) {
+    var o = state.overrides.find(function (x) { return String(x.id) === String(id); });
+    if (!o) return;
+    editingOverride = o.id;
+    document.getElementById('ovLabel').value = o.label;
+    document.getElementById('ovStart').value = o.start_date;
+    document.getElementById('ovEnd').value = o.end_date;
+    document.getElementById('ovRate').value = o.nightly_rate || '';
+    document.getElementById('ovMin').value = o.min_nights || '';
+    document.getElementById('ovPriority').value = o.priority || 0;
+    document.getElementById('ovBlocked').checked = !!o.is_blocked;
+    document.getElementById('addOverride').textContent = 'Save Changes';
+    document.getElementById('cancelOverride').hidden = false;
+    window.scrollTo({ top: document.getElementById('ovLabel').offsetTop - 120, behavior: 'smooth' });
+  }
+  document.getElementById('cancelOverride').addEventListener('click', clearOv);
+  document.getElementById('addOverride').addEventListener('click', async function () {
+    var btn = this; btn.disabled = true;
+    try {
+      await api('?resource=override', {
+        method: editingOverride ? 'PUT' : 'POST',
+        body: JSON.stringify(ovForm())
+      });
+      notify(editingOverride ? 'Override updated.' : 'Override added.', true);
+      clearOv(); await load();
+    } catch (e) { notify(e.message, false); }
+    btn.disabled = false;
+  });
+  async function delOverride(id) {
+    if (!confirm('Delete this override? Pricing for those dates returns to the seasonal rate.')) return;
+    try { await api('?resource=override&id=' + encodeURIComponent(id), { method: 'DELETE' });
+      notify('Override deleted.', true); await load();
+    } catch (e) { notify(e.message, false); }
+  }
+
+  /* ── Codes ── */
+  document.getElementById('cdKind').addEventListener('change', function () {
+    var isRates = this.value === 'rates';
+    document.getElementById('rateFields').hidden = !isRates;
+    document.getElementById('percentFields').hidden = isRates;
+  });
+  function cdForm() {
+    var seasons = [].slice.call(document.querySelectorAll('.freeSeason:checked'))
+      .map(function (c) { return c.value; });
+    return {
+      code: document.getElementById('cdCode').value,
+      original_code: editingCode,
+      label: document.getElementById('cdLabel').value,
+      kind: document.getElementById('cdKind').value,
+      percent: document.getElementById('cdPercent').value,
+      rate_high: document.getElementById('cdHigh').value,
+      rate_medium: document.getElementById('cdMed').value,
+      rate_low: document.getElementById('cdLow').value,
+      free_nights: document.getElementById('cdFree').value,
+      free_seasons: seasons,
+      valid_from: document.getElementById('cdFrom').value,
+      valid_until: document.getElementById('cdUntil').value,
+      max_uses: document.getElementById('cdMax').value,
+      is_active: document.getElementById('cdActive').checked
+    };
+  }
+  function clearCd() {
+    ['cdCode','cdLabel','cdPercent','cdHigh','cdMed','cdLow','cdFrom','cdUntil','cdMax']
+      .forEach(function (i) { document.getElementById(i).value = ''; });
+    document.getElementById('cdFree').value = 0;
+    document.getElementById('cdActive').checked = true;
+    document.querySelectorAll('.freeSeason').forEach(function (c) { c.checked = false; });
+    document.getElementById('cdKind').value = 'percent';
+    document.getElementById('rateFields').hidden = true;
+    document.getElementById('percentFields').hidden = false;
+    editingCode = null;
+    document.getElementById('saveCode').textContent = 'Add Code';
+    document.getElementById('cancelCode').hidden = true;
+  }
+  function editCode(code) {
+    var c = state.codes.find(function (x) { return x.code === code; });
+    if (!c) return;
+    editingCode = c.code;
+    document.getElementById('cdCode').value = c.code;
+    document.getElementById('cdLabel').value = c.label;
+    document.getElementById('cdKind').value = c.kind;
+    document.getElementById('cdPercent').value = c.percent || '';
+    document.getElementById('cdHigh').value = c.rate_high != null ? c.rate_high : '';
+    document.getElementById('cdMed').value = c.rate_medium != null ? c.rate_medium : '';
+    document.getElementById('cdLow').value = c.rate_low != null ? c.rate_low : '';
+    document.getElementById('cdFree').value = c.free_nights || 0;
+    document.getElementById('cdFrom').value = c.valid_from || '';
+    document.getElementById('cdUntil').value = c.valid_until || '';
+    document.getElementById('cdMax').value = c.max_uses != null ? c.max_uses : '';
+    document.getElementById('cdActive').checked = !!c.is_active;
+    document.querySelectorAll('.freeSeason').forEach(function (chk) {
+      chk.checked = (c.free_seasons || []).indexOf(chk.value) !== -1;
+    });
+    var isRates = c.kind === 'rates';
+    document.getElementById('rateFields').hidden = !isRates;
+    document.getElementById('percentFields').hidden = isRates;
+    document.getElementById('saveCode').textContent = 'Save Changes';
+    document.getElementById('cancelCode').hidden = false;
+    window.scrollTo({ top: document.getElementById('cdCode').offsetTop - 120, behavior: 'smooth' });
+  }
+  document.getElementById('cancelCode').addEventListener('click', clearCd);
+  document.getElementById('saveCode').addEventListener('click', async function () {
+    var btn = this; btn.disabled = true;
+    try {
+      await api('?resource=code', {
+        method: editingCode ? 'PUT' : 'POST',
+        body: JSON.stringify(cdForm())
+      });
+      notify(editingCode ? 'Code updated.' : 'Code added.', true);
+      clearCd(); await load();
+    } catch (e) { notify(e.message, false); }
+    btn.disabled = false;
+  });
+  async function delCode(code) {
+    if (!confirm('Delete code ' + code + '? Guests using it will no longer get the discount.')) return;
+    try { await api('?resource=code&code=' + encodeURIComponent(code), { method: 'DELETE' });
+      notify('Code deleted.', true); await load();
+    } catch (e) { notify(e.message, false); }
+  }
+
+  /* ── Preview ── */
+  document.getElementById('runPreview').addEventListener('click', async function () {
+    var out = document.getElementById('previewOut');
+    out.innerHTML = '<span class="muted">Calculating…</span>';
+    try {
+      var res = await fetch('/api/pricing', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          check_in: document.getElementById('pvIn').value,
+          check_out: document.getElementById('pvOut').value,
+          discount_code: document.getElementById('pvCode').value
+        })
+      });
+      var q = await res.json();
+      if (!res.ok) { out.innerHTML = '<div class="alert alert-err">' + esc(q.error) + '</div>'; return; }
+      var rows = q.nightly_breakdown.map(function (n) {
+        return '<tr><td>' + n.date + '</td><td class="muted">' + n.season +
+          (n.override ? ' · ' + esc(n.override) : '') + '</td><td>' +
+          (n.comped ? '<span class="pill pill-on">Free</span>' : money(n.rate)) + '</td></tr>';
+      }).join('');
+      out.innerHTML =
+        '<table><thead><tr><th>Night</th><th>Season</th><th>Charged</th></tr></thead><tbody>' +
+        rows + '</tbody></table>' +
+        '<p style="margin-top:.9rem" class="muted">Standard ' + money(q.subtotal) +
+        (q.discount ? ' · Discount −' + money(q.discount) + ' (' + esc(q.discount_label || '') + ')' : '') +
+        ' · Tax ' + money(q.tax) + '</p>' +
+        '<p class="preview-total">' + (q.total === 0 ? 'Complimentary' : money(q.total)) + '</p>' +
+        (q.below_minimum ? '<p class="muted">Below the ' + q.min_nights + '-night minimum — guest sees a request notice.</p>' : '');
+    } catch (e) {
+      out.innerHTML = '<div class="alert alert-err">Preview failed.</div>';
+    }
+  });
+
+  document.getElementById('logoutBtn').addEventListener('click', function () {
+    sessionStorage.removeItem('gg_admin_token');
+    sessionStorage.removeItem('gg_admin_role');
+    window.location.href = '/admin/login.html';
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

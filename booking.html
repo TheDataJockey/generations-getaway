@@ -150,6 +150,98 @@
       object-fit: cover; border-radius: 4px;
     }
 
+    /* ── Form alerts ── */
+    .form-alert {
+      padding: 0.9rem 1.1rem; border-radius: 4px;
+      font-size: 0.82rem; line-height: 1.6; margin-bottom: 1.25rem;
+    }
+    .form-alert-error {
+      background: rgba(200,80,80,0.12);
+      border: 1px solid rgba(200,80,80,0.35); color: #E8A0A0;
+    }
+    .form-alert-success {
+      background: rgba(80,180,120,0.12);
+      border: 1px solid rgba(80,180,120,0.35); color: #7FD1A4;
+    }
+
+    /* ── Reservation terms ── */
+    .terms-block {
+      margin: 1.5rem 0 1.25rem;
+      padding: 1.25rem 1.4rem;
+      max-height: 220px; overflow-y: auto;
+      background: rgba(13,27,46,0.5);
+      border: 1px solid rgba(46,95,163,0.25);
+      border-radius: 4px;
+    }
+    .terms-heading {
+      font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--sky); margin-bottom: 0.9rem;
+    }
+    .terms-clause {
+      font-size: 0.74rem; line-height: 1.75;
+      color: var(--muted); margin-bottom: 0.85rem;
+    }
+    .terms-clause strong { color: var(--sky); font-weight: 500; }
+    .form-check { margin-bottom: 1.5rem; }
+    .check-label,
+    .check-label span {
+      text-transform: none !important;
+      letter-spacing: 0 !important;
+      font-size: 0.8rem !important;
+      font-weight: 400 !important;
+      color: var(--sky) !important;
+    }
+    .check-label {
+      display: flex; align-items: flex-start; gap: 0.65rem;
+      line-height: 1.6; cursor: pointer; margin-bottom: 0;
+    }
+    .check-label input { margin-top: 0.25rem; flex-shrink: 0; }
+
+    /* ── Live quote panel ── */
+    /* [hidden] must beat display:flex below, or hidden rows still show */
+    [hidden] { display: none !important; }
+    .optional-hint {
+      color: var(--muted); font-weight: 400;
+      text-transform: none; letter-spacing: 0;
+    }
+    .quote-panel {
+      margin: 0.5rem 0 1.75rem;
+      padding: 1.25rem 1.4rem;
+      background: rgba(46,95,163,0.10);
+      border: 1px solid rgba(46,95,163,0.28);
+      border-radius: 4px;
+    }
+    .quote-loading {
+      font-size: 0.8rem; color: var(--muted); letter-spacing: 0.05em;
+    }
+    .quote-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      gap: 1rem; padding: 0.45rem 0;
+      font-size: 0.85rem; color: var(--sky);
+    }
+    .quote-row.quote-discount { color: #7FD1A4; }
+    .quote-row.quote-total {
+      margin-top: 0.6rem; padding-top: 0.9rem;
+      border-top: 1px solid rgba(46,95,163,0.3);
+      font-family: var(--font-serif);
+      font-size: 1.35rem; font-weight: 400;
+      color: var(--cream);
+    }
+    .quote-note {
+      margin-top: 0.9rem; font-size: 0.7rem; line-height: 1.6;
+      color: var(--muted);
+    }
+    #quoteMinNote {
+      color: var(--sky);
+      padding: 0.6rem 0.75rem;
+      background: rgba(46,95,163,0.14);
+      border-left: 2px solid var(--blue-light);
+      border-radius: 2px;
+    }
+    .quote-error {
+      font-size: 0.82rem; color: #E8A0A0;
+    }
+
     /* ── Availability indicator ── */
     .availability-notice {
       display: flex; align-items: center; gap: 0.6rem;
@@ -227,8 +319,9 @@
     <div class="booking-form-card reveal">
       <h2>Inquiry <em>Details</em></h2>
       <p class="subtitle">
-        Fill out the form below and we will confirm availability within 24 hours.
-        No payment is collected through this form — all booking details are confirmed via email.
+        Choose your dates to see an instant quote, then send your request.
+        We confirm availability within 24 hours. No payment is collected on this
+        page — once your dates are confirmed we email you a secure payment link.
       </p>
 
       <div id="formAlert" role="alert" aria-live="polite"></div>
@@ -285,6 +378,47 @@
             <span class="form-error" id="checkOutError" role="alert"></span>
           </div>
         </div>
+
+        <!-- Discount code -->
+        <div class="form-row">
+          <div class="form-group">
+            <label for="discountCode">Discount Code <span class="optional-hint">(optional)</span></label>
+            <input type="text" id="discountCode" name="discountCode"
+              class="form-control" autocomplete="off" spellcheck="false"
+              placeholder="Enter code if you have one"/>
+            <span class="form-error" id="discountCodeError" role="alert"></span>
+          </div>
+        </div>
+
+        <!-- Live quote -->
+        <div id="quotePanel" class="quote-panel" hidden aria-live="polite">
+          <div class="quote-loading" id="quoteLoading">Calculating your quote…</div>
+          <div class="quote-body" id="quoteBody" hidden>
+            <div class="quote-row">
+              <span id="quoteNightsLabel">Nightly rate</span>
+              <span id="quoteSubtotal"></span>
+            </div>
+            <div class="quote-row quote-discount" id="quoteDiscountRow" hidden>
+              <span id="quoteDiscountLabel"></span>
+              <span id="quoteDiscount"></span>
+            </div>
+            <div class="quote-row">
+              <span>Lodging tax (13%)</span>
+              <span id="quoteTax"></span>
+            </div>
+            <div class="quote-row quote-total">
+              <span>Estimated Total</span>
+              <span id="quoteTotal"></span>
+            </div>
+            <p class="quote-note" id="quoteMinNote" hidden></p>
+            <p class="quote-note" id="quoteStdNote">
+              Nightly rate includes cleaning. Estimate only — dates are not held
+              until we confirm availability and you complete payment.
+            </p>
+          </div>
+          <div class="quote-error" id="quoteError" hidden></div>
+        </div>
+
         <div class="form-row">
           <div class="form-group">
             <label for="numGuests">Number of Guests <span aria-hidden="true">*</span></label>
@@ -330,6 +464,58 @@
           <textarea id="specialRequests" name="specialRequests"
             class="form-control"
             placeholder="Early check-in, accessibility needs, special occasions, questions about the property..."></textarea>
+        </div>
+
+        <!-- Terms & cancellation rights -->
+        <div class="terms-block">
+          <p class="terms-heading">Reservation Terms</p>
+
+          <p class="terms-clause">
+            <strong>Cancellation by Generations Getaway LLC.</strong>
+            Generations Getaway LLC reserves the right to cancel any reservation
+            at any time, before or during a stay, for any reason and at its sole
+            discretion. This includes but is not limited to property damage,
+            maintenance, repair or safety concerns, loss of habitability, utility
+            or equipment failure, weather or other natural events, legal,
+            regulatory, licensing or insurance requirements, suspected violation
+            of these terms or the House Rules, or any material misrepresentation
+            by the Guest.
+          </p>
+
+          <p class="terms-clause">
+            If Generations Getaway LLC cancels a reservation, the Guest's sole
+            and exclusive remedy is a refund of all amounts actually paid to
+            Generations Getaway LLC for the affected reservation, issued to the
+            original method of payment within ten (10) business days. A
+            cancellation before check-in is refunded in full; a cancellation
+            during a stay is refunded on a pro-rata basis for the unused nights.
+          </p>
+
+          <p class="terms-clause">
+            Generations Getaway LLC shall not be liable for any other loss, cost
+            or expense arising from such a cancellation, including without
+            limitation airfare, transportation, alternative lodging, event,
+            activity or ticket costs, lost wages, or any incidental,
+            consequential, special, indirect or punitive damages. No relocation,
+            rebooking or compensation obligation shall apply beyond the refund
+            described above. Nothing in this section limits any right or remedy
+            that cannot lawfully be waived under applicable Florida law.
+          </p>
+
+          <p class="terms-clause">
+            <strong>Guest cancellation.</strong> Refunds for Guest-initiated
+            cancellations follow the published schedule: 30+ days before check-in
+            — full refund; 14–29 days — 50%; 7–13 days — 25%; under 7 days — no
+            refund.
+          </p>
+        </div>
+
+        <div class="form-group form-check">
+          <label class="check-label" for="agreeTerms">
+            <input type="checkbox" id="agreeTerms" name="agreeTerms" required/>
+            <span>I have read and agree to the Reservation Terms and House Rules above. <span aria-hidden="true">*</span></span>
+          </label>
+          <span class="form-error" id="agreeTermsError" role="alert"></span>
         </div>
 
         <button type="submit" class="btn btn-primary" id="submitBtn"
@@ -445,5 +631,244 @@
   </footer>
 
   <script src="/js/main.js" defer></script>
+
+  <!-- Live quote: asks the server for a price whenever dates change -->
+  <script>
+  (function () {
+    var checkIn  = document.getElementById('checkIn');
+    var checkOut = document.getElementById('checkOut');
+    var code     = document.getElementById('discountCode');
+    var panel    = document.getElementById('quotePanel');
+    var loading  = document.getElementById('quoteLoading');
+    var body     = document.getElementById('quoteBody');
+    var errBox   = document.getElementById('quoteError');
+    if (!checkIn || !checkOut || !panel) return;
+
+    // Don't allow past dates in the picker.
+    var today = new Date().toISOString().slice(0, 10);
+    checkIn.min = today;
+    checkOut.min = today;
+
+    var money = function (n) {
+      return '$' + Number(n).toLocaleString('en-US', {
+        minimumFractionDigits: 2, maximumFractionDigits: 2
+      });
+    };
+
+    var timer = null;
+    var reqId = 0;
+
+    function render(q) {
+      document.getElementById('quoteNightsLabel').textContent =
+        q.nights + (q.nights === 1 ? ' night' : ' nights');
+      document.getElementById('quoteSubtotal').textContent = money(q.subtotal);
+
+      var dRow = document.getElementById('quoteDiscountRow');
+      if (q.discount > 0) {
+        document.getElementById('quoteDiscountLabel').textContent = q.discount_label;
+        document.getElementById('quoteDiscount').textContent = '−' + money(q.discount);
+        dRow.hidden = false;
+      } else {
+        document.getElementById('quoteDiscountLabel').textContent = '';
+        document.getElementById('quoteDiscount').textContent = '';
+        dRow.hidden = true;
+      }
+
+      var minNote = document.getElementById('quoteMinNote');
+      if (q.below_minimum) {
+        minNote.textContent =
+          'We normally book a ' + q.min_nights + '-night minimum. Shorter stays '
+          + 'are considered on request — submit the form and we will confirm.';
+        minNote.hidden = false;
+      } else {
+        minNote.textContent = '';
+        minNote.hidden = true;
+      }
+
+      document.getElementById('quoteTax').textContent   = money(q.tax);
+      document.getElementById('quoteTotal').textContent =
+        q.total === 0 ? 'Complimentary' : money(q.total);
+
+      // A $0 stay shouldn't talk about completing payment.
+      var stdNote = document.getElementById('quoteStdNote');
+      if (stdNote) {
+        stdNote.textContent = q.total === 0
+          ? 'No payment due. Dates are not held until we confirm availability by email.'
+          : 'Nightly rate includes cleaning. Estimate only \u2014 dates are not held '
+            + 'until we confirm availability and you complete payment.';
+      }
+
+      // Tell the guest if they typed a code that doesn't exist,
+      // without revealing anything about which codes are valid.
+      var codeErr = document.getElementById('discountCodeError');
+      if (codeErr) {
+        codeErr.textContent = q.code_invalid
+          ? 'That code was not recognized.' : '';
+      }
+
+      loading.hidden = true;
+      errBox.hidden  = true;
+      body.hidden    = false;
+    }
+
+    function showError(msg) {
+      errBox.textContent = msg;
+      errBox.hidden = false;
+      body.hidden = true;
+      loading.hidden = true;
+    }
+
+    function fetchQuote() {
+      if (!checkIn.value || !checkOut.value) {
+        panel.hidden = true;
+        return;
+      }
+      panel.hidden   = false;
+      loading.hidden = false;
+      body.hidden    = true;
+      errBox.hidden  = true;
+
+      var mine = ++reqId;
+      fetch('/api/pricing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          check_in:      checkIn.value,
+          check_out:     checkOut.value,
+          discount_code: code ? code.value : ''
+        })
+      })
+        .then(function (r) {
+          return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+        })
+        .then(function (res) {
+          if (mine !== reqId) return;           // a newer request won
+          if (!res.ok) return showError(res.d.error || 'Unable to price these dates.');
+          render(res.d);
+        })
+        .catch(function () {
+          if (mine !== reqId) return;
+          showError('Could not reach pricing. We will confirm your total by email.');
+        });
+    }
+
+    function debounced() {
+      clearTimeout(timer);
+      timer = setTimeout(fetchQuote, 350);
+    }
+
+    checkIn.addEventListener('change', function () {
+      // Keep check-out after check-in.
+      if (checkIn.value) checkOut.min = checkIn.value;
+      if (checkOut.value && checkOut.value <= checkIn.value) checkOut.value = '';
+      debounced();
+    });
+    checkOut.addEventListener('change', debounced);
+    if (code) code.addEventListener('input', debounced);
+  })();
+  </script>
+
+  <!-- Booking form submission -->
+  <script>
+  (function () {
+    var form   = document.getElementById('bookingForm');
+    var btn    = document.getElementById('submitBtn');
+    var alertBox = document.getElementById('formAlert');
+    if (!form) return;
+
+    function val(id) {
+      var el = document.getElementById(id);
+      return el ? el.value.trim() : '';
+    }
+    function setError(id, msg) {
+      var el = document.getElementById(id + 'Error');
+      if (el) el.textContent = msg || '';
+      return !msg;
+    }
+    function notify(msg, kind) {
+      alertBox.innerHTML =
+        '<div class="form-alert form-alert-' + kind + '">' + msg + '</div>';
+      alertBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+
+      // Clear previous errors
+      ['firstName','lastName','email','checkIn','checkOut','agreeTerms']
+        .forEach(function (f) { setError(f, ''); });
+
+      var ok = true;
+      if (!val('firstName')) ok = setError('firstName', 'First name is required.') && ok;
+      if (!val('lastName'))  ok = setError('lastName',  'Last name is required.')  && ok;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val('email')))
+        ok = setError('email', 'A valid email is required.') && ok;
+      if (!val('checkIn'))   ok = setError('checkIn',  'Check-in date is required.')  && ok;
+      if (!val('checkOut'))  ok = setError('checkOut', 'Check-out date is required.') && ok;
+      if (val('checkIn') && val('checkOut') && val('checkOut') <= val('checkIn'))
+        ok = setError('checkOut', 'Check-out must be after check-in.') && ok;
+      if (!val('numGuests')) ok = setError('numGuests', 'Please select guests.') && ok;
+
+      var agree = document.getElementById('agreeTerms');
+      if (agree && !agree.checked) {
+        ok = setError('agreeTerms', 'Please accept the Reservation Terms to continue.') && ok;
+      }
+
+      if (!ok) {
+        notify('Please correct the highlighted fields and try again.', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      var original = btn.textContent;
+      btn.textContent = 'Sending…';
+
+      fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name:       val('firstName'),
+          last_name:        val('lastName'),
+          email:            val('email'),
+          phone:            val('phone'),
+          check_in_date:    val('checkIn'),
+          check_out_date:   val('checkOut'),
+          num_guests:       parseInt(val('numGuests'), 10),
+          booking_source:   val('bookingSource'),
+          purpose_of_stay:  val('purpose'),
+          special_requests: val('specialRequests'),
+          discount_code:    val('discountCode'),
+          terms_accepted:   true,
+          terms_accepted_at: new Date().toISOString()
+        })
+      })
+        .then(function (r) {
+          return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+        })
+        .then(function (res) {
+          if (!res.ok) {
+            var msg = res.d.errors
+              ? res.d.errors.join(' ')
+              : (res.d.error || 'We could not send your inquiry. Please try again.');
+            notify(msg, 'error');
+            btn.disabled = false;
+            btn.textContent = original;
+            return;
+          }
+          form.reset();
+          document.getElementById('quotePanel').hidden = true;
+          notify(
+            'Thank you — your booking inquiry has been received. ' +
+            'We will confirm availability within 24 hours by email.', 'success');
+          btn.textContent = 'Inquiry Sent';
+        })
+        .catch(function () {
+          notify('We could not reach the server. Please try again, or email us directly.', 'error');
+          btn.disabled = false;
+          btn.textContent = original;
+        });
+    });
+  })();
+  </script>
 </body>
 </html>
