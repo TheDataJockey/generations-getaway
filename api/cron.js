@@ -42,17 +42,21 @@ import {
 
 export default async function handler(req, res) {
   // ── Verify cron secret ──
+  // NOTE: the !CRON_SECRET check matters. Without it, an unset
+  // secret makes the comparison string "Bearer undefined", which
+  // anyone could send to trigger this endpoint.
   const authHeader = req.headers['authorization'];
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!process.env.CRON_SECRET ||
+      authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).json({ error: 'Unauthorized.' });
   }
 
   if (req.method !== 'GET') return res.status(405).end();
 
-  // ── Get today's date in EST ──
-  const now       = new Date();
-  const estOffset = -5; // EST (UTC-5); adjust to -4 for EDT if needed
-  const estNow    = new Date(now.getTime() + (estOffset * 60 * 60 * 1000));
+  // ── Get today's date in Fort Lauderdale local time ──
+  // Uses the IANA zone so EST/EDT is handled automatically. The old
+  // hardcoded -5 offset was wrong for ~8 months of the year.
+  const estNow = easternToday();
 
   const today     = toDateStr(estNow);
   const tomorrow  = toDateStr(addDays(estNow, 1));
@@ -161,12 +165,22 @@ async function markSent(bookingId, field) {
 }
 
 // ── Date helpers ──
+// Returns a Date whose UTC calendar date matches today's date in
+// America/New_York, so DST never shifts which day we act on.
+function easternToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  return new Date(`${parts}T00:00:00Z`);
+}
+
 function toDateStr(date) {
   return date.toISOString().split('T')[0];
 }
 
 function addDays(date, days) {
   const d = new Date(date);
-  d.setDate(d.getDate() + days);
+  d.setUTCDate(d.getUTCDate() + days);
   return d;
 }

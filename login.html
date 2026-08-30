@@ -1,0 +1,333 @@
+<!--
+  FILE: admin/login.html
+  PAGE: Admin Login Page
+  URL:  generationsgetawayfl.com/admin/login.html
+  ============================================================
+  PURPOSE:
+    Secure two-step login page for Kyle (the property owner)
+    to access the Admin Dashboard. Not visible to guests.
+
+  HOW LOGIN WORKS (2 steps):
+    Step 1 - Email and password (verified against Supabase)
+    Step 2 - 6-digit TOTP code from Microsoft Authenticator app
+             on Kyle's phone (two-factor authentication)
+    First time only: QR code shown to set up Authenticator app
+
+  CONNECTS TO:
+    - /api/admin-auth   Handles both login steps (server-side)
+    - /admin/dashboard.html  Redirects here on success
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="robots" content="noindex, nofollow"/>
+  <title>Admin Login — Generations Getaway LLC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/css/styles.css"/>
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 2rem;
+      background:
+        linear-gradient(160deg, rgba(13,27,46,0.97) 0%, rgba(27,42,74,0.95) 100%),
+        url('https://raw.githubusercontent.com/TheDataJockey/generations-getaway/main/assets/pool-night.jpg') center/cover no-repeat fixed;
+    }
+    .login-wrap { width: 100%; max-width: 400px; }
+    .login-card {
+      background: rgba(27,42,74,0.5);
+      border: 1px solid rgba(91,141,217,0.25);
+      border-radius: 4px; padding: 3rem 2.5rem;
+      backdrop-filter: blur(16px);
+    }
+    .login-logo { width: 80px; height: 80px; display: block; margin: 0 auto 1.2rem; object-fit: contain; }
+    .login-title { font-family: var(--font-serif); font-size: 1.8rem; font-weight: 300; text-align: center; margin-bottom: 0.3rem; }
+    .login-title em { font-style: italic; color: var(--sky); }
+    .login-sub { text-align: center; font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 2.5rem; }
+    .step-indicator { display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1.5rem; }
+    .step-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(91,141,217,0.25); transition: background var(--transition); }
+    .step-dot.active { background: var(--blue-light); }
+    .step-dot.done   { background: var(--blue); }
+    .totp-wrap { display: flex; gap: 0.5rem; justify-content: center; }
+    .totp-digit {
+      width: 42px; height: 52px; text-align: center; font-size: 1.3rem;
+      font-family: var(--font-serif);
+      background: rgba(27,42,74,0.8);
+      border: 1px solid rgba(91,141,217,0.3);
+      color: var(--cream); border-radius: 4px; outline: none;
+      transition: border-color var(--transition);
+      caret-color: var(--blue-light);
+    }
+    .totp-digit:focus { border-color: var(--blue-light); }
+    .totp-help { text-align: center; font-size: 0.75rem; color: var(--muted); line-height: 1.7; margin-top: 0.3rem; }
+    .qr-section { display: none; }
+    .qr-section.show { display: block; }
+    .qr-placeholder {
+      width: 180px; height: 180px; background: white; border-radius: 4px;
+      margin: 1.2rem auto; display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; color: #333; text-align: center; padding: 1rem;
+    }
+    .qr-secret {
+      text-align: center; font-size: 0.75rem; color: var(--muted);
+      word-break: break-all; background: rgba(27,42,74,0.6);
+      padding: 0.6rem; border-radius: 4px;
+      border: 1px solid rgba(91,141,217,0.2);
+      margin-bottom: 1rem; line-height: 1.6;
+    }
+    .qr-secret strong { color: var(--sky); display: block; margin-bottom: 0.3rem; }
+    .setup-step { display: flex; gap: 0.6rem; margin-bottom: 0.4rem; font-size: 0.78rem; color: rgba(164,196,224,0.8); line-height: 1.7; }
+    .setup-step-num {
+      width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%;
+      background: rgba(46,95,163,0.3); border: 1px solid var(--blue);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.65rem; color: var(--sky); margin-top: 0.1rem;
+    }
+    .admin-footer { text-align: center; margin-top: 1.5rem; font-size: 0.68rem; color: var(--muted); letter-spacing: 0.1em; }
+
+    /* ── Tablet ── */
+    @media (max-width: 768px) {
+      body { padding: 1.5rem; }
+      .login-wrap { max-width: 100%; }
+      .login-card { padding: 2.5rem 2rem; }
+      .qr-placeholder { width: 160px; height: 160px; }
+    }
+    /* ── Mobile ── */
+    @media (max-width: 480px) {
+      body { padding: 1rem; align-items: flex-start; padding-top: 3rem; }
+      .login-card { padding: 2rem 1.2rem; }
+      .login-logo { width: 70px; height: 70px; }
+      .login-title { font-size: 1.6rem; }
+      .login-subtitle { font-size: 0.65rem; margin-bottom: 2rem; }
+      .totp-wrap { gap: 0.4rem; }
+      .totp-digit { width: 38px; height: 48px; font-size: 1.2rem; }
+      .step-dot { width: 7px; height: 7px; }
+      .qr-placeholder { width: 140px; height: 140px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <img src="https://raw.githubusercontent.com/TheDataJockey/generations-getaway/main/assets/logo.png" alt="Generations Getaway LLC" class="login-logo"/>
+      <h1 class="login-title">Admin <em>Portal</em></h1>
+      <p class="login-sub">Secure Access Only</p>
+      <div class="step-indicator" aria-hidden="true">
+        <div class="step-dot active" id="dot1"></div>
+        <div class="step-dot"        id="dot2"></div>
+      </div>
+      <div id="alertBox" role="alert" aria-live="assertive"></div>
+
+      <!-- STEP 1: Credentials -->
+      <div id="step1">
+        <form style="display:flex;flex-direction:column;gap:1.2rem;" id="credForm" novalidate>
+          <div class="form-group">
+            <label for="adminEmail">Email Address</label>
+            <input type="email" id="adminEmail" class="form-control"
+              placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+              required autocomplete="off" autocapitalize="none"
+              spellcheck="false" inputmode="email"/>
+          </div>
+          <div class="form-group">
+            <label for="adminPassword">Password</label>
+            <div class="password-wrap">
+              <input type="password" id="adminPassword" class="form-control"
+                placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+                required autocomplete="current-password"/>
+              <button type="button" class="pw-toggle" id="pwToggle"
+                aria-label="Toggle password visibility">👁</button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary" id="credBtn">Continue</button>
+        </form>
+      </div>
+
+      <!-- STEP 2: 2FA -->
+      <div id="step2" style="display:none;">
+        <!-- QR Setup (first login only) -->
+        <div class="qr-section" id="qrSetup">
+          <p style="font-size:0.82rem;color:rgba(164,196,224,0.85);text-align:center;margin-bottom:1rem;line-height:1.7;">
+            Set up two-factor authentication with <strong style="color:var(--sky)">Microsoft Authenticator</strong>
+          </p>
+          <div class="qr-placeholder" id="qrCode">Loading QR code&hellip;</div>
+          <div class="qr-secret">
+            <strong>Manual entry key:</strong>
+            <span id="totpSecretDisplay">Loading&hellip;</span>
+          </div>
+          <div style="margin-bottom:1.2rem;">
+            <div class="setup-step"><span class="setup-step-num">1</span>Open Microsoft Authenticator on your phone</div>
+            <div class="setup-step"><span class="setup-step-num">2</span>Tap + &rarr; Other account &rarr; Scan the QR code above</div>
+            <div class="setup-step"><span class="setup-step-num">3</span>Enter the 6-digit code shown in the app below</div>
+          </div>
+        </div>
+        <!-- TOTP entry -->
+        <div id="totpEntry">
+          <p style="font-size:0.82rem;color:rgba(164,196,224,0.85);text-align:center;margin-bottom:1.2rem;line-height:1.7;">
+            Enter the <strong style="color:var(--sky)">6-digit code</strong> from Microsoft Authenticator
+          </p>
+          <div class="totp-wrap" role="group" aria-label="6-digit authenticator code">
+            <input type="text" class="totp-digit" id="t1" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Code digit 1" autocomplete="off"/>
+            <input type="text" class="totp-digit" id="t2" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Code digit 2" autocomplete="off"/>
+            <input type="text" class="totp-digit" id="t3" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Code digit 3" autocomplete="off"/>
+            <input type="text" class="totp-digit" id="t4" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Code digit 4" autocomplete="off"/>
+            <input type="text" class="totp-digit" id="t5" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Code digit 5" autocomplete="off"/>
+            <input type="text" class="totp-digit" id="t6" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Code digit 6" autocomplete="off"/>
+          </div>
+          <p class="totp-help">Code refreshes every 30 seconds</p>
+          <button class="btn btn-primary" id="totpBtn" style="width:100%;margin-top:1.2rem;">
+            Verify &amp; Sign In
+          </button>
+          <button class="btn btn-ghost" id="backBtn"
+            style="width:100%;margin-top:0.6rem;font-size:0.65rem;">
+            &larr; Back
+          </button>
+        </div>
+      </div>
+    </div>
+    <p class="admin-footer">Generations Getaway LLC &nbsp;&middot;&nbsp; Admin Access</p>
+  </div>
+
+  <script type="module">
+    /**
+     * Admin Login Handler
+     * ====================
+     * Two-step: email/password → TOTP 2FA.
+     * First login shows QR code for Authenticator setup.
+     * All validation done server-side.
+     */
+
+    let adminEmail   = '';
+    let needsQrSetup = false;
+
+    const alertBox   = document.getElementById('alertBox');
+    const credBtn    = document.getElementById('credBtn');
+    const totpBtn    = document.getElementById('totpBtn');
+    const backBtn    = document.getElementById('backBtn');
+    const dot1       = document.getElementById('dot1');
+    const dot2       = document.getElementById('dot2');
+    const totpDigits = ['t1','t2','t3','t4','t5','t6'].map(id => document.getElementById(id));
+
+    // ── Auto-advance TOTP digits ──
+    totpDigits.forEach((input, i) => {
+      input.addEventListener('input', (e) => {
+        e.target.value = e.target.value.replace(/[^0-9]/g, '');
+        if (e.target.value && i < 5) totpDigits[i + 1].focus();
+        if (totpDigits.every(d => d.value)) verifyTotp();
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !e.target.value && i > 0) totpDigits[i-1].focus();
+      });
+    });
+
+    // ── Step 1: credentials ──
+    document.getElementById('credForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      alertBox.innerHTML = '';
+      const email    = document.getElementById('adminEmail').value.trim();
+      const password = document.getElementById('adminPassword').value;
+      if (!email || !password) {
+        alertBox.innerHTML = '<div class="alert alert-error">Email and password are required.</div>';
+        return;
+      }
+      credBtn.disabled = true;
+      credBtn.textContent = 'Verifying...';
+      try {
+        const res  = await fetch('/api/admin-auth?step=credentials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          adminEmail   = email;
+          needsQrSetup = data.needs_setup;
+          document.getElementById('step1').style.display = 'none';
+          document.getElementById('step2').style.display = 'block';
+          dot1.classList.replace('active', 'done');
+          dot2.classList.add('active');
+          if (needsQrSetup) {
+            document.getElementById('qrSetup').classList.add('show');
+            document.getElementById('qrCode').innerHTML =
+              `<img src="${data.qr_url}" alt="QR Code" style="width:100%;height:100%;object-fit:contain;"/>`;
+            document.getElementById('totpSecretDisplay').textContent = data.secret;
+          }
+          totpDigits[0].focus();
+        } else {
+          alertBox.innerHTML = `<div class="alert alert-error">${data.error || 'Invalid credentials.'}</div>`;
+          credBtn.disabled = false;
+          credBtn.textContent = 'Continue';
+        }
+      } catch {
+        alertBox.innerHTML = '<div class="alert alert-error">Connection error. Please try again.</div>';
+        credBtn.disabled = false;
+        credBtn.textContent = 'Continue';
+      }
+    });
+
+    // ── Step 2: TOTP verify ──
+    totpBtn.addEventListener('click', verifyTotp);
+
+    async function verifyTotp() {
+      const code = totpDigits.map(d => d.value).join('');
+      if (code.length !== 6) return;
+      totpBtn.disabled = true;
+      totpBtn.textContent = 'Verifying...';
+      alertBox.innerHTML = '';
+      try {
+        const res  = await fetch('/api/admin-auth?step=totp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: adminEmail, code }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          sessionStorage.setItem('gg_admin_token', data.token);
+          sessionStorage.setItem('gg_admin_role',  data.role);
+          window.location.href = '/admin/dashboard.html';
+        } else {
+          alertBox.innerHTML = `<div class="alert alert-error">${data.error || 'Invalid code. Please try again.'}</div>`;
+          totpDigits.forEach(d => { d.value = ''; });
+          totpDigits[0].focus();
+          totpBtn.disabled = false;
+          totpBtn.textContent = 'Verify & Sign In';
+        }
+      } catch {
+        alertBox.innerHTML = '<div class="alert alert-error">Connection error. Please try again.</div>';
+        totpBtn.disabled = false;
+        totpBtn.textContent = 'Verify & Sign In';
+      }
+    }
+
+    // ── Back to step 1 ──
+    backBtn.addEventListener('click', () => {
+      document.getElementById('step2').style.display = 'none';
+      document.getElementById('step1').style.display = 'block';
+      dot2.classList.remove('active');
+      dot1.classList.replace('done', 'active');
+      credBtn.disabled = false;
+      credBtn.textContent = 'Continue';
+      alertBox.innerHTML = '';
+      totpDigits.forEach(d => { d.value = ''; });
+      document.getElementById('qrSetup').classList.remove('show');
+    });
+
+    // ── Password visibility toggle ──
+    document.getElementById('pwToggle').addEventListener('click', () => {{
+      const input  = document.getElementById('adminPassword');
+      const btn    = document.getElementById('pwToggle');
+      const isHidden = input.type === 'password';
+      input.type   = isHidden ? 'text' : 'password';
+      btn.textContent = isHidden ? '🙈' : '👁';
+      btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+    }});
+
+    // ── Already logged in? ──
+    if (sessionStorage.getItem('gg_admin_token')) {
+      window.location.href = '/admin/dashboard.html';
+    }
+  </script>
+</body>
+</html>

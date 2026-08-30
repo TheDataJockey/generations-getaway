@@ -657,8 +657,12 @@
 
     var timer = null;
     var reqId = 0;
+    var lastCheckIn = '';
+    // Remembered nightly minimum; refreshed from each server quote.
+    var minNights = 3;
 
     function render(q) {
+      if (q.min_nights) minNights = q.min_nights;
       document.getElementById('quoteNightsLabel').textContent =
         q.nights + (q.nights === 1 ? ' night' : ' nights');
       document.getElementById('quoteSubtotal').textContent = money(q.subtotal);
@@ -757,12 +761,38 @@
       timer = setTimeout(fetchQuote, 350);
     }
 
+    function addDays(iso, n) {
+      var d = new Date(iso + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().slice(0, 10);
+    }
+    function nightsBetween(a, b) {
+      return Math.round(
+        (new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000
+      );
+    }
+
     checkIn.addEventListener('change', function () {
-      // Keep check-out after check-in.
-      if (checkIn.value) checkOut.min = checkIn.value;
-      if (checkOut.value && checkOut.value <= checkIn.value) checkOut.value = '';
+      if (!checkIn.value) return;
+
+      // Check-out can never be on or before check-in.
+      checkOut.min = addDays(checkIn.value, 1);
+
+      if (!checkOut.value) {
+        // Nothing chosen yet — default to the minimum stay so the
+        // guest sees a price straight away.
+        checkOut.value = addDays(checkIn.value, minNights);
+      } else if (checkOut.value <= checkIn.value) {
+        // Move check-out forward, keeping the trip length they had.
+        var prev = nightsBetween(lastCheckIn || checkIn.value, checkOut.value);
+        if (!prev || prev < 1) prev = minNights;
+        checkOut.value = addDays(checkIn.value, prev);
+      }
+
+      lastCheckIn = checkIn.value;
       debounced();
     });
+
     checkOut.addEventListener('change', debounced);
     if (code) code.addEventListener('input', debounced);
   })();
