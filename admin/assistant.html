@@ -1,0 +1,307 @@
+<!--
+  FILE: admin/assistant.html
+  PAGE: Admin — Operations Assistant
+  URL:  generationsgetawayfl.com/admin/assistant.html
+  ============================================================
+  PURPOSE:
+    A private AI assistant for Kyle. It can see live rates,
+    discount codes, date overrides, upcoming bookings and the
+    knowledge base, and answer operational questions about them.
+
+  ACCESS:
+    Requires an admin session. Redirects to admin/login.html if
+    not signed in.
+
+  IMPORTANT:
+    This is NOT the guest chatbot. It knows the discount codes.
+    Do not screen-share this page with guests present.
+
+  TALKS TO:
+    /api/admin-chat
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="robots" content="noindex, nofollow"/>
+<title>Operations Assistant — Generations Getaway Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --navy-deep:#0D1B2E; --navy:#132339; --navy-light:#1B2A4A;
+    --blue:#2E5FA3; --blue-light:#5B8DD9; --sky:#A8C4E0;
+    --cream:#F4F7FB; --muted:#7A90AE; --white:#fff;
+    --good:#7FD1A4; --bad:#E8A0A0;
+    --font-serif:'Cormorant Garamond',Georgia,serif;
+    --font-sans:'Montserrat',-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    background:var(--navy-deep); color:var(--cream);
+    font-family:var(--font-sans); font-size:14px; line-height:1.65;
+    display:flex; flex-direction:column; -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--blue-light);text-decoration:none;}
+
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:1rem;flex-wrap:wrap;padding:1rem 1.4rem;
+    background:var(--navy);border-bottom:1px solid rgba(46,95,163,.3);
+    flex-shrink:0;
+  }
+  header h1{font-family:var(--font-serif);font-size:1.4rem;font-weight:400;}
+  .header-actions{display:flex;gap:.55rem;}
+  .btn{
+    padding:.55rem 1rem;border:none;border-radius:4px;
+    font-family:var(--font-sans);font-size:.68rem;font-weight:500;
+    letter-spacing:.12em;text-transform:uppercase;cursor:pointer;
+  }
+  .btn-primary{background:var(--blue);color:var(--white);}
+  .btn-primary:hover{background:var(--blue-light);}
+  .btn-ghost{background:transparent;color:var(--sky);border:1px solid rgba(46,95,163,.45);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+
+  .privacy-note{
+    padding:.55rem 1.4rem;font-size:.7rem;color:var(--muted);
+    background:rgba(46,95,163,.10);
+    border-bottom:1px solid rgba(46,95,163,.2);flex-shrink:0;
+  }
+
+  .chat{
+    flex:1;overflow-y:auto;padding:1.4rem;
+    max-width:900px;width:100%;margin:0 auto;
+  }
+  .msg{margin-bottom:1.2rem;display:flex;gap:.7rem;}
+  .msg-avatar{
+    width:28px;height:28px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:.62rem;letter-spacing:.05em;font-weight:600;
+  }
+  .msg-user .msg-avatar{background:var(--blue);color:var(--white);}
+  .msg-ai   .msg-avatar{background:var(--navy-light);color:var(--sky);border:1px solid rgba(46,95,163,.4);}
+  .msg-body{flex:1;min-width:0;}
+  .msg-role{
+    font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:.3rem;
+  }
+  .msg-text{font-size:.88rem;white-space:pre-wrap;word-wrap:break-word;}
+  .msg-text strong{color:var(--sky);font-weight:600;}
+  .msg-ai .msg-text{color:var(--cream);}
+  .msg-error .msg-text{color:var(--bad);}
+
+  .suggestions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem;}
+  .chip{
+    padding:.45rem .8rem;border-radius:99px;font-size:.74rem;
+    background:var(--navy-light);border:1px solid rgba(46,95,163,.35);
+    color:var(--sky);cursor:pointer;
+  }
+  .chip:hover{background:var(--blue);color:var(--white);border-color:var(--blue);}
+
+  .composer{
+    flex-shrink:0;border-top:1px solid rgba(46,95,163,.3);
+    background:var(--navy);padding:.9rem 1.4rem;
+  }
+  .composer-inner{
+    max-width:900px;margin:0 auto;display:flex;gap:.7rem;align-items:flex-end;
+  }
+  textarea{
+    flex:1;resize:none;min-height:44px;max-height:150px;
+    padding:.7rem .85rem;background:var(--navy-light);color:var(--cream);
+    border:1px solid rgba(46,95,163,.35);border-radius:4px;
+    font-family:var(--font-sans);font-size:.88rem;line-height:1.5;
+  }
+  textarea:focus{outline:none;border-color:var(--blue-light);}
+  .hint{
+    max-width:900px;margin:.45rem auto 0;
+    font-size:.65rem;color:var(--muted);
+  }
+  .typing{display:flex;gap:.25rem;padding:.4rem 0;}
+  .typing span{
+    width:6px;height:6px;border-radius:50%;background:var(--muted);
+    animation:blink 1.3s infinite;
+  }
+  .typing span:nth-child(2){animation-delay:.2s;}
+  .typing span:nth-child(3){animation-delay:.4s;}
+  @keyframes blink{0%,60%,100%{opacity:.25;}30%{opacity:1;}}
+  @media(max-width:600px){
+    header h1{font-size:1.15rem;}
+    .chat{padding:1rem;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Operations Assistant</h1>
+  <div class="header-actions">
+    <button class="btn btn-ghost" id="clearBtn">Clear</button>
+    <a class="btn btn-ghost" href="/admin/dashboard.html">&larr; Dashboard</a>
+  </div>
+</header>
+
+<div class="privacy-note">
+  Private to you. This assistant can see your discount codes and guest
+  bookings &mdash; don't screen-share it with guests present.
+</div>
+
+<div class="chat" id="chat"></div>
+
+<div class="composer">
+  <div class="composer-inner">
+    <textarea id="input" rows="1" placeholder="Ask about rates, codes, bookings, or maintenance…"></textarea>
+    <button class="btn btn-primary" id="sendBtn">Send</button>
+  </div>
+  <p class="hint">
+    Read-only. To change rates or codes use the Pricing page; for bookings use the Dashboard.
+  </p>
+</div>
+
+<script>
+(function () {
+  var token = sessionStorage.getItem('gg_admin_token');
+  if (!token) { window.location.href = '/admin/login.html'; return; }
+
+  var chat    = document.getElementById('chat');
+  var input   = document.getElementById('input');
+  var sendBtn = document.getElementById('sendBtn');
+  var history = [];
+  var busy    = false;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+    });
+  }
+  // Minimal formatting: **bold** only. Everything else stays literal.
+  function fmt(s) {
+    return esc(s).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  }
+
+  function addMsg(role, text, isError) {
+    var wrap = document.createElement('div');
+    wrap.className = 'msg msg-' + (role === 'user' ? 'user' : 'ai') +
+                     (isError ? ' msg-error' : '');
+    wrap.innerHTML =
+      '<div class="msg-avatar">' + (role === 'user' ? 'YOU' : 'AI') + '</div>' +
+      '<div class="msg-body">' +
+        '<div class="msg-role">' + (role === 'user' ? 'You' : 'Assistant') + '</div>' +
+        '<div class="msg-text">' + fmt(text) + '</div>' +
+      '</div>';
+    chat.appendChild(wrap);
+    chat.scrollTop = chat.scrollHeight;
+    return wrap;
+  }
+
+  function addTyping() {
+    var wrap = document.createElement('div');
+    wrap.className = 'msg msg-ai';
+    wrap.innerHTML =
+      '<div class="msg-avatar">AI</div>' +
+      '<div class="msg-body"><div class="msg-role">Assistant</div>' +
+      '<div class="typing"><span></span><span></span><span></span></div></div>';
+    chat.appendChild(wrap);
+    chat.scrollTop = chat.scrollHeight;
+    return wrap;
+  }
+
+  var SUGGESTIONS = [
+    'What discount codes do I have active?',
+    'What would a week in March cost?',
+    'Who is checking in over the next two weeks?',
+    'What is my cancellation policy?',
+    'Are any of my date overrides overlapping?'
+  ];
+
+  function greet() {
+    chat.innerHTML = '';
+    var w = addMsg('assistant',
+      "Hi Kyle. I can see your current rates, discount codes, date overrides, " +
+      "upcoming bookings and knowledge base. Ask me anything about them.");
+    var box = document.createElement('div');
+    box.className = 'suggestions';
+    SUGGESTIONS.forEach(function (s) {
+      var c = document.createElement('span');
+      c.className = 'chip'; c.textContent = s;
+      c.addEventListener('click', function () { input.value = s; send(); });
+      box.appendChild(c);
+    });
+    w.querySelector('.msg-body').appendChild(box);
+  }
+
+  async function send() {
+    var q = input.value.trim();
+    if (!q || busy) return;
+
+    busy = true;
+    sendBtn.disabled = true;
+    input.value = '';
+    input.style.height = 'auto';
+
+    // Drop the suggestion chips once a conversation starts.
+    var chips = chat.querySelector('.suggestions');
+    if (chips) chips.remove();
+
+    addMsg('user', q);
+    var typing = addTyping();
+
+    try {
+      var res = await fetch('/api/admin-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ question: q, history: history })
+      });
+
+      typing.remove();
+
+      if (res.status === 401) { window.location.href = '/admin/login.html'; return; }
+
+      var data = await res.json().catch(function () { return {}; });
+
+      if (!res.ok) {
+        addMsg('assistant', data.error || 'Something went wrong. Please try again.', true);
+      } else {
+        addMsg('assistant', data.answer);
+        history.push({ role: 'user', content: q });
+        history.push({ role: 'assistant', content: data.answer });
+        if (history.length > 16) history = history.slice(-16);
+      }
+    } catch (e) {
+      typing.remove();
+      addMsg('assistant', 'Could not reach the assistant. Check your connection and try again.', true);
+    }
+
+    busy = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+
+  sendBtn.addEventListener('click', send);
+
+  input.addEventListener('keydown', function (e) {
+    // Enter sends; Shift+Enter makes a new line.
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+  input.addEventListener('input', function () {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 150) + 'px';
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', function () {
+    history = [];
+    greet();
+    input.focus();
+  });
+
+  greet();
+  input.focus();
+})();
+</script>
+</body>
+</html>

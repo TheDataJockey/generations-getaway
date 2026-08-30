@@ -638,6 +638,9 @@
       </button>
 
       <div class="nav-section-label">System</div>
+      <a class="nav-item" href="/admin/assistant.html" style="text-decoration:none;">
+        <span class="nav-icon">💬</span> Ops Assistant
+      </a>
       <a class="nav-item" href="/admin/pricing.html" style="text-decoration:none;">
         <span class="nav-icon">💲</span> Pricing &amp; Discounts
       </a>
@@ -2016,8 +2019,22 @@
       } catch (err) { console.error(err); }
     };
 
+    // Clear every field in the KB modal. Used by all entry points so a
+    // new entry can never inherit the previous entry's answer.
+    function resetKbForm() {
+      document.getElementById('kbId').value       = '';
+      document.getElementById('kbQuestion').value = '';
+      document.getElementById('kbAnswer').value   = '';
+      document.getElementById('kbKeywords').value = '';
+      const cat = document.getElementById('kbCategory');
+      if (cat) cat.selectedIndex = 0;
+      const title = document.getElementById('kbModalTitle');
+      if (title) title.textContent = 'Add Knowledge Base Entry';
+    }
+
     // Pre-fill KB modal with escalated question
     window.addToKb = function(question) {
+      resetKbForm();
       document.getElementById('kbQuestion').value = question;
       document.getElementById('kbModal').classList.add('open');
     };
@@ -2071,10 +2088,7 @@
 
     // KB modal
     document.getElementById('addKbBtn').addEventListener('click', () => {
-      document.getElementById('kbId').value = '';
-      document.getElementById('kbQuestion').value = '';
-      document.getElementById('kbAnswer').value   = '';
-      document.getElementById('kbKeywords').value = '';
+      resetKbForm();
       document.getElementById('kbModal').classList.add('open');
     });
 
@@ -2082,6 +2096,9 @@
       try {
         const res  = await fetch(`/api/admin/knowledge/${id}`, { headers: authHeaders() });
         const data = await res.json();
+        resetKbForm();
+        const t = document.getElementById('kbModalTitle');
+        if (t) t.textContent = 'Edit Knowledge Base Entry';
         document.getElementById('kbId').value       = data.id;
         document.getElementById('kbCategory').value = data.category;
         document.getElementById('kbQuestion').value = data.question;
@@ -2117,13 +2134,16 @@
           body:    JSON.stringify({ id, category, question, answer, keywords }),
         });
         document.getElementById('kbModal').classList.remove('open');
+        resetKbForm();
         loadKnowledge();
       } catch (err) { console.error(err); }
     });
 
     ['closeKbModal','closeKbModal2'].forEach(id => {
-      document.getElementById(id)?.addEventListener('click', () =>
-        document.getElementById('kbModal').classList.remove('open'));
+      document.getElementById(id)?.addEventListener('click', () => {
+        document.getElementById('kbModal').classList.remove('open');
+        resetKbForm();
+      });
     });
 
     // Notes tabs

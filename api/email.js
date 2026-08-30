@@ -86,6 +86,13 @@ const emailStyles = `
   </style>`;
 
 // ── Send via Resend ──
+// Format a number as USD for email display.
+function money(n) {
+  return '$' + Number(n || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+}
+
 export async function sendEmail({ to, from, subject, html, text }) {
   if (!RESEND_API_KEY) {
     console.error('[email] RESEND_API_KEY not set');
@@ -194,6 +201,15 @@ export async function sendKyleNotification({ guest, booking }) {
       <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)}</span></div>
       <div class="info-row"><span class="info-label">Guests</span><span class="info-value">${booking.num_guests || 1}</span></div>
       <div class="info-row"><span class="info-label">Source</span><span class="info-value" style="text-transform:capitalize;">${booking.booking_source || 'Direct'}</span></div>
+      ${booking.discount_code ? `<div class="info-row"><span class="info-label">Discount Code</span><span class="info-value"><strong>${booking.discount_code}</strong></span></div>` : ''}
+      ${booking.quote ? `
+      <div class="info-row"><span class="info-label">Nights</span><span class="info-value">${booking.quote.nights}</span></div>
+      <div class="info-row"><span class="info-label">Standard Rate</span><span class="info-value">${money(booking.quote.subtotal)}</span></div>
+      ${booking.quote.discount > 0 ? `<div class="info-row"><span class="info-label">Discount</span><span class="info-value">-${money(booking.quote.discount)}${booking.quote.discount_label ? ` (${booking.quote.discount_label})` : ''}</span></div>` : ''}
+      <div class="info-row"><span class="info-label">Tax</span><span class="info-value">${money(booking.quote.tax)}</span></div>
+      <div class="info-row"><span class="info-label">Estimated Total</span><span class="info-value"><strong>${booking.quote.total === 0 ? 'COMPLIMENTARY' : money(booking.quote.total)}</strong></span></div>
+      ${booking.quote.below_minimum ? `<div class="info-row"><span class="info-label">Note</span><span class="info-value">Below the ${booking.quote.min_nights}-night minimum &mdash; needs your approval</span></div>` : ''}
+      ` : ''}
       ${booking.special_requests ? `<div class="info-row"><span class="info-label">Notes</span><span class="info-value" style="max-width:320px;">${booking.special_requests}</span></div>` : ''}
     </div>
     <div style="text-align:center;margin-top:24px;">
@@ -203,7 +219,10 @@ export async function sendKyleNotification({ guest, booking }) {
   <div class="footer"><p>${PROPERTY_NAME} Admin Notification</p></div>
 </div></body></html>`;
 
-  const text = `New booking inquiry from ${guest.first_name} ${guest.last_name} (${guest.email}). Check-in: ${formatDate(booking.check_in_date)}, Check-out: ${formatDate(booking.check_out_date)}.`;
+  const text = `New booking inquiry from ${guest.first_name} ${guest.last_name} (${guest.email}). `
+    + `Check-in: ${formatDate(booking.check_in_date)}, Check-out: ${formatDate(booking.check_out_date)}.`
+    + (booking.discount_code ? ` Code used: ${booking.discount_code}.` : '')
+    + (booking.quote ? ` Estimated total: ${booking.quote.total === 0 ? 'COMPLIMENTARY' : money(booking.quote.total)}.` : '');
 
   return sendEmail({ to: KYLE_EMAIL, from: FROM_BOOKINGS, subject, html, text });
 }

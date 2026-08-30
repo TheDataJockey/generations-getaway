@@ -76,6 +76,7 @@ export default async function handler(req, res) {
       booking_source,
       purpose_of_stay,
       special_requests,
+      discount_code,
     } = req.body;
 
     // Server-side validation
@@ -109,6 +110,7 @@ export default async function handler(req, res) {
       booking_source:  sanitize(booking_source),
       purpose_of_stay: sanitize(purpose_of_stay),
       special_requests: sanitize(special_requests),
+      discount_code:    sanitize(discount_code)?.toUpperCase() || null,
     };
 
     // ── Upsert guest record (inquiry stage) ──
@@ -164,16 +166,32 @@ export default async function handler(req, res) {
 
     if (bookingError) throw new Error(`Failed to create booking record: ${bookingError.message} (code: ${bookingError.code})`);
 
-    // ── TODO Phase 8: Send confirmation email via Resend ──
-    // await sendConfirmationEmail(cleanData, numNights);
-
     // ── Send emails — confirmation to guest + notification to Kyle ──
     try {
       const { sendBookingConfirmation, sendKyleNotification } = await import('./email.js');
+
+      // Recalculate the quote server-side so the figure in the email
+      // is authoritative, not whatever the browser displayed.
+      let quote = null;
+      try {
+        const { loadConfig, computeQuote } = await import('./pricing.js');
+        const cfg = await loadConfig();
+        const q = computeQuote(cfg, {
+          check_in:      check_in_date,
+          check_out:     check_out_date,
+          discount_code: cleanData.discount_code,
+        });
+        if (!q.error) quote = q;
+      } catch (quoteErr) {
+        console.error('[bookings] Quote for email failed:', quoteErr.message);
+      }
+
       const guestData   = { first_name, last_name, email, phone };
       const bookingData = {
         check_in_date, check_out_date, num_guests,
-        booking_source, special_requests
+        booking_source, special_requests,
+        discount_code: cleanData.discount_code,
+        quote,
       };
       await Promise.all([
         sendBookingConfirmation({ guest: guestData, booking: bookingData }),
