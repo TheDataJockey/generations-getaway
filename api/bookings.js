@@ -110,6 +110,20 @@ export default async function handler(req, res) {
     // ── Sanitize inputs ──
     const sanitize = (str) => str?.trim().replace(/<[^>]*>/g, '') || null;
 
+    // These columns carry CHECK constraints in Postgres. Sending a value
+    // the constraint doesn't allow rejects the whole insert, so anything
+    // unrecognised is stored as null (which CHECK always permits) and
+    // noted instead. Better a booking with a blank source than no booking.
+    const ALLOWED_SOURCES  = ['airbnb', 'vrbo', 'direct', 'referral', 'social', 'other'];
+    const ALLOWED_PURPOSES = ['vacation', 'business', 'family',
+                              'special_occasion', 'relocation', 'other'];
+
+    const constrain = (value, allowed) => {
+      const v = sanitize(value)?.toLowerCase();
+      if (!v) return null;
+      return allowed.includes(v) ? v : null;
+    };
+
     const cleanData = {
       first_name:      sanitize(first_name),
       last_name:       sanitize(last_name),
@@ -118,11 +132,25 @@ export default async function handler(req, res) {
       check_in_date,
       check_out_date,
       num_guests:      parseInt(num_guests),
-      booking_source:  sanitize(booking_source),
-      purpose_of_stay: sanitize(purpose_of_stay),
+      booking_source:  constrain(booking_source, ALLOWED_SOURCES),
+      purpose_of_stay: constrain(purpose_of_stay, ALLOWED_PURPOSES),
       special_requests: sanitize(special_requests),
       discount_code:    sanitize(discount_code)?.toUpperCase() || null,
     };
+
+    // Don't silently lose what they told us.
+    const droppedNotes = [];
+    if (booking_source && !cleanData.booking_source) {
+      droppedNotes.push(`Heard about us via: ${sanitize(booking_source)}`);
+    }
+    if (purpose_of_stay && !cleanData.purpose_of_stay) {
+      droppedNotes.push(`Purpose of stay: ${sanitize(purpose_of_stay)}`);
+    }
+    if (droppedNotes.length) {
+      cleanData.special_requests =
+        [cleanData.special_requests, droppedNotes.join(' | ')]
+          .filter(Boolean).join(' \u2014 ');
+    }
 
     // ── Upsert guest record (inquiry stage) ──
     // Guest records ARE created at inquiry stage so we can track them,
