@@ -1,6 +1,10 @@
 /**
- * FILE: api/email.js
+ * FILE: api/_lib/email.js
  * NOT A DIRECT ENDPOINT - imported by api/bookings.js and api/cron.js
+ *
+ * MOVED to api/_lib/ so Vercel does not count it as a Serverless
+ * Function. Files under api/ that start with _ are excluded from
+ * the function count; the Hobby plan allows only 12.
  * USED BY: All automated email sending
  * ============================================================
  * PURPOSE:
@@ -201,6 +205,7 @@ export async function sendKyleNotification({ guest, booking }) {
       <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)}</span></div>
       <div class="info-row"><span class="info-label">Guests</span><span class="info-value">${booking.num_guests || 1}</span></div>
       <div class="info-row"><span class="info-label">Source</span><span class="info-value" style="text-transform:capitalize;">${booking.booking_source || 'Direct'}</span></div>
+
       ${booking.discount_code ? `<div class="info-row"><span class="info-label">Discount Code</span><span class="info-value"><strong>${booking.discount_code}</strong></span></div>` : ''}
       ${booking.quote ? `
       <div class="info-row"><span class="info-label">Nights</span><span class="info-value">${booking.quote.nights}</span></div>

@@ -38,7 +38,7 @@ import {
   sendDayBeforeReminder,
   sendCheckoutReminder,
   sendReviewRequest,
-} from './email.js';
+} from './_lib/email.js';
 
 export default async function handler(req, res) {
   // ── Verify cron secret ──

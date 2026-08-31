@@ -107,6 +107,12 @@ export default async function handler(req, res) {
     case 'event-sources':    return handleEventSources(req, res, token);
     case 'requests':         return handleRequests(req, res, auth);
     case 'users':            return handleUsers(req, res, token);
+    case 'assistant':        return handleAssistant(req, res, token);
+    case 'pricing-all':
+    case 'season':
+    case 'settings':
+    case 'override':
+    case 'code':             return handlePricingAdmin(req, res, token, resource);
     default:
       return res.status(400).json({ error: 'Missing or invalid resource parameter.' });
   }
@@ -686,4 +692,428 @@ function validateGuest(body) {
     errors.push('Check-out must be after check-in.');
   }
   return errors;
+}
+
+// ════════════════════════════════════
+// PRICING ADMIN  (was api/pricing-admin.js)
+// Merged here to stay within the Hobby plan's 12-function limit.
+// ════════════════════════════════════
+
+const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
+const num    = (v) => (v === '' || v == null ? null : Number(v));
+
+function badRate(v) {
+  const n = Number(v);
+  return !Number.isFinite(n) || n < 0 || n > 100000;
+}
+
+
+async function handlePricingAdmin(req, res, token, resource) {
+  const needsWrite = req.method !== 'GET';
+  const auth = await validateAdminToken(token, needsWrite ? 'family_admin' : null);
+  if (auth.error) return res.status(auth.status).json({ error: auth.error });
+  const admin = auth.admin;
+try {
+    /* ---------- READ EVERYTHING ---------- */
+    if (req.method === 'GET' && (resource === 'all' || resource === '')) {
+      const [seasons, overrides, codes, settings] = await Promise.all([
+        supabase.from('pricing_seasons').select('*').order('sort_order'),
+        supabase.from('pricing_overrides').select('*').order('start_date'),
+        supabase.from('discount_codes').select('*').order('code'),
+        supabase.from('pricing_settings').select('*').eq('id', 1).single(),
+      ]);
+      return res.status(200).json({
+        seasons:   seasons.data   || [],
+        overrides: overrides.data || [],
+        codes:     codes.data     || [],
+        settings:  settings.data  || { min_nights: 3, tax_rate: 0.13 },
+      });
+    }
+
+    /* ---------- SEASON RATE ---------- */
+    if (resource === 'season' && req.method === 'PUT') {
+      const { id, nightly_rate, months, label } = req.body || {};
+      if (!id) return res.status(400).json({ error: 'Season id is required.' });
+      if (badRate(nightly_rate)) {
+        return res.status(400).json({ error: 'Rate must be between 0 and 100000.' });
+      }
+      if (months && (!Array.isArray(months) || months.some(m => m < 1 || m > 12))) {
+        return res.status(400).json({ error: 'Months must be numbers 1-12.' });
+      }
+
+      const patch = { nightly_rate: Number(nightly_rate), updated_at: new Date().toISOString() };
+      if (months) patch.months = months;
+      if (label)  patch.label  = label;
+
+      const { error } = await supabase
+        .from('pricing_seasons').update(patch).eq('id', id);
+      if (error) throw error;
+
+      await logAudit(admin, 'update', 'pricing_seasons', id,
+        `Rate set to $${nightly_rate}`);
+      return res.status(200).json({ success: true });
+    }
+
+    /* ---------- GLOBAL SETTINGS ---------- */
+    if (resource === 'settings' && req.method === 'PUT') {
+      const { min_nights, tax_rate } = req.body || {};
+      const mn = parseInt(min_nights, 10);
+      const tr = Number(tax_rate);
+      if (!Number.isInteger(mn) || mn < 1 || mn > 30) {
+        return res.status(400).json({ error: 'Minimum nights must be 1-30.' });
+      }
+      if (!Number.isFinite(tr) || tr < 0 || tr > 1) {
+        return res.status(400).json({ error: 'Tax rate must be a decimal between 0 and 1.' });
+      }
+      const { error } = await supabase.from('pricing_settings')
+        .update({ min_nights: mn, tax_rate: tr, updated_at: new Date().toISOString() })
+        .eq('id', 1);
+      if (error) throw error;
+      await logAudit(admin, 'update', 'pricing_settings', '1',
+        `Min nights ${mn}, tax ${(tr * 100).toFixed(2)}%`);
+      return res.status(200).json({ success: true });
+    }
+
+    /* ---------- DATE OVERRIDES ---------- */
+    if (resource === 'override') {
+      if (req.method === 'POST' || req.method === 'PUT') {
+        const b = req.body || {};
+        if (!b.label?.trim()) return res.status(400).json({ error: 'A label is required.' });
+        if (!isDate(b.start_date) || !isDate(b.end_date)) {
+          return res.status(400).json({ error: 'Valid start and end dates are required.' });
+        }
+        if (b.end_date < b.start_date) {
+          return res.status(400).json({ error: 'End date must be on or after start date.' });
+        }
+        if (!b.is_blocked && badRate(b.nightly_rate)) {
+          return res.status(400).json({ error: 'Enter a valid nightly rate, or mark the dates blocked.' });
+        }
+
+        const row = {
+          label:        b.label.trim(),
+          start_date:   b.start_date,
+          end_date:     b.end_date,
+          nightly_rate: b.is_blocked ? null : Number(b.nightly_rate),
+          is_blocked:   !!b.is_blocked,
+          min_nights:   num(b.min_nights),
+          priority:     parseInt(b.priority, 10) || 0,
+          updated_at:   new Date().toISOString(),
+        };
+
+        if (req.method === 'POST') {
+          const { data, error } = await supabase
+            .from('pricing_overrides').insert(row).select('id').single();
+          if (error) throw error;
+          await logAudit(admin, 'create', 'pricing_overrides', data.id,
+            `${row.label}: ${row.start_date} to ${row.end_date}`);
+          return res.status(201).json({ success: true, id: data.id });
+        }
+
+        if (!b.id) return res.status(400).json({ error: 'Override id is required.' });
+        const { error } = await supabase
+          .from('pricing_overrides').update(row).eq('id', b.id);
+        if (error) throw error;
+        await logAudit(admin, 'update', 'pricing_overrides', b.id, row.label);
+        return res.status(200).json({ success: true });
+      }
+
+      if (req.method === 'DELETE') {
+        const id = req.query.id || (req.body || {}).id;
+        if (!id) return res.status(400).json({ error: 'Override id is required.' });
+        const { error } = await supabase.from('pricing_overrides').delete().eq('id', id);
+        if (error) throw error;
+        await logAudit(admin, 'delete', 'pricing_overrides', id, 'Override removed');
+        return res.status(200).json({ success: true });
+      }
+    }
+
+    /* ---------- DISCOUNT CODES ---------- */
+    if (resource === 'code') {
+      if (req.method === 'POST' || req.method === 'PUT') {
+        const b = req.body || {};
+        const code = (b.code || '').trim().toUpperCase();
+
+        if (!/^[A-Z0-9._-]{3,32}$/.test(code)) {
+          return res.status(400).json({
+            error: 'Code must be 3-32 characters: letters, numbers, dot, dash or underscore.'
+          });
+        }
+        if (!b.label?.trim()) return res.status(400).json({ error: 'A label is required.' });
+        if (!['percent', 'rates'].includes(b.kind)) {
+          return res.status(400).json({ error: 'Kind must be percent or rates.' });
+        }
+        if (b.kind === 'percent') {
+          const p = Number(b.percent);
+          if (!Number.isFinite(p) || p < 0 || p > 100) {
+            return res.status(400).json({ error: 'Percent must be between 0 and 100.' });
+          }
+        } else {
+          for (const k of ['rate_high', 'rate_medium', 'rate_low']) {
+            if (b[k] != null && b[k] !== '' && badRate(b[k])) {
+              return res.status(400).json({ error: 'Rates must be between 0 and 100000.' });
+            }
+          }
+        }
+
+        const row = {
+          code,
+          label:        b.label.trim(),
+          kind:         b.kind,
+          percent:      b.kind === 'percent' ? Number(b.percent) : null,
+          rate_high:    b.kind === 'rates' ? num(b.rate_high)   : null,
+          rate_medium:  b.kind === 'rates' ? num(b.rate_medium) : null,
+          rate_low:     b.kind === 'rates' ? num(b.rate_low)    : null,
+          free_nights:  parseInt(b.free_nights, 10) || 0,
+          free_seasons: Array.isArray(b.free_seasons) ? b.free_seasons : [],
+          is_active:    b.is_active !== false,
+          valid_from:   isDate(b.valid_from)  ? b.valid_from  : null,
+          valid_until:  isDate(b.valid_until) ? b.valid_until : null,
+          max_uses:     num(b.max_uses),
+          notes:        b.notes || null,
+          updated_at:   new Date().toISOString(),
+        };
+
+        if (req.method === 'POST') {
+          const { error } = await supabase.from('discount_codes').insert(row);
+          if (error) {
+            if (error.code === '23505') {
+              return res.status(409).json({ error: 'That code already exists.' });
+            }
+            throw error;
+          }
+          await logAudit(admin, 'create', 'discount_codes', code, row.label);
+          return res.status(201).json({ success: true });
+        }
+
+        const { error } = await supabase
+          .from('discount_codes').update(row).eq('code', b.original_code || code);
+        if (error) throw error;
+        await logAudit(admin, 'update', 'discount_codes', code, row.label);
+        return res.status(200).json({ success: true });
+      }
+
+      if (req.method === 'DELETE') {
+        const code = (req.query.code || (req.body || {}).code || '').toUpperCase();
+        if (!code) return res.status(400).json({ error: 'Code is required.' });
+        const { error } = await supabase.from('discount_codes').delete().eq('code', code);
+        if (error) throw error;
+        await logAudit(admin, 'delete', 'discount_codes', code, 'Code removed');
+        return res.status(200).json({ success: true });
+      }
+    }
+
+    return res.status(404).json({ error: 'Unknown resource.' });
+  } catch (err) {
+    console.error('pricing-admin error:', err);
+    return res.status(500).json({ error: 'Something went wrong saving your changes.' });
+  }
+
+}
+
+// ════════════════════════════════════
+// OPS ASSISTANT  (was api/admin-chat.js)
+// ════════════════════════════════════
+const ASSISTANT_RATE_LIMIT = 60;
+const ASSISTANT_MODEL = 'claude-sonnet-4-20250514';
+
+async function buildContext() {
+  const today = new Date().toISOString().slice(0, 10);
+  const in60  = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+
+  const [seasons, overrides, codes, settings, bookings, kb] = await Promise.all([
+    supabase.from('pricing_seasons').select('*').order('sort_order'),
+    supabase.from('pricing_overrides').select('*').order('start_date'),
+    supabase.from('discount_codes').select('*').order('code'),
+    supabase.from('pricing_settings').select('*').eq('id', 1).single(),
+    supabase.from('bookings')
+      .select('check_in_date, check_out_date, num_guests, status, num_nights, guests(first_name, last_name, email)')
+      .gte('check_out_date', today).lte('check_in_date', in60)
+      .order('check_in_date'),
+    supabase.from('knowledge_base').select('category, question, answer'),
+  ]);
+
+  const MONTHS = ['','January','February','March','April','May','June',
+                  'July','August','September','October','November','December'];
+
+  const seasonLines = (seasons.data || []).map(s =>
+    `- ${s.label} (${s.id}): $${Number(s.nightly_rate).toFixed(2)}/night. ` +
+    `Months: ${(s.months || []).map(m => MONTHS[m]).join(', ') || 'none'}`
+  ).join('\n');
+
+  const overrideLines = (overrides.data || []).length
+    ? (overrides.data || []).map(o =>
+        `- "${o.label}" ${o.start_date} to ${o.end_date}: ` +
+        (o.is_blocked ? 'BLOCKED (not bookable)' : `$${Number(o.nightly_rate).toFixed(2)}/night`) +
+        (o.min_nights ? `, min ${o.min_nights} nights` : '') +
+        `, priority ${o.priority || 0}`
+      ).join('\n')
+    : '(none set)';
+
+  const codeLines = (codes.data || []).map(c => {
+    const effect = c.kind === 'percent'
+      ? `${c.percent}% off the standard rate`
+      : `flat rates — high $${c.rate_high ?? '—'}, medium $${c.rate_medium ?? '—'}, low $${c.rate_low ?? '—'}` +
+        (c.free_nights ? `, first ${c.free_nights} night(s) free` +
+          (c.free_seasons?.length ? ` in ${c.free_seasons.join('/')} season only` : '') : '');
+    const limits = [
+      c.valid_from  ? `valid from ${c.valid_from}`   : null,
+      c.valid_until ? `valid until ${c.valid_until}` : null,
+      c.max_uses != null ? `${c.times_used}/${c.max_uses} uses` : null,
+      c.is_active ? null : 'INACTIVE',
+    ].filter(Boolean).join(', ');
+    return `- ${c.code} ("${c.label}"): ${effect}${limits ? ` [${limits}]` : ''}`;
+  }).join('\n');
+
+  const bookingLines = (bookings.data || []).length
+    ? (bookings.data || []).map(b => {
+        const g = b.guests || {};
+        return `- ${b.check_in_date} to ${b.check_out_date} (${b.num_nights || '?'} nights): ` +
+               `${g.first_name || '?'} ${g.last_name || ''}, ${b.num_guests || '?'} guests, status ${b.status}`;
+      }).join('\n')
+    : '(no bookings in the next 60 days)';
+
+  const kbLines = (kb.data || []).map(k =>
+    `- [${k.category}] ${k.question} => ${k.answer}`
+  ).join('\n');
+
+  const taxPct = ((settings.data?.tax_rate ?? 0.13) * 100).toFixed(2);
+
+  return `TODAY'S DATE: ${today}
+
+NIGHTLY RATES (all-in, include cleaning):
+${seasonLines}
+
+BOOKING SETTINGS:
+- Minimum stay: ${settings.data?.min_nights ?? 3} nights (soft — shorter stays can be requested and approved)
+- Lodging tax: ${taxPct}% (Broward County: 6% FL transient + 1% county surtax + 6% tourist development)
+- Tax is charged on the discounted amount, so comped nights are untaxed.
+
+DATE OVERRIDES (these beat the seasonal rate):
+${overrideLines}
+
+DISCOUNT CODES (CONFIDENTIAL — never to be shared with guests):
+${codeLines}
+
+UPCOMING BOOKINGS (next 60 days):
+${bookingLines}
+
+PROPERTY KNOWLEDGE BASE:
+${kbLines || '(empty)'}
+
+CANCELLATION POLICY:
+- Guest cancels: 30+ days = full refund, 14-29 days = 50%, 7-13 days = 25%, under 7 days = none.
+- Management may cancel any reservation at any time at its sole discretion; the guest's
+  sole remedy is a refund of amounts paid (pro-rated if the stay has begun).`;
+}
+
+const SYSTEM_PROMPT = `You are the operations assistant for Kyle, who owns and runs
+Generations Getaway LLC — a 2 bed / 1 bath short-term rental with a heated pool and spa
+at 647 NE 16th Terrace, Fort Lauderdale, FL.
+
+You are speaking to Kyle himself, not to a guest. You may freely discuss discount codes,
+rates, margins, guest details, and operational matters.
+
+HOW TO ANSWER:
+- Be direct and concise. Kyle is busy and often on his phone.
+- Use the CONTEXT below as the source of truth about his business. Prefer it over
+  general knowledge whenever they disagree.
+- When he asks what something costs, do the arithmetic and show the figures.
+- When the context does not cover something, say so plainly rather than guessing.
+  Never invent a discount code, a rate, a booking, or a property detail.
+- For maintenance questions not in the knowledge base, general guidance is fine, but
+  say clearly that it is general advice and not specific to his equipment.
+- You cannot change anything. If he asks you to update a rate, add a code, or edit a
+  booking, tell him which page to use: the Pricing & Discounts page for rates, overrides
+  and codes, or the Dashboard for bookings and guests.
+- Flag anything that looks like a problem — a comped booking, a stay under the minimum,
+  an expired code still active, overlapping overrides.
+
+CONTEXT:
+`;
+
+
+async function handleAssistant(req, res, token) {
+  const auth = await validateAdminToken(token);
+  if (auth.error) return res.status(auth.status).json({ error: auth.error });
+  const admin = auth.admin;
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
+try {
+    const { question, history } = req.body || {};
+    if (!question?.trim()) {
+      return res.status(400).json({ error: 'A question is required.' });
+    }
+    if (question.length > 4000) {
+      return res.status(400).json({ error: 'That question is too long.' });
+    }
+
+    // ── Rate limit per admin, per hour ──
+    const hourAgo = new Date(Date.now() - 3600000).toISOString();
+    const { count } = await supabase
+      .from('admin_chat_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('admin_id', admin.id)
+      .gte('created_at', hourAgo);
+
+    if ((count || 0) >= RATE_LIMIT) {
+      return res.status(429).json({
+        error: 'Too many messages this hour. Please try again shortly.'
+      });
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(503).json({
+        error: 'The assistant is not configured yet. ANTHROPIC_API_KEY is missing in Vercel.'
+      });
+    }
+
+    const context = await buildContext();
+
+    // Keep the last few turns so follow-up questions make sense.
+    const priorTurns = Array.isArray(history)
+      ? history.slice(-8).filter(m =>
+          (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      : [];
+
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type':      'application/json',
+        'x-api-key':         process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model:      MODEL,
+        max_tokens: 1200,
+        system:     SYSTEM_PROMPT + context,
+        messages:   [...priorTurns, { role: 'user', content: question.trim() }],
+      }),
+    });
+
+    if (!aiRes.ok) {
+      const detail = await aiRes.text();
+      console.error('[admin-chat] Anthropic error:', aiRes.status, detail.slice(0, 400));
+      return res.status(502).json({ error: 'The assistant could not be reached. Please try again.' });
+    }
+
+    const data = await aiRes.json();
+    const answer = data.content?.[0]?.text
+      || 'Sorry — I could not produce an answer for that.';
+
+    // Log for review. Never block the reply if logging fails.
+    supabase.from('admin_chat_logs').insert({
+      admin_id:    admin.id,
+      admin_email: admin.email,
+      question:    question.trim(),
+      answer,
+    }).then(({ error }) => {
+      if (error) console.error('[admin-chat] Log failed:', error.message);
+    });
+
+    return res.status(200).json({ answer });
+
+  } catch (err) {
+    console.error('[admin-chat]', err);
+    return res.status(500).json({ error: 'Something went wrong. Please try again.' });
+  }
+
 }

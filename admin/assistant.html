@@ -17,7 +17,7 @@
     Do not screen-share this page with guests present.
 
   TALKS TO:
-    /api/admin-chat
+    /api/admin?resource=assistant
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -249,7 +249,7 @@
     var typing = addTyping();
 
     try {
-      var res = await fetch('/api/admin-chat', {
+      var res = await fetch('/api/admin?resource=assistant', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

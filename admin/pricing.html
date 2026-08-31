@@ -369,7 +369,7 @@
     }, 4000);
   }
   async function api(path, opts) {
-    var res = await fetch('/api/pricing-admin' + path,
+    var res = await fetch('/api/admin' + path,
       Object.assign({ headers: headers() }, opts || {}));
     if (res.status === 401) { window.location.href = '/admin/login.html'; return null; }
     var data = await res.json().catch(function(){ return {}; });
@@ -475,7 +475,7 @@
   /* ── Load ── */
   async function load() {
     try {
-      var d = await api('?resource=all');
+      var d = await api('?resource=pricing-all');
       if (!d) return;
       state = d;
       document.getElementById('minNights').value = d.settings.min_nights;

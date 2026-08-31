@@ -168,7 +168,7 @@ export default async function handler(req, res) {
 
     // ── Send emails — confirmation to guest + notification to Kyle ──
     try {
-      const { sendBookingConfirmation, sendKyleNotification } = await import('./email.js');
+      const { sendBookingConfirmation, sendKyleNotification } = await import('./_lib/email.js');
 
       // Recalculate the quote server-side so the figure in the email
       // is authoritative, not whatever the browser displayed.
