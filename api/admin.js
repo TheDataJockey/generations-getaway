@@ -296,7 +296,19 @@ async function handleBookings(req, res, token) {
           .eq('id', id)
           .single();
         if (error) throw error;
-        return res.status(200).json({ booking: data });
+
+        // Return the same flattened shape the list view uses, at the top
+        // level, so the dashboard modal can read it directly. `booking`
+        // is kept for any caller that still expects the nested form.
+        const flat = {
+          ...data,
+          guest_first: data.guests?.first_name || '—',
+          guest_last:  data.guests?.last_name  || '',
+          guest_email: data.guests?.email      || '',
+          guest_phone: data.guests?.phone      || '',
+        };
+        delete flat.guests;
+        return res.status(200).json({ ...flat, booking: data });
       }
       let query = supabase
         .from('bookings')

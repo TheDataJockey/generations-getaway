@@ -1963,26 +1963,68 @@
       document.getElementById('bookingModalBody').innerHTML = '<div class="spinner"></div>';
       try {
         const res  = await fetch(`/api/admin?resource=bookings&id=${bookingId}`, { headers: authHeaders() });
-        const data = await res.json();
+        const raw  = await res.json();
+        if (!res.ok) throw new Error(raw.error || 'Request failed');
+        // Accept either the flattened shape or a nested { booking: ... }.
+        const b    = raw.booking || raw;
+        const g    = b.guests || {};
+        const data = {
+          ...b,
+          guest_first: raw.guest_first || g.first_name || '',
+          guest_last:  raw.guest_last  || g.last_name  || '',
+          guest_email: raw.guest_email || g.email      || '',
+          guest_phone: raw.guest_phone || g.phone      || '',
+        };
+        const dash  = v => (v === null || v === undefined || v === '') ? '—' : v;
+        const money = v => (v === null || v === undefined || v === '')
+          ? '—' : '$' + Number(v).toLocaleString('en-US',
+              { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const name = [data.guest_first, data.guest_last].filter(Boolean).join(' ') || '—';
         document.getElementById('bookingModalBody').innerHTML = `
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;">
             <div class="form-group"><label>Guest</label>
-              <div style="color:var(--cream);padding:0.5rem 0;">${data.guest_first} ${data.guest_last}</div></div>
+              <div style="color:var(--cream);padding:0.5rem 0;">${name}</div></div>
             <div class="form-group"><label>Status</label>
-              <div style="padding:0.5rem 0;"><span class="status status-${data.status}">${data.status}</span></div></div>
+              <div style="padding:0.5rem 0;"><span class="status status-${data.status || 'inquiry'}">${dash(data.status)}</span></div></div>
             <div class="form-group"><label>Check-In</label>
-              <div style="color:var(--cream);padding:0.5rem 0;">${formatDate(data.check_in_date)}</div></div>
+              <div style="color:var(--cream);padding:0.5rem 0;">${data.check_in_date ? formatDate(data.check_in_date) : '—'}</div></div>
             <div class="form-group"><label>Check-Out</label>
-              <div style="color:var(--cream);padding:0.5rem 0;">${formatDate(data.check_out_date)}</div></div>
+              <div style="color:var(--cream);padding:0.5rem 0;">${data.check_out_date ? formatDate(data.check_out_date) : '—'}</div></div>
             <div class="form-group"><label>Guests</label>
-              <div style="color:var(--cream);padding:0.5rem 0;">${data.num_guests}</div></div>
+              <div style="color:var(--cream);padding:0.5rem 0;">${dash(data.num_guests)}</div></div>
             <div class="form-group"><label>Source</label>
               <div style="color:var(--cream);padding:0.5rem 0;text-transform:capitalize;">${data.booking_source || '—'}</div></div>
             <div class="form-group"><label>Email</label>
-              <div style="color:var(--sky);padding:0.5rem 0;">${data.guest_email}</div></div>
+              <div style="color:var(--sky);padding:0.5rem 0;">${dash(data.guest_email)}</div></div>
             <div class="form-group"><label>Phone</label>
               <div style="color:var(--cream);padding:0.5rem 0;">${data.guest_phone || '—'}</div></div>
           </div>
+          ${data.request_id ? `
+          <div class="form-group" style="margin-top:1rem;"><label>Request ID</label>
+            <div style="color:var(--cream);padding:0.5rem 0;font-family:monospace;">${data.request_id}</div></div>
+          ` : ''}
+          ${data.quoted_total != null ? `
+          <div class="form-group" style="margin-top:1rem;"><label>Quote at Request</label>
+            <div style="padding:0.5rem 0;color:rgba(164,196,224,0.85);line-height:1.9;">
+              Subtotal ${money(data.quoted_subtotal)}
+              ${Number(data.quoted_discount) > 0
+                ? ` &middot; Discount &minus;${money(data.quoted_discount)}` : ''}
+              ${data.discount_code ? ` (<strong>${data.discount_code}</strong>)` : ''}
+              &middot; Tax ${money(data.quoted_tax)}<br/>
+              <strong style="color:var(--cream);">Total ${
+                Number(data.quoted_total) === 0 ? 'Complimentary' : money(data.quoted_total)}</strong>
+              ${data.deposit_amount != null ? `<br/>Deposit ${money(data.deposit_amount)}` : ''}
+              ${data.balance_amount ? ` &middot; Balance ${money(data.balance_amount)}${
+                data.balance_due_date ? ' due ' + formatDate(data.balance_due_date) : ''}` : ''}
+            </div></div>
+          ` : ''}
+          <div class="form-group" style="margin-top:1rem;"><label>Terms Accepted</label>
+            <div style="padding:0.5rem 0;color:${data.terms_accepted ? 'var(--good, #7FD1A4)' : 'var(--bad, #E8A0A0)'};">
+              ${data.terms_accepted
+                ? 'Yes' + (data.terms_accepted_at
+                    ? ' \u2014 ' + new Date(data.terms_accepted_at).toLocaleString('en-US') : '')
+                : 'Not recorded'}
+            </div></div>
           ${data.special_requests ? `
           <div class="form-group" style="margin-top:1rem;"><label>Special Requests</label>
             <div style="color:rgba(164,196,224,0.8);padding:0.5rem 0;line-height:1.7;">${data.special_requests}</div></div>
