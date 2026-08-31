@@ -159,6 +159,10 @@
       background: rgba(200,80,80,0.12);
       border: 1px solid rgba(200,80,80,0.35); color: #E8A0A0;
     }
+    .form-alert-warn {
+      background: rgba(255,213,79,0.10);
+      border: 1px solid rgba(255,213,79,0.35); color: #FFD54F;
+    }
     .form-alert-success {
       background: rgba(80,180,120,0.12);
       border: 1px solid rgba(80,180,120,0.35); color: #7FD1A4;
@@ -1407,10 +1411,27 @@
         })
       })
         .then(function (r) {
-          return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+          return r.json()
+            .catch(function () { return {}; })
+            .then(function (d) { return { ok: r.ok, status: r.status, d: d }; });
         })
         .then(function (res) {
           if (!res.ok) {
+            // Rate limited — this is not the guest's mistake, so it gets
+            // its own calmer message with a way to reach us directly.
+            if (res.status === 429) {
+              notify(
+                escHtml(res.d.error ||
+                  'You have submitted several requests recently. Please try ' +
+                  'again shortly, or email us directly.') +
+                ' <a href="mailto:kyle@generationsgetawayfl.com" ' +
+                'style="color:inherit;text-decoration:underline;">Email us</a>',
+                'warn');
+              btn.disabled = false;
+              btn.textContent = original;
+              return;
+            }
+
             // Paint any field-specific messages the server sent back.
             if (res.d.field_errors) {
               Object.keys(res.d.field_errors).forEach(function (f) {

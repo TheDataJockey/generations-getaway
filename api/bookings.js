@@ -28,8 +28,15 @@
 import { supabase } from './_lib/supabase.js';
 import { setCors } from './_lib/cors.js';
 
-// ── Rate limit: max 5 inquiries per IP per hour ──
-const RATE_LIMIT = 5;
+// ── Rate limit: max 10 SUBMITTED inquiries per IP per hour ──
+// Counts only successful submissions, not failed validation attempts,
+// so a guest fumbling the form doesn't burn their allowance. Note the
+// limit is per IP, and a household or hotel shares one — hence 10
+// rather than something tighter.
+const RATE_LIMIT = 10;
+
+// Shown to guests who hit the limit so they always have a way through.
+const CONTACT_EMAIL = 'kyle@generationsgetawayfl.com';
 
 export default async function handler(req, res) {
   setCors(req, res);
@@ -52,17 +59,32 @@ export default async function handler(req, res) {
       .gte('created_at', oneHourAgo);
 
     if (count >= RATE_LIMIT) {
+      // Work out when the oldest entry falls out of the window so we can
+      // tell the guest how long to wait instead of just refusing.
+      let waitMinutes = 60;
+      try {
+        const { data: oldest } = await supabase
+          .from('visitor_logs')
+          .select('created_at')
+          .eq('ip_address', ip)
+          .eq('page_visited', '/api/bookings')
+          .gte('created_at', oneHourAgo)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .single();
+        if (oldest?.created_at) {
+          const freeAt = new Date(oldest.created_at).getTime() + 3600000;
+          waitMinutes = Math.max(1, Math.ceil((freeAt - Date.now()) / 60000));
+        }
+      } catch { /* fall back to 60 */ }
+
       return res.status(429).json({
-        error: 'Too many requests. Please wait before submitting another inquiry.'
+        error: `You have submitted several requests recently. Please try again in ` +
+               `about ${waitMinutes} minute${waitMinutes === 1 ? '' : 's'}, or email ` +
+               `us directly at ${CONTACT_EMAIL} and we will help right away.`,
+        retry_after_minutes: waitMinutes,
       });
     }
-
-    // ── Log this request ──
-    await supabase.from('visitor_logs').insert({
-      ip_address:   ip,
-      page_visited: '/api/bookings',
-      user_agent:   req.headers['user-agent'] || null,
-    });
 
     // ── Parse & validate body ──
     const {
@@ -246,6 +268,15 @@ export default async function handler(req, res) {
       .single();
 
     if (bookingError) throw new Error(`Failed to create booking record: ${bookingError.message} (code: ${bookingError.code})`);
+
+    // Record the submission for rate limiting. Deliberately after the
+    // insert succeeds — validation failures shouldn't count against
+    // a guest who is simply correcting a typo.
+    await supabase.from('visitor_logs').insert({
+      ip_address:   ip,
+      page_visited: '/api/bookings',
+      user_agent:   req.headers['user-agent'] || null,
+    });
 
     // ── Send emails — confirmation to guest + notification to Kyle ──
     try {
