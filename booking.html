@@ -282,6 +282,14 @@
       background: var(--blue); color: var(--white); font-weight: 500;
     }
     .cal-day.sel .rate { color: rgba(255,255,255,0.75); }
+    .cal-min {
+      margin-top: 0.9rem; padding: 0.5rem 0.75rem;
+      font-size: 0.7rem; line-height: 1.6; color: var(--sky);
+      background: rgba(46,95,163,0.12);
+      border-left: 2px solid var(--blue-light);
+    }
+    .cal-min strong { color: var(--cream); font-weight: 500; }
+
     .cal-legend {
       display: flex; gap: 1.1rem; flex-wrap: wrap;
       margin-top: 0.9rem; padding-top: 0.7rem;
@@ -520,6 +528,7 @@
             <button type="button" class="cal-nav" id="calNext" aria-label="Next month">&#8250;</button>
           </div>
           <div class="cal-months" id="calMonths"></div>
+          <p class="cal-min" id="calMinNote"></p>
           <div class="cal-legend">
             <span><i class="sw sw-open"></i> Available</span>
             <span><i class="sw sw-booked"></i> Booked</span>
@@ -917,33 +926,62 @@
         btn.addEventListener('click', function () { pickDate(btn.dataset.iso); });
       });
       updateChips();
+      updateMinNote();
+    }
+
+    // Which end of the range the next click sets. We track this
+    // explicitly rather than inferring it from whether check-out has a
+    // value — the auto-suggested check-out below always fills it, so
+    // inferring would make every second click restart the selection.
+    var awaitingCheckout = false;
+
+    function startStay(iso) {
+      checkIn.value  = iso;
+      checkOut.value = '';
+      // Suggest the minimum stay so a price appears straight away.
+      // The guest can still click any later date to change it.
+      var suggested = addDays(iso, minNights);
+      if (!rangeHasBooked(iso, suggested)) checkOut.value = suggested;
+      awaitingCheckout = true;
     }
 
     function pickDate(iso) {
-      // First click sets check-in. Second sets check-out, unless it is
-      // before check-in or the span crosses a booked night — then it
-      // becomes the new check-in.
-      if (!checkIn.value || checkOut.value) {
-        checkIn.value = iso;
-        checkOut.value = '';
+      if (!checkIn.value || !awaitingCheckout) {
+        // Fresh selection.
+        startStay(iso);
       } else if (iso <= checkIn.value) {
-        checkIn.value = iso;
+        // Clicked on or before check-in — treat as a new arrival date.
+        startStay(iso);
       } else if (rangeHasBooked(checkIn.value, iso)) {
-        checkIn.value = iso;
-        checkOut.value = '';
+        // A booked night sits in between, so this can't be the departure.
+        startStay(iso);
       } else {
-        checkOut.value = iso;
-      }
-
-      if (checkIn.value && !checkOut.value) {
-        // Suggest the minimum stay if those nights are free.
-        var suggested = addDays(checkIn.value, minNights);
-        if (!rangeHasBooked(checkIn.value, suggested)) checkOut.value = suggested;
+        // Valid departure date.
+        checkOut.value   = iso;
+        awaitingCheckout = false;
       }
 
       lastCheckIn = checkIn.value;
       renderCalendar();
       debounced();
+    }
+
+    // Minimum-stay hint. Always visible so guests know before choosing,
+    // and turns into a warning if the current selection is shorter.
+    function updateMinNote() {
+      var el = document.getElementById('calMinNote');
+      if (!el) return;
+      var nights = (checkIn.value && checkOut.value)
+        ? nightsBetween(checkIn.value, checkOut.value) : 0;
+
+      if (nights && nights < minNights) {
+        el.innerHTML = '<strong>' + nights + '-night stay selected.</strong> ' +
+          'We normally book a ' + minNights + '-night minimum \u2014 shorter stays ' +
+          'are considered on request. Submit the form and we will confirm.';
+      } else {
+        el.innerHTML = '<strong>' + minNights + '-night minimum stay.</strong> ' +
+          'Shorter stays are considered on request.';
+      }
     }
 
     function updateChips() {
@@ -972,6 +1010,7 @@
     });
     document.getElementById('clearDates').addEventListener('click', function () {
       checkIn.value = ''; checkOut.value = '';
+      awaitingCheckout = false;
       panel.hidden = true;
       renderCalendar();
     });
