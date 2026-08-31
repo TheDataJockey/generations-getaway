@@ -455,3 +455,80 @@ function formatDate(dateStr) {
     });
   } catch { return dateStr; }
 }
+
+// ════════════════════════════════════════════════════════
+// TEMPLATE 7 — Booking Approved (sent when Kyle confirms)
+// ════════════════════════════════════════════════════════
+export async function sendBookingApproved({ guest, booking }) {
+  const subject = `Your stay is confirmed \u2014 ${PROPERTY_NAME}`;
+
+  const deposit = booking.deposit_amount != null ? money(booking.deposit_amount) : null;
+  const balance = booking.balance_amount ? money(booking.balance_amount) : null;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>${emailStyles}</head>
+<body><div class="wrapper">
+  <div class="header">
+    <div class="header-title">Your Stay Is Confirmed</div>
+    <div class="header-sub">${PROPERTY_NAME}</div>
+  </div>
+  <div class="body">
+    <div class="greeting">Great news, <em>${guest.first_name}</em>.</div>
+    <p>We've confirmed your dates. Here are the details:</p>
+    <div class="info-card">
+      ${booking.request_id ? `<div class="info-row"><span class="info-label">Request</span><span class="info-value">${booking.request_id}</span></div>` : ''}
+      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)} after 4:00 PM</span></div>
+      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)} by 11:00 AM</span></div>
+      <div class="info-row"><span class="info-label">Guests</span><span class="info-value">${booking.num_guests || 1}</span></div>
+      ${booking.quoted_total != null ? `<div class="info-row"><span class="info-label">Total</span><span class="info-value">${Number(booking.quoted_total) === 0 ? 'Complimentary' : money(booking.quoted_total)}</span></div>` : ''}
+      ${deposit ? `<div class="info-row"><span class="info-label">Deposit Due Now</span><span class="info-value">${deposit}</span></div>` : ''}
+      ${balance ? `<div class="info-row"><span class="info-label">Balance</span><span class="info-value">${balance}${booking.balance_due_date ? ` due ${formatDate(booking.balance_due_date)}` : ''}</span></div>` : ''}
+    </div>
+    ${Number(booking.quoted_total) === 0 ? `
+    <p>No payment is required for this stay. We'll send your door code and
+       arrival details a few days before you arrive.</p>` : `
+    <p><strong>Next step:</strong> we will send a secure payment request for the
+       deposit shortly. Your dates are held for you, and we'll follow up with your
+       door code and arrival details a few days before check-in.</p>`}
+    <p>Address: ${PROPERTY_ADDRESS}</p>
+  </div>
+  <div class="footer"><p>${PROPERTY_NAME}</p></div>
+</div></body></html>`;
+
+  const text = `Your stay at ${PROPERTY_NAME} is confirmed. `
+    + `Check-in ${formatDate(booking.check_in_date)} after 4 PM, `
+    + `check-out ${formatDate(booking.check_out_date)} by 11 AM.`
+    + (deposit ? ` Deposit due: ${deposit}. A secure payment request follows.` : '');
+
+  return sendEmail({ to: guest.email, from: FROM_BOOKINGS, subject, html, text });
+}
+
+// ════════════════════════════════════════════════════════
+// TEMPLATE 8 — Booking Declined
+// ════════════════════════════════════════════════════════
+export async function sendBookingDeclined({ guest, booking }) {
+  const subject = `Regarding your booking request \u2014 ${PROPERTY_NAME}`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>${emailStyles}</head>
+<body><div class="wrapper">
+  <div class="header">
+    <div class="header-title">Booking Request Update</div>
+    <div class="header-sub">${PROPERTY_NAME}</div>
+  </div>
+  <div class="body">
+    <div class="greeting">Hello <em>${guest.first_name}</em>,</div>
+    <p>Thank you for your interest in ${PROPERTY_NAME}. Unfortunately we are
+       not able to accommodate your requested dates
+       ${booking.check_in_date ? `(${formatDate(booking.check_in_date)} to ${formatDate(booking.check_out_date)})` : ''}.</p>
+    <p>We'd be glad to help you find alternative dates \u2014 just reply to this
+       email and let us know what might work.</p>
+    <p>No payment has been taken.</p>
+  </div>
+  <div class="footer"><p>${PROPERTY_NAME}</p></div>
+</div></body></html>`;
+
+  const text = `Thank you for your interest in ${PROPERTY_NAME}. `
+    + `Unfortunately we cannot accommodate your requested dates. `
+    + `Reply to this email and we'll help find alternatives. No payment has been taken.`;
+
+  return sendEmail({ to: guest.email, from: FROM_BOOKINGS, subject, html, text });
+}

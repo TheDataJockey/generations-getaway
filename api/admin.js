@@ -378,13 +378,47 @@ async function handleBookings(req, res, token) {
       const { error } = await supabase.from('bookings').update(updates).eq('id', id);
       if (error) throw error;
       await logAudit(auth.admin, 'updated', 'bookings', id, `Status → ${status}`);
-      return res.status(200).json({ success: true });
+
+      // Tell the guest. Email failure must never undo a status change,
+      // so it is reported back rather than thrown.
+      let emailed = null;
+      if (status === 'confirmed' || status === 'cancelled') {
+        try {
+          const { data: full } = await supabase
+            .from('bookings')
+            .select('*, guests(first_name, last_name, email, phone)')
+            .eq('id', id)
+            .single();
+
+          const g = full?.guests;
+          if (g?.email) {
+            const mail = await import('./_lib/email.js');
+            const payload = { guest: g, booking: full };
+            const result = status === 'confirmed'
+              ? await mail.sendBookingApproved(payload)
+              : await mail.sendBookingDeclined(payload);
+            emailed = result?.success
+              ? `Emailed ${g.email}`
+              : `Email failed: ${result?.error || 'unknown'}`;
+          } else {
+            emailed = 'No guest email on file — nothing sent.';
+          }
+        } catch (mailErr) {
+          console.error('[admin/bookings] Email failed:', mailErr.message);
+          emailed = `Email failed: ${mailErr.message}`;
+        }
+      }
+
+      return res.status(200).json({ success: true, status, emailed });
     }
 
     return res.status(405).end();
   } catch (err) {
-    console.error('[admin/bookings]', err.message);
-    return res.status(500).json({ error: 'An unexpected error occurred.' });
+    console.error('[admin/bookings]', err);
+    return res.status(500).json({
+      error: 'Could not update the booking.',
+      detail: err.message,
+    });
   }
 }
 
@@ -727,7 +761,7 @@ async function handlePricingAdmin(req, res, token, resource) {
   const admin = auth.admin;
 try {
     /* ---------- READ EVERYTHING ---------- */
-    if (req.method === 'GET' && (resource === 'all' || resource === '')) {
+    if (req.method === 'GET' && (resource === 'pricing-all' || resource === 'all')) {
       const [seasons, overrides, codes, settings] = await Promise.all([
         supabase.from('pricing_seasons').select('*').order('sort_order'),
         supabase.from('pricing_overrides').select('*').order('start_date'),

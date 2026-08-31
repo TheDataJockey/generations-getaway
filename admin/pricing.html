@@ -485,7 +485,11 @@
       document.getElementById('loading').hidden = true;
       document.getElementById('content').hidden = false;
     } catch (e) {
-      document.getElementById('loading').textContent = e.message;
+      document.getElementById('loading').innerHTML =
+        '<div class="alert alert-err">Could not load pricing: ' + esc(e.message) +
+        '<br/><br/>If this mentions an unknown resource, api/admin.js needs ' +
+        'redeploying. If it mentions a missing table, run db/pricing-schema.sql ' +
+        'in Supabase.</div>';
     }
   }
 

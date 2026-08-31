@@ -1946,15 +1946,44 @@
 
     // Update booking status
     window.updateBookingStatus = async function(bookingId, status) {
-      if (!confirm(`Are you sure you want to ${status === 'confirmed' ? 'approve' : 'decline'} this booking?`)) return;
+      const verb = status === 'confirmed' ? 'approve' : 'decline';
+      if (!bookingId) { alert('No booking selected. Please reopen the booking.'); return; }
+      if (!confirm(`Are you sure you want to ${verb} this booking?\n\nThe guest will be emailed.`)) return;
+
+      const approve = document.getElementById('approveBookingBtn');
+      const decline = document.getElementById('declineBookingBtn');
+      if (approve) approve.disabled = true;
+      if (decline) decline.disabled = true;
+
       try {
-        const res = await fetch('/api/admin?resource=bookings', {
+        const res  = await fetch('/api/admin?resource=bookings', {
           method:  'PATCH',
           headers: authHeaders(),
           body:    JSON.stringify({ id: bookingId, status }),
         });
-        if (res.ok) { loadPageData('dashboard'); loadPageData('bookings'); }
-      } catch (err) { console.error(err); }
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          // Never fail silently — this used to swallow every error.
+          if (data.detail) console.error('[bookings] detail:', data.detail);
+          alert(`Could not ${verb} this booking.\n\n` +
+                (data.error || `Server returned ${res.status}.`) +
+                (data.detail ? `\n\n${data.detail}` : ''));
+          return;
+        }
+
+        document.getElementById('bookingModal').classList.remove('open');
+        alert(`Booking ${status === 'confirmed' ? 'approved' : 'declined'}.` +
+              (data.emailed ? `\n\n${data.emailed}` : ''));
+        loadPageData('dashboard');
+        loadPageData('bookings');
+      } catch (err) {
+        console.error(err);
+        alert(`Could not ${verb} this booking. ${err.message}`);
+      } finally {
+        if (approve) approve.disabled = false;
+        if (decline) decline.disabled = false;
+      }
     };
 
     // Open booking modal
@@ -2040,12 +2069,10 @@
     document.getElementById('closeBookingModal').addEventListener('click', () =>
       document.getElementById('bookingModal').classList.remove('open'));
     document.getElementById('approveBookingBtn').addEventListener('click', (e) => {
-      updateBookingStatus(e.target.dataset.id, 'confirmed');
-      document.getElementById('bookingModal').classList.remove('open');
+      updateBookingStatus(e.currentTarget.dataset.id, 'confirmed');
     });
     document.getElementById('declineBookingBtn').addEventListener('click', (e) => {
-      updateBookingStatus(e.target.dataset.id, 'cancelled');
-      document.getElementById('bookingModal').classList.remove('open');
+      updateBookingStatus(e.currentTarget.dataset.id, 'cancelled');
     });
 
     // Resolve chat escalation
