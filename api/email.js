@@ -245,7 +245,7 @@ export async function sendWelcomeEmail({ guest, booking }) {
     <p>Your stay at ${PROPERTY_NAME} begins in just 3 days. Everything is being prepared for your arrival — here's everything you need to know.</p>
 
     <div class="info-card">
-      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)} after 3:00 PM</span></div>
+      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)} after 4:00 PM</span></div>
       <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)} by 11:00 AM</span></div>
       <div class="info-row"><span class="info-label">Address</span><span class="info-value">${PROPERTY_ADDRESS}</span></div>
       <div class="info-row"><span class="info-label">Parking</span><span class="info-value">Driveway only — no street parking</span></div>
@@ -305,7 +305,7 @@ export async function sendDayBeforeReminder({ guest, booking }) {
     <p>Your Fort Lauderdale getaway begins tomorrow. Here's a quick reminder of everything you need for a smooth arrival.</p>
 
     <div class="info-card">
-      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">Tomorrow, ${formatDate(booking.check_in_date)} after 3:00 PM</span></div>
+      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">Tomorrow, ${formatDate(booking.check_in_date)} after 4:00 PM</span></div>
       <div class="info-row"><span class="info-label">Address</span><span class="info-value">${PROPERTY_ADDRESS}</span></div>
       <div class="info-row"><span class="info-label">Parking</span><span class="info-value">Driveway only — no street parking</span></div>
     </div>
@@ -339,7 +339,7 @@ export async function sendDayBeforeReminder({ guest, booking }) {
   </div>
 </div></body></html>`;
 
-  const text = `See you tomorrow, ${guest.first_name}! Check-in is after 3 PM at ${PROPERTY_ADDRESS}. Your door PIN is ${booking.yale_pin_code || 'in your guest portal'}. Directions: https://maps.google.com/?q=647+NE+16th+Terrace+Fort+Lauderdale+FL`;
+  const text = `See you tomorrow, ${guest.first_name}! Check-in is after 4 PM at ${PROPERTY_ADDRESS}. Your door PIN is ${booking.yale_pin_code || 'in your guest portal'}. Directions: https://maps.google.com/?q=647+NE+16th+Terrace+Fort+Lauderdale+FL`;
 
   return sendEmail({ to: guest.email, from: FROM_WELCOME, subject, html, text });
 }
