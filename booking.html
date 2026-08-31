@@ -361,6 +361,24 @@
       font-size: 1.35rem; font-weight: 400;
       color: var(--cream);
     }
+    .pay-schedule {
+      margin-top: 0.9rem; padding-top: 0.85rem;
+      border-top: 1px solid rgba(46,95,163,0.25);
+    }
+    .pay-heading {
+      font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--sky); margin-bottom: 0.5rem;
+    }
+    .pay-row {
+      display: flex; justify-content: space-between; gap: 1rem;
+      font-size: 0.8rem; color: var(--cream); padding: 0.22rem 0;
+    }
+    .pay-row span:first-child { color: var(--sky); }
+    .pay-note {
+      margin-top: 0.6rem; font-size: 0.7rem; line-height: 1.6;
+      color: var(--muted);
+    }
+
     .quote-note {
       margin-top: 0.9rem; font-size: 0.7rem; line-height: 1.6;
       color: var(--muted);
@@ -454,8 +472,10 @@
       <h2>Inquiry <em>Details</em></h2>
       <p class="subtitle">
         Choose your dates to see an instant quote, then send your request.
-        We confirm availability within 24 hours. No payment is collected on this
-        page — once your dates are confirmed we email you a secure payment link.
+        We confirm availability within 24 hours. <strong>No payment is collected on
+        this page.</strong> Once we confirm your dates, you will receive a secure
+        payment request by email for a 50% deposit, with the balance due 14 days
+        before arrival.
       </p>
 
       <div id="formAlert" role="alert" aria-live="polite"></div>
@@ -571,6 +591,22 @@
               <span>Estimated Total</span>
               <span id="quoteTotal"></span>
             </div>
+            <div class="pay-schedule" id="paySchedule" hidden>
+              <p class="pay-heading">Payment Schedule</p>
+              <div class="pay-row">
+                <span id="payDepositLabel">50% deposit on confirmation</span>
+                <span id="payDeposit"></span>
+              </div>
+              <div class="pay-row" id="payBalanceRow">
+                <span id="payBalanceLabel">Balance</span>
+                <span id="payBalance"></span>
+              </div>
+              <p class="pay-note">
+                No payment is taken now. Once we confirm your dates we will
+                email you a secure payment request for the deposit.
+              </p>
+            </div>
+
             <p class="quote-note" id="quoteMinNote" hidden></p>
             <p class="quote-note" id="quoteStdNote">
               Nightly rate includes cleaning. Estimate only — dates are not held
@@ -661,6 +697,17 @@
             rebooking or compensation obligation shall apply beyond the refund
             described above. Nothing in this section limits any right or remedy
             that cannot lawfully be waived under applicable Florida law.
+          </p>
+
+          <p class="terms-clause">
+            <strong>Payment.</strong> No payment is taken when you submit a request.
+            Once Generations Getaway LLC confirms your dates, you will receive a
+            secure payment request by email for a deposit of 50% of the total. The
+            remaining balance is due 14 days before your arrival date. If your
+            arrival is already within 14 days at the time of confirmation, the full
+            amount is payable then. Dates are not held until the deposit is paid,
+            and a reservation is not confirmed until you receive written
+            confirmation from Generations Getaway LLC.
           </p>
 
           <p class="terms-clause">
@@ -1094,6 +1141,33 @@
         }).join('');
       } else {
         taxes.innerHTML = '';
+      }
+
+      // Payment schedule
+      var sched = q.payment_schedule;
+      var schedEl = document.getElementById('paySchedule');
+      if (sched) {
+        var fmtDate = function (iso) {
+          return new Date(iso + 'T00:00:00').toLocaleDateString('en-US',
+            { month: 'long', day: 'numeric', year: 'numeric' });
+        };
+        if (sched.split) {
+          document.getElementById('payDepositLabel').textContent =
+            sched.deposit_pct + '% deposit on confirmation';
+          document.getElementById('payDeposit').textContent = money(sched.deposit_amount);
+          document.getElementById('payBalanceLabel').textContent =
+            'Balance due ' + fmtDate(sched.balance_due_date);
+          document.getElementById('payBalance').textContent = money(sched.balance_amount);
+          document.getElementById('payBalanceRow').hidden = false;
+        } else {
+          document.getElementById('payDepositLabel').textContent =
+            'Full amount on confirmation';
+          document.getElementById('payDeposit').textContent = money(sched.deposit_amount);
+          document.getElementById('payBalanceRow').hidden = true;
+        }
+        schedEl.hidden = false;
+      } else {
+        schedEl.hidden = true;
       }
 
       var minNote = document.getElementById('quoteMinNote');

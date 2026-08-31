@@ -332,6 +332,35 @@ export function computeQuote(cfg, { check_in, check_out, discount_code }) {
   // Average nightly figure for display (a stay can mix seasons).
   const avgNightly = nights ? round(collected / nights) : 0;
 
+  // Payment schedule: 50% deposit on confirmation, balance due 14 days
+  // before arrival. If arrival is already inside that window, the whole
+  // amount falls due at confirmation instead.
+  const BALANCE_DAYS = 14;
+  const DEPOSIT_PCT  = 0.5;
+  let schedule = null;
+
+  if (total > 0) {
+    const balanceDue = new Date(start.getTime() - BALANCE_DAYS * 86400000);
+    const dueIso     = balanceDue.toISOString().slice(0, 10);
+    const splitable  = balanceDue > today;
+
+    schedule = splitable
+      ? {
+          split:           true,
+          deposit_pct:     DEPOSIT_PCT * 100,
+          deposit_amount:  round(total * DEPOSIT_PCT),
+          balance_amount:  round(total - round(total * DEPOSIT_PCT)),
+          balance_due_date: dueIso,
+          balance_days:    BALANCE_DAYS,
+        }
+      : {
+          split:          false,
+          deposit_amount: total,
+          balance_amount: 0,
+          reason: `Arrival is within ${BALANCE_DAYS} days, so the full amount is due on confirmation.`,
+        };
+  }
+
   return {
     nights,
     below_minimum: nights < requiredMin,
@@ -347,6 +376,7 @@ export function computeQuote(cfg, { check_in, check_out, discount_code }) {
     tax_rate: cfg.taxRate,
     avg_nightly: avgNightly,
     total,
+    payment_schedule: schedule,
     nightly_breakdown: breakdown,
   };
 }

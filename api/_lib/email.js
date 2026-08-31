@@ -166,6 +166,8 @@ export async function sendBookingConfirmation({ guest, booking }) {
     <ul class="checklist">
       <li><span class="check">✓</span> We'll review your dates and confirm availability</li>
       <li><span class="check">✓</span> You'll receive a confirmation email once approved</li>
+      <li><span class="check">✓</span> A secure payment request follows for a 50% deposit</li>
+      <li><span class="check">✓</span> The remaining balance is due 14 days before arrival</li>
       <li><span class="check">✓</span> 3 days before check-in, we'll send your guest portal access with door PIN and WiFi details</li>
     </ul>
 
