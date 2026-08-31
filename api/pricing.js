@@ -50,6 +50,12 @@ const FALLBACK = {
   },
   minNights: 3,
   taxRate: 0.13,
+  // Broward County lodging tax, broken out by who you remit to.
+  taxComponents: [
+    { key: 'state',   label: 'FL sales tax (transient rentals)', rate: 0.06, remit_to: 'Florida Dept. of Revenue' },
+    { key: 'surtax',  label: 'Broward discretionary surtax',     rate: 0.01, remit_to: 'Florida Dept. of Revenue' },
+    { key: 'tdt',     label: 'Broward Tourist Development Tax',  rate: 0.06, remit_to: 'Broward County' },
+  ],
   overrides: [],
   codes: {
     FAMILYKB:  { kind: 'rates', label: 'Complimentary family stay',
@@ -68,14 +74,25 @@ const FALLBACK = {
    ============================================================ */
 export async function loadConfig() {
   try {
-    const [seasons, overrides, codes, settings] = await Promise.all([
+    const today = new Date().toISOString().slice(0, 10);
+    const [seasons, overrides, codes, settings, booked] = await Promise.all([
       supabase.from('pricing_seasons').select('*'),
       supabase.from('pricing_overrides').select('*'),
       supabase.from('discount_codes').select('*').eq('is_active', true),
       supabase.from('pricing_settings').select('*').eq('id', 1).single(),
+      // Dates already taken. A stay occupies its check-in night through
+      // the night BEFORE check-out, so a new guest may arrive on the
+      // day someone else leaves.
+      supabase.from('bookings')
+        .select('check_in_date, check_out_date, status')
+        .in('status', ['confirmed', 'paid', 'completed'])
+        .gte('check_out_date', today),
     ]);
 
-    if (!seasons.data || !seasons.data.length) return { ...FALLBACK };
+    const bookedRows = booked?.data || [];
+    if (!seasons.data || !seasons.data.length) {
+      return { ...FALLBACK, bookings: bookedRows };
+    }
 
     const rates = {};
     const seasonByMonth = {};
@@ -111,7 +128,9 @@ export async function loadConfig() {
       minNights: settings.data?.min_nights ?? FALLBACK.minNights,
       taxRate:   settings.data?.tax_rate != null
                    ? Number(settings.data.tax_rate) : FALLBACK.taxRate,
+      taxComponents: FALLBACK.taxComponents,
       codes:     Object.keys(codeMap).length ? codeMap : FALLBACK.codes,
+      bookings:  bookedRows,
     };
   } catch (err) {
     console.error('Pricing config load failed, using fallback:', err);
@@ -128,6 +147,61 @@ function parseDate(str) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(str || '')) return null;
   const d = new Date(`${str}T00:00:00Z`);
   return isNaN(d.getTime()) ? null : d;
+}
+
+// True when an existing confirmed booking occupies this night.
+// A stay runs [check_in, check_out) — the checkout day is free.
+function isBooked(iso, bookings) {
+  for (const b of (bookings || [])) {
+    if (iso >= b.check_in_date && iso < b.check_out_date) return true;
+  }
+  return false;
+}
+
+// Every unavailable date in a window, for greying out the picker.
+export function unavailableDates(cfg, fromIso, toIso) {
+  const out = new Set();
+  for (const b of (cfg.bookings || [])) {
+    let d = new Date(`${b.check_in_date}T00:00:00Z`);
+    const end = new Date(`${b.check_out_date}T00:00:00Z`);
+    while (d < end) {
+      const iso = d.toISOString().slice(0, 10);
+      if (iso >= fromIso && iso <= toIso) out.add(iso);
+      d = new Date(d.getTime() + 86400000);
+    }
+  }
+  for (const o of (cfg.overrides || [])) {
+    if (!o.is_blocked) continue;
+    let d = new Date(`${o.start_date}T00:00:00Z`);
+    const end = new Date(`${o.end_date}T00:00:00Z`);
+    while (d <= end) {
+      const iso = d.toISOString().slice(0, 10);
+      if (iso >= fromIso && iso <= toIso) out.add(iso);
+      d = new Date(d.getTime() + 86400000);
+    }
+  }
+  return [...out].sort();
+}
+
+// Nightly rate for every date in a window, for the booking calendar.
+// Mirrors the pricing precedence used when quoting: a date override
+// beats the seasonal rate.
+export function rateCalendar(cfg, fromIso, toIso) {
+  const out = {};
+  let d = new Date(`${fromIso}T00:00:00Z`);
+  const end = new Date(`${toIso}T00:00:00Z`);
+  while (d <= end) {
+    const iso    = d.toISOString().slice(0, 10);
+    const season = cfg.seasonByMonth[d.getUTCMonth() + 1] || 'medium';
+    const ov     = overrideFor(iso, cfg.overrides || []);
+    if (!(ov && ov.is_blocked)) {
+      out[iso] = ov && ov.nightly_rate != null
+        ? Number(ov.nightly_rate)
+        : (cfg.rates[season] ?? FALLBACK.rates[season]);
+    }
+    d = new Date(d.getTime() + 86400000);
+  }
+  return out;
 }
 
 // Highest-priority override covering this date, if any.
@@ -186,6 +260,13 @@ export function computeQuote(cfg, { check_in, check_out, discount_code }) {
     const season = cfg.seasonByMonth[night.getUTCMonth() + 1] || 'medium';
 
     // A date override beats the seasonal rate.
+    if (isBooked(iso, cfg.bookings)) {
+      return {
+        error: `Sorry — ${iso} is already booked. Please choose different dates.`,
+        unavailable: true,
+      };
+    }
+
     const ov = overrideFor(iso, cfg.overrides || []);
     if (ov && ov.is_blocked) {
       return { error: `We are not accepting bookings for ${iso}. Please choose other dates.` };
@@ -234,8 +315,22 @@ export function computeQuote(cfg, { check_in, check_out, discount_code }) {
   }
 
   const taxable = round(collected);
-  const tax     = round(taxable * cfg.taxRate);
-  const total   = round(taxable + tax);
+
+  // Break tax into its statutory components. Each is computed on the
+  // same taxable base and rounded independently, then the total is the
+  // sum — so the figures shown always add up to what is charged.
+  const components = (cfg.taxComponents || FALLBACK.taxComponents).map(c => ({
+    key:      c.key,
+    label:    c.label,
+    rate:     c.rate,
+    remit_to: c.remit_to,
+    amount:   round(taxable * c.rate),
+  }));
+  const tax   = round(components.reduce((sum, c) => sum + c.amount, 0));
+  const total = round(taxable + tax);
+
+  // Average nightly figure for display (a stay can mix seasons).
+  const avgNightly = nights ? round(collected / nights) : 0;
 
   return {
     nights,
@@ -248,7 +343,9 @@ export function computeQuote(cfg, { check_in, check_out, discount_code }) {
     code_invalid: codeInvalid,
     taxable,
     tax,
+    tax_components: components,
     tax_rate: cfg.taxRate,
+    avg_nightly: avgNightly,
     total,
     nightly_breakdown: breakdown,
   };
@@ -259,6 +356,25 @@ export function computeQuote(cfg, { check_in, check_out, discount_code }) {
    ============================================================ */
 export default async function handler(req, res) {
   if (setCors(req, res)) return;
+
+  // GET returns the dates the booking form should grey out.
+  if (req.method === 'GET') {
+    try {
+      const cfg  = await loadConfig();
+      const from = new Date().toISOString().slice(0, 10);
+      const to   = new Date(Date.now() + 540 * 86400000).toISOString().slice(0, 10);
+      return res.status(200).json({
+        unavailable: unavailableDates(cfg, from, to),
+        rates:       rateCalendar(cfg, from, to),
+        min_nights:  cfg.minNights,
+        from, to,
+      });
+    } catch (err) {
+      console.error('Availability error:', err);
+      // Fail open — an empty list just means nothing is greyed out.
+      return res.status(200).json({ unavailable: [], min_nights: 3 });
+    }
+  }
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });

@@ -182,6 +182,11 @@
       color: var(--muted); margin-bottom: 0.85rem;
     }
     .terms-clause strong { color: var(--sky); font-weight: 500; }
+    .house-rules {
+      margin: 0 0 0.5rem 1.1rem; padding: 0;
+      font-size: 0.74rem; line-height: 1.75; color: var(--muted);
+    }
+    .house-rules li { margin-bottom: 0.4rem; }
     .form-check { margin-bottom: 1.5rem; }
     .check-label,
     .check-label span {
@@ -196,6 +201,107 @@
       line-height: 1.6; cursor: pointer; margin-bottom: 0;
     }
     .check-label input { margin-top: 0.25rem; flex-shrink: 0; }
+
+    /* ── Date chips ── */
+    .date-summary {
+      display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap;
+    }
+    .date-chip {
+      flex: 1; min-width: 130px; padding: 0.6rem 0.8rem;
+      background: var(--navy-light);
+      border: 1px solid rgba(46,95,163,0.35); border-radius: 4px;
+    }
+    .date-chip.active { border-color: var(--blue-light); }
+    .date-chip-label {
+      display: block; font-size: 0.6rem; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 0.15rem;
+    }
+    .date-chip-value { display: block; font-size: 0.88rem; color: var(--cream); }
+    .date-arrow { color: var(--muted); }
+    .date-clear {
+      background: none; border: none; cursor: pointer;
+      color: var(--sky); font-family: var(--font-sans);
+      font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase;
+    }
+
+    /* ── Availability calendar ── */
+    .cal {
+      margin: 1rem 0 1.5rem; padding: 1rem;
+      background: rgba(13,27,46,0.45);
+      border: 1px solid rgba(46,95,163,0.25); border-radius: 4px;
+    }
+    .cal-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 0.9rem;
+    }
+    .cal-title {
+      font-family: var(--font-serif); font-size: 1.05rem; color: var(--cream);
+    }
+    .cal-nav {
+      width: 32px; height: 32px; line-height: 1; cursor: pointer;
+      background: var(--navy-light); color: var(--sky);
+      border: 1px solid rgba(46,95,163,0.35); border-radius: 4px;
+      font-size: 1.1rem;
+    }
+    .cal-nav:hover:not(:disabled) { border-color: var(--blue-light); color: var(--cream); }
+    .cal-nav:disabled { opacity: 0.3; cursor: not-allowed; }
+    .cal-months { display: grid; gap: 1.4rem; }
+    @media (min-width: 700px) { .cal-months { grid-template-columns: 1fr 1fr; } }
+    .cal-month-name {
+      font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--sky); text-align: center; margin-bottom: 0.6rem;
+    }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .cal-dow {
+      font-size: 0.58rem; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--muted); text-align: center; padding-bottom: 0.3rem;
+    }
+    .cal-day {
+      position: relative; aspect-ratio: 1 / 1;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      border: 1px solid transparent; border-radius: 3px;
+      background: none; cursor: pointer; padding: 0;
+      font-family: var(--font-sans); font-size: 0.8rem; color: var(--cream);
+    }
+    .cal-day .rate {
+      font-size: 0.52rem; color: var(--muted); margin-top: 1px;
+    }
+    .cal-day:hover:not(:disabled) { border-color: var(--blue-light); }
+    .cal-day.empty { cursor: default; }
+    .cal-day:disabled { cursor: not-allowed; }
+    .cal-day.past { color: rgba(122,144,174,0.35); }
+    .cal-day.past .rate { display: none; }
+    .cal-day.booked {
+      color: rgba(232,160,160,0.55); text-decoration: line-through;
+      background: rgba(232,160,160,0.07);
+    }
+    .cal-day.booked .rate { display: none; }
+    .cal-day.in-range { background: rgba(46,95,163,0.22); }
+    .cal-day.sel {
+      background: var(--blue); color: var(--white); font-weight: 500;
+    }
+    .cal-day.sel .rate { color: rgba(255,255,255,0.75); }
+    .cal-legend {
+      display: flex; gap: 1.1rem; flex-wrap: wrap;
+      margin-top: 0.9rem; padding-top: 0.7rem;
+      border-top: 1px solid rgba(46,95,163,0.18);
+      font-size: 0.66rem; color: var(--muted);
+    }
+    .cal-legend span { display: flex; align-items: center; gap: 0.35rem; }
+    .sw { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+    .sw-open   { border: 1px solid rgba(46,95,163,0.5); }
+    .sw-booked { background: rgba(232,160,160,0.3); }
+    .sw-sel    { background: var(--blue); }
+
+    .booked-notice {
+      margin: -0.6rem 0 1.2rem;
+      padding: 0.55rem 0.8rem;
+      font-size: 0.72rem; line-height: 1.6; color: var(--sky);
+      background: rgba(46,95,163,0.10);
+      border-left: 2px solid var(--blue-light);
+    }
+    .booked-notice strong { color: var(--cream); font-weight: 500; }
 
     /* ── Live quote panel ── */
     /* [hidden] must beat display:flex below, or hidden rows still show */
@@ -220,6 +326,26 @@
       font-size: 0.85rem; color: var(--sky);
     }
     .quote-row.quote-discount { color: #7FD1A4; }
+    .quote-nightly {
+      margin: 0.2rem 0 0.6rem; padding-left: 0.9rem;
+      border-left: 2px solid rgba(46,95,163,0.3);
+    }
+    .quote-nightly div {
+      display: flex; justify-content: space-between; gap: 1rem;
+      font-size: 0.74rem; color: var(--muted); padding: 0.14rem 0;
+    }
+    .quote-taxes { margin: 0.35rem 0 0; }
+    .quote-taxes div {
+      display: flex; justify-content: space-between; gap: 1rem;
+      font-size: 0.74rem; color: var(--muted); padding: 0.16rem 0;
+    }
+    .quote-taxes .tax-remit {
+      display: block; font-size: 0.64rem; opacity: 0.75;
+    }
+    .quote-row.quote-taxtotal {
+      border-top: 1px solid rgba(46,95,163,0.18);
+      margin-top: 0.4rem; padding-top: 0.5rem;
+    }
     .quote-row.quote-total {
       margin-top: 0.6rem; padding-top: 0.9rem;
       border-top: 1px solid rgba(46,95,163,0.3);
@@ -366,18 +492,42 @@
         <hr class="section-divider"/>
         <div class="form-row">
           <div class="form-group">
-            <label for="checkIn">Check-In Date <span aria-hidden="true">*</span></label>
-            <input type="date" id="checkIn" name="checkIn"
-              class="form-control" required/>
+            <label>Your Dates <span aria-hidden="true">*</span></label>
+            <div class="date-summary" id="dateSummary">
+              <div class="date-chip" id="chipIn">
+                <span class="date-chip-label">Check-in</span>
+                <span class="date-chip-value" id="chipInValue">Select a date</span>
+              </div>
+              <span class="date-arrow" aria-hidden="true">&rarr;</span>
+              <div class="date-chip" id="chipOut">
+                <span class="date-chip-label">Check-out</span>
+                <span class="date-chip-value" id="chipOutValue">&mdash;</span>
+              </div>
+              <button type="button" class="date-clear" id="clearDates" hidden>Clear</button>
+            </div>
+            <input type="hidden" id="checkIn" name="checkIn"/>
+            <input type="hidden" id="checkOut" name="checkOut"/>
             <span class="form-error" id="checkInError" role="alert"></span>
-          </div>
-          <div class="form-group">
-            <label for="checkOut">Check-Out Date <span aria-hidden="true">*</span></label>
-            <input type="date" id="checkOut" name="checkOut"
-              class="form-control" required/>
             <span class="form-error" id="checkOutError" role="alert"></span>
           </div>
         </div>
+
+        <!-- Availability calendar -->
+        <div class="cal" id="calendar" aria-label="Availability calendar">
+          <div class="cal-head">
+            <button type="button" class="cal-nav" id="calPrev" aria-label="Previous month">&#8249;</button>
+            <div class="cal-title" id="calTitle"></div>
+            <button type="button" class="cal-nav" id="calNext" aria-label="Next month">&#8250;</button>
+          </div>
+          <div class="cal-months" id="calMonths"></div>
+          <div class="cal-legend">
+            <span><i class="sw sw-open"></i> Available</span>
+            <span><i class="sw sw-booked"></i> Booked</span>
+            <span><i class="sw sw-sel"></i> Your stay</span>
+          </div>
+        </div>
+
+        <p class="booked-notice" id="bookedNotice" hidden></p>
 
         <!-- Discount code -->
         <div class="form-row">
@@ -398,12 +548,14 @@
               <span id="quoteNightsLabel">Nightly rate</span>
               <span id="quoteSubtotal"></span>
             </div>
+            <div class="quote-nightly" id="quoteNightly"></div>
             <div class="quote-row quote-discount" id="quoteDiscountRow" hidden>
               <span id="quoteDiscountLabel"></span>
               <span id="quoteDiscount"></span>
             </div>
-            <div class="quote-row">
-              <span>Lodging tax (13%)</span>
+            <div class="quote-taxes" id="quoteTaxes"></div>
+            <div class="quote-row quote-taxtotal">
+              <span>Total taxes</span>
               <span id="quoteTax"></span>
             </div>
             <div class="quote-row quote-total">
@@ -508,6 +660,29 @@
             — full refund; 14–29 days — 50%; 7–13 days — 25%; under 7 days — no
             refund.
           </p>
+
+          <p class="terms-heading" style="margin-top:1.2rem;">House Rules</p>
+          <ul class="house-rules">
+            <li>No pets.</li>
+            <li>No smoking of any kind &mdash; marijuana, tobacco, cigarettes, cigars,
+                electronic cigarettes, or any similar product that generates smoke
+                or vapour. No parties or events.</li>
+            <li>Check-in is anytime after 4:00 PM. Check-out is by 11:00 AM.</li>
+            <li>Self check-in with keypad code.</li>
+            <li>Guests must be 25 years of age or older unless accompanied by an adult.</li>
+            <li>No bikes in the house &mdash; use the bike locker if available.</li>
+            <li>No outdoor shoes on the carpet.</li>
+            <li>Please be respectful of the neighbors and reduce noise volume
+                between 10:00 PM and 8:00 AM.</li>
+            <li>Maximum occupancy is your booking party plus 2 additional daytime
+                guests. No unauthorized overnight guests.</li>
+            <li>No parking on the street.</li>
+            <li>Please leave the property in the condition you found it and dispose
+                of all trash before checkout.</li>
+            <li>Please lock all doors and ensure the back gate is secure when
+                leaving the property.</li>
+            <li>Make sure to enjoy your getaway and have fun.</li>
+          </ul>
         </div>
 
         <div class="form-group form-check">
@@ -644,10 +819,6 @@
     var errBox   = document.getElementById('quoteError');
     if (!checkIn || !checkOut || !panel) return;
 
-    // Don't allow past dates in the picker.
-    var today = new Date().toISOString().slice(0, 10);
-    checkIn.min = today;
-    checkOut.min = today;
 
     var money = function (n) {
       return '$' + Number(n).toLocaleString('en-US', {
@@ -660,11 +831,193 @@
     var lastCheckIn = '';
     // Remembered nightly minimum; refreshed from each server quote.
     var minNights = 3;
+    // Dates already taken. Native date inputs can't grey out individual
+    // days, so we validate the selection and tell the guest immediately.
+    var unavailable = {};
+
+    var rateMap = {};
+    var calCursor = null;   // first month shown
+
+    fetch('/api/pricing')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        (d.unavailable || []).forEach(function (iso) { unavailable[iso] = true; });
+        rateMap = d.rates || {};
+        if (d.min_nights) minNights = d.min_nights;
+        markUnavailable();
+        renderCalendar();
+      })
+      .catch(function () { renderCalendar(); });
+
+    /* ── Availability calendar ── */
+    var DOW = ['S','M','T','W','T','F','S'];
+    var MON = ['January','February','March','April','May','June','July',
+               'August','September','October','November','December'];
+
+    function todayIso() { return new Date().toISOString().slice(0, 10); }
+    function isoOf(y, m, d) {
+      return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    }
+
+    function monthGrid(year, month) {
+      var first = new Date(Date.UTC(year, month, 1));
+      var lead  = first.getUTCDay();
+      var days  = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+      var today = todayIso();
+      var html  = '<div class="cal-month-name">' + MON[month] + ' ' + year + '</div>';
+      html += '<div class="cal-grid">';
+      DOW.forEach(function (d, i) {
+        html += '<div class="cal-dow" aria-hidden="true">' + d + '</div>';
+      });
+      for (var i = 0; i < lead; i++) {
+        html += '<span class="cal-day empty"></span>';
+      }
+      for (var day = 1; day <= days; day++) {
+        var iso    = isoOf(year, month, day);
+        var past   = iso < today;
+        var booked = !!unavailable[iso];
+        var rate   = rateMap[iso];
+        var cls    = ['cal-day'];
+        var dis    = past || booked;
+        if (past)   cls.push('past');
+        if (booked) cls.push('booked');
+        if (iso === checkIn.value || iso === checkOut.value) cls.push('sel');
+        else if (checkIn.value && checkOut.value &&
+                 iso > checkIn.value && iso < checkOut.value) cls.push('in-range');
+        var aria = booked ? day + ' ' + MON[month] + ', already booked'
+                          : day + ' ' + MON[month] + (rate ? ', $' + rate + ' per night' : '');
+        html += '<button type="button" class="' + cls.join(' ') + '"' +
+                ' data-iso="' + iso + '"' + (dis ? ' disabled' : '') +
+                ' aria-label="' + aria + '">' + day +
+                (rate && !dis ? '<span class="rate">$' + rate + '</span>' : '') +
+                '</button>';
+      }
+      return html + '</div>';
+    }
+
+    function renderCalendar() {
+      var months = document.getElementById('calMonths');
+      if (!months) return;
+      if (!calCursor) {
+        var n = new Date();
+        calCursor = new Date(Date.UTC(n.getFullYear(), n.getMonth(), 1));
+      }
+      var m2 = new Date(Date.UTC(
+        calCursor.getUTCFullYear(), calCursor.getUTCMonth() + 1, 1));
+      months.innerHTML =
+        '<div>' + monthGrid(calCursor.getUTCFullYear(), calCursor.getUTCMonth()) + '</div>' +
+        '<div>' + monthGrid(m2.getUTCFullYear(), m2.getUTCMonth()) + '</div>';
+
+      var now = new Date();
+      var atStart = calCursor.getUTCFullYear() === now.getFullYear() &&
+                    calCursor.getUTCMonth() === now.getMonth();
+      document.getElementById('calPrev').disabled = atStart;
+
+      months.querySelectorAll('.cal-day[data-iso]:not(:disabled)').forEach(function (btn) {
+        btn.addEventListener('click', function () { pickDate(btn.dataset.iso); });
+      });
+      updateChips();
+    }
+
+    function pickDate(iso) {
+      // First click sets check-in. Second sets check-out, unless it is
+      // before check-in or the span crosses a booked night — then it
+      // becomes the new check-in.
+      if (!checkIn.value || checkOut.value) {
+        checkIn.value = iso;
+        checkOut.value = '';
+      } else if (iso <= checkIn.value) {
+        checkIn.value = iso;
+      } else if (rangeHasBooked(checkIn.value, iso)) {
+        checkIn.value = iso;
+        checkOut.value = '';
+      } else {
+        checkOut.value = iso;
+      }
+
+      if (checkIn.value && !checkOut.value) {
+        // Suggest the minimum stay if those nights are free.
+        var suggested = addDays(checkIn.value, minNights);
+        if (!rangeHasBooked(checkIn.value, suggested)) checkOut.value = suggested;
+      }
+
+      lastCheckIn = checkIn.value;
+      renderCalendar();
+      debounced();
+    }
+
+    function updateChips() {
+      var fmt = function (iso) {
+        return new Date(iso + 'T00:00:00').toLocaleDateString('en-US',
+          { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      };
+      document.getElementById('chipInValue').textContent =
+        checkIn.value ? fmt(checkIn.value) : 'Select a date';
+      document.getElementById('chipOutValue').textContent =
+        checkOut.value ? fmt(checkOut.value) : '\u2014';
+      document.getElementById('chipIn').classList.toggle('active', !!checkIn.value);
+      document.getElementById('chipOut').classList.toggle('active', !!checkOut.value);
+      document.getElementById('clearDates').hidden = !checkIn.value;
+    }
+
+    document.getElementById('calPrev').addEventListener('click', function () {
+      calCursor = new Date(Date.UTC(
+        calCursor.getUTCFullYear(), calCursor.getUTCMonth() - 1, 1));
+      renderCalendar();
+    });
+    document.getElementById('calNext').addEventListener('click', function () {
+      calCursor = new Date(Date.UTC(
+        calCursor.getUTCFullYear(), calCursor.getUTCMonth() + 1, 1));
+      renderCalendar();
+    });
+    document.getElementById('clearDates').addEventListener('click', function () {
+      checkIn.value = ''; checkOut.value = '';
+      panel.hidden = true;
+      renderCalendar();
+    });
+
+    // Show the next few booked ranges under the date fields.
+    function markUnavailable() {
+      var list = Object.keys(unavailable).sort();
+      if (!list.length) return;
+      var ranges = [], start = list[0], prev = list[0];
+      for (var i = 1; i < list.length; i++) {
+        if (list[i] !== addDays(prev, 1)) {
+          ranges.push([start, prev]);
+          start = list[i];
+        }
+        prev = list[i];
+      }
+      ranges.push([start, prev]);   // close the final run
+      var el = document.getElementById('bookedNotice');
+      if (!el) return;
+      var fmt = function (iso) {
+        return new Date(iso + 'T00:00:00')
+          .toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      };
+      el.innerHTML = '<strong>Already booked:</strong> ' +
+        ranges.slice(0, 6).map(function (r) {
+          return r[0] === r[1] ? fmt(r[0]) : fmt(r[0]) + '&ndash;' + fmt(r[1]);
+        }).join(' &middot; ') +
+        (ranges.length > 6 ? ' and more' : '');
+      el.hidden = false;
+    }
+
+    // True if any night in the range is taken.
+    function rangeHasBooked(fromIso, toIso) {
+      var d = fromIso;
+      while (d < toIso) {
+        if (unavailable[d]) return d;
+        d = addDays(d, 1);
+      }
+      return null;
+    }
 
     function render(q) {
       if (q.min_nights) minNights = q.min_nights;
       document.getElementById('quoteNightsLabel').textContent =
-        q.nights + (q.nights === 1 ? ' night' : ' nights');
+        q.nights + (q.nights === 1 ? ' night' : ' nights') +
+        (q.avg_nightly ? ' \u00d7 ' + money(q.avg_nightly) + ' avg' : '');
       document.getElementById('quoteSubtotal').textContent = money(q.subtotal);
 
       var dRow = document.getElementById('quoteDiscountRow');
@@ -676,6 +1029,32 @@
         document.getElementById('quoteDiscountLabel').textContent = '';
         document.getElementById('quoteDiscount').textContent = '';
         dRow.hidden = true;
+      }
+
+      // Per-night breakdown
+      var nightly = document.getElementById('quoteNightly');
+      if (q.nightly_breakdown && q.nightly_breakdown.length) {
+        nightly.innerHTML = q.nightly_breakdown.map(function (n) {
+          var d = new Date(n.date + 'T00:00:00');
+          var label = d.toLocaleDateString('en-US',
+            { weekday: 'short', month: 'short', day: 'numeric' });
+          var amount = n.comped ? 'Free' : money(n.rate);
+          return '<div><span>' + label + '</span><span>' + amount + '</span></div>';
+        }).join('');
+      } else {
+        nightly.innerHTML = '';
+      }
+
+      // Tax components, each shown separately
+      var taxes = document.getElementById('quoteTaxes');
+      if (q.tax_components && q.tax_components.length) {
+        taxes.innerHTML = q.tax_components.map(function (t) {
+          return '<div><span>' + t.label + ' (' + (t.rate * 100).toFixed(0) + '%)' +
+                 '<span class="tax-remit">Remitted to ' + t.remit_to + '</span></span>' +
+                 '<span>' + money(t.amount) + '</span></div>';
+        }).join('');
+      } else {
+        taxes.innerHTML = '';
       }
 
       var minNote = document.getElementById('quoteMinNote');
@@ -727,6 +1106,18 @@
         panel.hidden = true;
         return;
       }
+
+      // Catch a clash before hitting the server so the guest gets
+      // instant feedback. The server checks again regardless.
+      var clash = rangeHasBooked(checkIn.value, checkOut.value);
+      if (clash) {
+        panel.hidden = false;
+        showError('Sorry \u2014 ' +
+          new Date(clash + 'T00:00:00').toLocaleDateString('en-US',
+            { weekday: 'long', month: 'long', day: 'numeric' }) +
+          ' is already booked. Please choose different dates.');
+        return;
+      }
       panel.hidden   = false;
       loading.hidden = false;
       body.hidden    = true;
@@ -772,28 +1163,7 @@
       );
     }
 
-    checkIn.addEventListener('change', function () {
-      if (!checkIn.value) return;
-
-      // Check-out can never be on or before check-in.
-      checkOut.min = addDays(checkIn.value, 1);
-
-      if (!checkOut.value) {
-        // Nothing chosen yet — default to the minimum stay so the
-        // guest sees a price straight away.
-        checkOut.value = addDays(checkIn.value, minNights);
-      } else if (checkOut.value <= checkIn.value) {
-        // Move check-out forward, keeping the trip length they had.
-        var prev = nightsBetween(lastCheckIn || checkIn.value, checkOut.value);
-        if (!prev || prev < 1) prev = minNights;
-        checkOut.value = addDays(checkIn.value, prev);
-      }
-
-      lastCheckIn = checkIn.value;
-      debounced();
-    });
-
-    checkOut.addEventListener('change', debounced);
+    // Dates are driven by the calendar above (see pickDate).
     if (code) code.addEventListener('input', debounced);
   })();
   </script>
