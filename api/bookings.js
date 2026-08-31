@@ -77,23 +77,34 @@ export default async function handler(req, res) {
       purpose_of_stay,
       special_requests,
       discount_code,
+      terms_accepted,
+      terms_accepted_at,
     } = req.body;
 
-    // Server-side validation
-    const errors = [];
+    // Server-side validation. Errors are keyed by field so the form
+    // can put the message next to the input that caused it.
+    const fieldErrors = {};
 
-    if (!first_name?.trim())                   errors.push('First name is required.');
-    if (!last_name?.trim())                    errors.push('Last name is required.');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Valid email is required.');
-    if (!check_in_date)                        errors.push('Check-in date is required.');
-    if (!check_out_date)                       errors.push('Check-out date is required.');
-    if (!num_guests || num_guests < 1 || num_guests > 4) errors.push('Number of guests must be between 1 and 4.');
+    if (!first_name?.trim())  fieldErrors.firstName = 'First name is required.';
+    if (!last_name?.trim())   fieldErrors.lastName  = 'Last name is required.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || ''))
+                              fieldErrors.email     = 'Enter a valid email address.';
+    if (!check_in_date)       fieldErrors.checkIn   = 'Choose a check-in date.';
+    if (!check_out_date)      fieldErrors.checkOut  = 'Choose a check-out date.';
+    if (!num_guests || num_guests < 1 || num_guests > 4)
+                              fieldErrors.numGuests = 'Choose between 1 and 4 guests.';
     if (check_in_date && check_out_date && check_out_date <= check_in_date) {
-      errors.push('Check-out must be after check-in.');
+      fieldErrors.checkOut = 'Check-out must be after check-in.';
+    }
+    if (!terms_accepted) {
+      fieldErrors.agreeTerms = 'Please read and accept the Reservation Terms and House Rules.';
     }
 
-    if (errors.length > 0) {
-      return res.status(400).json({ error: errors.join(' ') });
+    if (Object.keys(fieldErrors).length > 0) {
+      return res.status(400).json({
+        error: 'Please correct the highlighted fields.',
+        field_errors: fieldErrors,
+      });
     }
 
     // ── Sanitize inputs ──
@@ -148,10 +159,52 @@ export default async function handler(req, res) {
       / (1000 * 60 * 60 * 24)
     );
 
+    // Price the stay server-side so the stored figures are ours, not
+    // whatever the browser displayed.
+    let quote = null;
+    try {
+      const { loadConfig, computeQuote } = await import('./pricing.js');
+      const cfg = await loadConfig();
+      const q = computeQuote(cfg, {
+        check_in:      cleanData.check_in_date,
+        check_out:     cleanData.check_out_date,
+        discount_code: cleanData.discount_code,
+      });
+      if (!q.error) quote = q;
+    } catch (quoteErr) {
+      console.error('[bookings] Quote failed:', quoteErr.message);
+    }
+
+    // Human-readable request ID. If the helper is missing (migration
+    // not run yet) we carry on without one rather than failing the
+    // booking — the guest still gets through.
+    let requestId = null;
+    try {
+      const { data: idData, error: idErr } =
+        await supabase.rpc('next_public_id', { p_prefix: 'REQ' });
+      if (idErr) console.error('[bookings] ID generation failed:', idErr.message);
+      else requestId = idData;
+    } catch (idEx) {
+      console.error('[bookings] ID generation threw:', idEx.message);
+    }
+
+    const sched = quote?.payment_schedule || null;
+
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert({
         guest_id:         guest.id,
+        request_id:       requestId,
+        terms_accepted:   !!terms_accepted,
+        terms_accepted_at: terms_accepted_at || new Date().toISOString(),
+        discount_code:    cleanData.discount_code,
+        quoted_subtotal:  quote ? quote.subtotal : null,
+        quoted_discount:  quote ? quote.discount : null,
+        quoted_tax:       quote ? quote.tax      : null,
+        quoted_total:     quote ? quote.total    : null,
+        deposit_amount:   sched ? sched.deposit_amount : null,
+        balance_amount:   sched ? sched.balance_amount : null,
+        balance_due_date: sched && sched.split ? sched.balance_due_date : null,
         check_in_date:    cleanData.check_in_date,
         check_out_date:   cleanData.check_out_date,
         num_guests:       cleanData.num_guests,
@@ -170,28 +223,13 @@ export default async function handler(req, res) {
     try {
       const { sendBookingConfirmation, sendKyleNotification } = await import('./_lib/email.js');
 
-      // Recalculate the quote server-side so the figure in the email
-      // is authoritative, not whatever the browser displayed.
-      let quote = null;
-      try {
-        const { loadConfig, computeQuote } = await import('./pricing.js');
-        const cfg = await loadConfig();
-        const q = computeQuote(cfg, {
-          check_in:      check_in_date,
-          check_out:     check_out_date,
-          discount_code: cleanData.discount_code,
-        });
-        if (!q.error) quote = q;
-      } catch (quoteErr) {
-        console.error('[bookings] Quote for email failed:', quoteErr.message);
-      }
-
       const guestData   = { first_name, last_name, email, phone };
       const bookingData = {
         check_in_date, check_out_date, num_guests,
         booking_source, special_requests,
         discount_code: cleanData.discount_code,
         quote,
+        request_id: requestId,
       };
       await Promise.all([
         sendBookingConfirmation({ guest: guestData, booking: bookingData }),
@@ -205,13 +243,15 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success:    true,
       booking_id: booking.id,
+      request_id: requestId,
       message:    'Booking inquiry received successfully.',
     });
 
   } catch (err) {
-    console.error('[/api/bookings]', err.message);
+    console.error('[/api/bookings]', err);
     return res.status(500).json({
-      error: 'An unexpected error occurred. Please try again.'
+      error: 'We could not save your request. Please try again, or email us directly.',
+      detail: err.message,   // shown in the browser console for diagnosis
     });
   }
 }

@@ -201,6 +201,15 @@
       line-height: 1.6; cursor: pointer; margin-bottom: 0;
     }
     .check-label input { margin-top: 0.25rem; flex-shrink: 0; }
+    .check-label input:disabled { cursor: not-allowed; }
+    .check-label:has(input:disabled) { opacity: 0.55; cursor: not-allowed; }
+    .scroll-hint {
+      margin-top: 0.4rem; font-size: 0.7rem; line-height: 1.5;
+      color: var(--muted);
+    }
+    .terms-block.read-complete {
+      border-color: rgba(127,209,164,0.35);
+    }
 
     /* ── Date chips ── */
     .date-summary {
@@ -743,9 +752,13 @@
 
         <div class="form-group form-check">
           <label class="check-label" for="agreeTerms">
-            <input type="checkbox" id="agreeTerms" name="agreeTerms" required/>
+            <input type="checkbox" id="agreeTerms" name="agreeTerms" required disabled/>
             <span>I have read and agree to the Reservation Terms and House Rules above. <span aria-hidden="true">*</span></span>
           </label>
+          <p class="scroll-hint" id="scrollHint">
+            Please scroll through the Reservation Terms and House Rules above
+            before accepting.
+          </p>
           <span class="form-error" id="agreeTermsError" role="alert"></span>
         </div>
 
@@ -1281,6 +1294,33 @@
   })();
   </script>
 
+  <!-- Terms scroll gate -->
+  <script>
+  (function () {
+    var box   = document.querySelector('.terms-block');
+    var chk   = document.getElementById('agreeTerms');
+    var hint  = document.getElementById('scrollHint');
+    if (!box || !chk) return;
+
+    function unlock() {
+      if (!chk.disabled) return;
+      chk.disabled = false;
+      box.classList.add('read-complete');
+      hint.textContent = 'Thanks \u2014 you can now accept the terms.';
+    }
+
+    function check() {
+      // Within 24px of the bottom counts as read to the end.
+      if (box.scrollTop + box.clientHeight >= box.scrollHeight - 24) unlock();
+    }
+
+    // If the block is short enough that there's nothing to scroll,
+    // don't trap the guest — unlock immediately.
+    if (box.scrollHeight <= box.clientHeight + 4) unlock();
+    else box.addEventListener('scroll', check, { passive: true });
+  })();
+  </script>
+
   <!-- Booking form submission -->
   <script>
   (function () {
@@ -1297,6 +1337,11 @@
       var el = document.getElementById(id + 'Error');
       if (el) el.textContent = msg || '';
       return !msg;
+    }
+    function escHtml(t) {
+      return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) {
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+      });
     }
     function notify(msg, kind) {
       alertBox.innerHTML =
@@ -1328,7 +1373,13 @@
       }
 
       if (!ok) {
-        notify('Please correct the highlighted fields and try again.', 'error');
+        var firstBad = form.querySelector('.form-error:not(:empty)');
+        notify('Please complete the highlighted fields below.', 'error');
+        if (firstBad) {
+          firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          var input = firstBad.parentElement.querySelector('input, select, textarea');
+          if (input && !input.disabled) input.focus({ preventScroll: true });
+        }
         return;
       }
 
@@ -1360,19 +1411,31 @@
         })
         .then(function (res) {
           if (!res.ok) {
-            var msg = res.d.errors
-              ? res.d.errors.join(' ')
-              : (res.d.error || 'We could not send your inquiry. Please try again.');
-            notify(msg, 'error');
+            // Paint any field-specific messages the server sent back.
+            if (res.d.field_errors) {
+              Object.keys(res.d.field_errors).forEach(function (f) {
+                setError(f, res.d.field_errors[f]);
+              });
+              var bad = form.querySelector('.form-error:not(:empty)');
+              if (bad) bad.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            if (res.d.detail) console.error('[booking] server detail:', res.d.detail);
+            notify(escHtml(res.d.error || 'We could not send your inquiry. Please try again.'), 'error');
             btn.disabled = false;
             btn.textContent = original;
             return;
           }
           form.reset();
           document.getElementById('quotePanel').hidden = true;
+          var chk = document.getElementById('agreeTerms');
+          if (chk) chk.disabled = true;
           notify(
-            'Thank you — your booking inquiry has been received. ' +
-            'We will confirm availability within 24 hours by email.', 'success');
+            'Thank you \u2014 your booking request has been received.' +
+            (/^[A-Z0-9-]{1,32}$/.test(res.d.request_id || '')
+              ? ' Your request number is <strong>' + res.d.request_id + '</strong>.'
+              : '') +
+            ' We will confirm availability within 24 hours by email, then send ' +
+            'a secure payment request for the deposit.', 'success');
           btn.textContent = 'Inquiry Sent';
         })
         .catch(function () {
