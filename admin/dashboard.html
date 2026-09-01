@@ -1986,6 +1986,94 @@
       }
     };
 
+    // Create a Stripe payment link and email it to the guest.
+    window.sendPaymentRequest = async function(bookingId, type, btn) {
+      var label = type === 'deposit' ? 'deposit' : 'balance';
+      if (!confirm(`Send the ${label} payment request to the guest?\n\n` +
+                   `A Stripe link will be created and emailed to them.`)) return;
+
+      var out = document.getElementById('payResult');
+      var originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      if (out) out.textContent = '';
+
+      try {
+        const res = await fetch('/api/stripe?action=create_payment_link', {
+          method:  'POST',
+          headers: authHeaders(),
+          body:    JSON.stringify({ booking_id: bookingId, payment_type: type }),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          if (out) out.innerHTML =
+            '<span style="color:#E8A0A0;">Failed: ' +
+            (data.error || `server returned ${res.status}`) + '</span>';
+          btn.disabled = false;
+          btn.textContent = originalText;
+          return;
+        }
+
+        // Always show the link — if the email failed it can still be copied.
+        if (out) out.innerHTML =
+          '<span style="color:#7FD1A4;">' + (data.emailed || 'Link created') + '</span><br/>' +
+          '<a href="' + data.payment_url + '" target="_blank" rel="noopener" ' +
+          'style="word-break:break-all;">' + data.payment_url + '</a>';
+        btn.textContent = 'Request Sent';
+        loadPageData('bookings');
+      } catch (err) {
+        console.error(err);
+        if (out) out.innerHTML =
+          '<span style="color:#E8A0A0;">Could not reach the server. ' + err.message + '</span>';
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    };
+
+    // Generate a Stripe payment link and email it to the guest.
+    window.sendPaymentRequest = async function(bookingId, type, btn) {
+      const label = type === 'deposit' ? 'deposit' : 'balance';
+      if (!confirm(`Send the ${label} payment request to the guest?\n\n` +
+                   `A secure Stripe link will be created and emailed to them.`)) return;
+
+      const out = document.getElementById('payResult');
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      if (out) out.innerHTML = '';
+
+      try {
+        const res = await fetch('/api/stripe?action=create_payment_link', {
+          method:  'POST',
+          headers: authHeaders(),
+          body:    JSON.stringify({ booking_id: bookingId, payment_type: type }),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          if (out) out.innerHTML =
+            `<span style="color:#E8A0A0;">Could not send: ${data.error || 'Server error ' + res.status}</span>`;
+          btn.disabled = false;
+          btn.textContent = originalText;
+          return;
+        }
+
+        if (out) out.innerHTML =
+          `<span style="color:#7FD1A4;">Payment link created` +
+          (data.emailed ? ` — ${data.emailed}` : '') + `.</span><br/>` +
+          `<a href="${data.payment_url}" target="_blank" rel="noopener">Open the link</a>`;
+        btn.textContent = 'Sent';
+        loadPageData('bookings');
+      } catch (err) {
+        console.error(err);
+        if (out) out.innerHTML =
+          `<span style="color:#E8A0A0;">Could not send: ${err.message}</span>`;
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    };
+
     // Open booking modal
     window.openBookingModal = async function(bookingId) {
       document.getElementById('bookingModal').classList.add('open');
@@ -2054,12 +2142,67 @@
                     ? ' \u2014 ' + new Date(data.terms_accepted_at).toLocaleString('en-US') : '')
                 : 'Not recorded'}
             </div></div>
+          ${Number(data.quoted_total) > 0 ? `
+          <div class="form-group" style="margin-top:1.2rem;"><label>Payment Requests</label>
+            <div style="display:flex;gap:0.6rem;flex-wrap:wrap;padding:0.5rem 0;">
+              <button class="btn btn-ghost" id="sendDepositBtn" data-id="${data.id}"
+                ${data.deposit_amount == null ? 'disabled' : ''}>
+                ${data.deposit_status === 'paid' ? 'Deposit Paid'
+                  : data.deposit_status === 'sent' ? 'Resend Deposit Request'
+                  : 'Send Deposit Request'}${data.deposit_amount != null ? ' · ' + money(data.deposit_amount) : ''}
+              </button>
+              <button class="btn btn-ghost" id="sendBalanceBtn" data-id="${data.id}"
+                ${!data.balance_amount ? 'disabled' : ''}>
+                ${data.balance_status === 'paid' ? 'Balance Paid'
+                  : data.balance_status === 'sent' ? 'Resend Balance Request'
+                  : 'Send Balance Request'}${data.balance_amount ? ' · ' + money(data.balance_amount) : ''}
+              </button>
+            </div>
+            <div id="payResult" style="font-size:0.82rem;line-height:1.7;color:rgba(164,196,224,0.85);"></div>
+          </div>
+          ` : ''}
+          ${(data.status === 'confirmed' || data.status === 'paid') ? `
+          <div class="form-group" style="margin-top:1.2rem;padding-top:1rem;border-top:1px solid rgba(46,95,163,0.25);">
+            <label>Payment Requests</label>
+            <div style="display:flex;gap:0.6rem;flex-wrap:wrap;margin-top:0.5rem;">
+              <button class="btn btn-primary" data-pay="deposit" data-booking="${data.id}"
+                ${data.deposit_amount == null ? 'disabled title="No deposit amount on this booking"' : ''}>
+                Send Deposit${data.deposit_amount != null ? ' ' + money(data.deposit_amount) : ''}
+              </button>
+              <button class="btn btn-ghost" data-pay="balance" data-booking="${data.id}"
+                ${!data.balance_amount ? 'disabled title="No balance on this booking"' : ''}>
+                Send Balance${data.balance_amount ? ' ' + money(data.balance_amount) : ''}
+              </button>
+            </div>
+            <div style="margin-top:0.6rem;font-size:0.75rem;color:var(--muted);line-height:1.7;">
+              ${data.deposit_sent_at ? `Deposit request sent ${new Date(data.deposit_sent_at).toLocaleString('en-US')}<br/>` : ''}
+              ${data.balance_sent_at ? `Balance request sent ${new Date(data.balance_sent_at).toLocaleString('en-US')}<br/>` : ''}
+              ${data.stripe_payment_link_url ? `<a href="${data.stripe_payment_link_url}" target="_blank" rel="noopener">Open most recent payment link</a>` : ''}
+            </div>
+            <div id="payResult" style="margin-top:0.6rem;font-size:0.8rem;"></div>
+          </div>
+          ` : ''}
           ${data.special_requests ? `
           <div class="form-group" style="margin-top:1rem;"><label>Special Requests</label>
             <div style="color:rgba(164,196,224,0.8);padding:0.5rem 0;line-height:1.7;">${data.special_requests}</div></div>
           ` : ''}`;
         document.getElementById('approveBookingBtn').dataset.id = bookingId;
         document.getElementById('declineBookingBtn').dataset.id = bookingId;
+
+        document.querySelectorAll('[data-pay]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            sendPaymentRequest(btn.dataset.booking, btn.dataset.pay, btn);
+          });
+        });
+
+        ['sendDepositBtn','sendBalanceBtn'].forEach(function (btnId) {
+          var el = document.getElementById(btnId);
+          if (!el || el.disabled) return;
+          el.addEventListener('click', function () {
+            sendPaymentRequest(bookingId,
+              btnId === 'sendDepositBtn' ? 'deposit' : 'balance', el);
+          });
+        });
       } catch (err) {
         document.getElementById('bookingModalBody').innerHTML =
           '<div class="alert alert-error">Failed to load booking details.</div>';

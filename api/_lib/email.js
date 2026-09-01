@@ -532,3 +532,61 @@ export async function sendBookingDeclined({ guest, booking }) {
 
   return sendEmail({ to: guest.email, from: FROM_BOOKINGS, subject, html, text });
 }
+
+// ════════════════════════════════════════════════════════
+// TEMPLATE 9 — Payment Request (deposit or balance)
+// ════════════════════════════════════════════════════════
+export async function sendPaymentRequest({ guest, booking, payment_type, amount, payment_url }) {
+  const isDeposit = payment_type === 'deposit';
+  const isBalance = payment_type === 'balance';
+
+  const label = isDeposit ? 'Deposit' : isBalance ? 'Balance' : 'Payment';
+  const subject = `${label} request for your stay \u2014 ${PROPERTY_NAME}`;
+
+  const intro = isDeposit
+    ? `Your dates are confirmed. To secure them, please pay the 50% deposit below.`
+    : isBalance
+      ? `Your stay is coming up. Here is the remaining balance.`
+      : `Here is the payment request for your stay.`;
+
+  const timing = isBalance && booking.balance_due_date
+    ? `<p>This balance is due by <strong>${formatDate(booking.balance_due_date)}</strong>.</p>`
+    : isDeposit
+      ? `<p>Once the deposit clears we'll send your arrival details. The remaining
+         balance${booking.balance_due_date ? ` is due ${formatDate(booking.balance_due_date)}` : ' follows later'}.</p>`
+      : '';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>${emailStyles}</head>
+<body><div class="wrapper">
+  <div class="header">
+    <div class="header-title">${label} Request</div>
+    <div class="header-sub">${PROPERTY_NAME}</div>
+  </div>
+  <div class="body">
+    <div class="greeting">Hello <em>${guest.first_name}</em>,</div>
+    <p>${intro}</p>
+    <div class="info-card">
+      ${booking.request_id ? `<div class="info-row"><span class="info-label">Request</span><span class="info-value">${booking.request_id}</span></div>` : ''}
+      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)}</span></div>
+      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)}</span></div>
+      <div class="info-row"><span class="info-label">${label} Due</span><span class="info-value"><strong>${money(amount)}</strong></span></div>
+    </div>
+    <div style="text-align:center;margin:26px 0;">
+      <a href="${payment_url}" class="btn">Pay ${money(amount)} Securely</a>
+    </div>
+    ${timing}
+    <p style="font-size:13px;color:#7A90AE;">
+      Payment is processed by Stripe. We never see or store your card details.
+      If the button doesn't work, copy this link into your browser:<br/>
+      <span style="word-break:break-all;">${payment_url}</span>
+    </p>
+  </div>
+  <div class="footer"><p>${PROPERTY_NAME}</p></div>
+</div></body></html>`;
+
+  const text = `${label} request for your stay at ${PROPERTY_NAME}. `
+    + `${formatDate(booking.check_in_date)} to ${formatDate(booking.check_out_date)}. `
+    + `Amount due: ${money(amount)}. Pay securely here: ${payment_url}`;
+
+  return sendEmail({ to: guest.email, from: FROM_BOOKINGS, subject, html, text });
+}

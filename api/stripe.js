@@ -166,26 +166,67 @@ async function createPaymentLink(req, res) {
   const admin = await validateAdmin(req);
   if (!admin) return res.status(401).json({ error: 'Unauthorized.' });
 
-  const { booking_id } = req.body;
-  if (!booking_id) return res.status(400).json({ error: 'booking_id required.' });
+  const result = await buildPaymentLink({
+    booking_id:   req.body?.booking_id,
+    payment_type: req.body?.payment_type || 'full',
+    admin_id:     admin.id,
+  });
+  return res.status(result.status).json(result.body);
+}
+
+/**
+ * Create a Stripe payment link for a booking and email it to the guest.
+ * Shared by the admin endpoint above and the daily cron (balance reminders),
+ * so both behave identically. Returns { status, body } rather than writing
+ * to a response, because the cron has no response to write to.
+ */
+export async function buildPaymentLink({ booking_id, payment_type = 'full', admin_id = null }) {
+  // payment_type: 'deposit' (50% now), 'balance' (remainder, due 14 days
+  // before arrival) or 'full'. Defaults to full for backwards compatibility.
+  if (!booking_id) return { status: 400, body: { error: 'booking_id required.' } };
+  if (!['deposit', 'balance', 'full'].includes(payment_type)) {
+    return { status: 400, body: { error: 'payment_type must be deposit, balance or full.' } };
+  }
 
   // Fetch booking + guest
   const { data: booking, error } = await supabase
     .from('bookings')
     .select(`
-      id, check_in_date, check_out_date, num_nights,
-      total_amount, security_deposit, payment_status,
+      id, request_id, check_in_date, check_out_date, num_nights,
+      total_amount, quoted_total, deposit_amount, balance_amount,
+      balance_due_date, security_deposit, payment_status,
       guests(first_name, last_name, email)
     `)
     .eq('id', booking_id)
     .single();
 
-  if (error || !booking) return res.status(404).json({ error: 'Booking not found.' });
-  if (!booking.total_amount) return res.status(400).json({ error: 'Total amount not set on booking.' });
+  if (error || !booking) return { status: 404, body: { error: 'Booking not found.' } };
+
+  // Work out what to charge. Bookings taken through the website store
+  // quoted_total / deposit_amount / balance_amount; older ones only have
+  // total_amount, so fall back to that.
+  const fullAmount = booking.quoted_total ?? booking.total_amount;
+  const amountMap = {
+    deposit: booking.deposit_amount,
+    balance: booking.balance_amount,
+    full:    fullAmount,
+  };
+  const amount = amountMap[payment_type];
+
+  if (amount == null || parseFloat(amount) <= 0) {
+    return { status: 400, body: {
+      error: payment_type === 'full'
+        ? 'No total is set on this booking.'
+        : `No ${payment_type} amount is set on this booking. It may predate the deposit schedule.`,
+    } };
+  }
 
   const guest        = booking.guests;
-  const amountCents  = Math.round(parseFloat(booking.total_amount) * 100);
+  const amountCents  = Math.round(parseFloat(amount) * 100);
   const refundPolicy = getRefundPolicy(booking.check_in_date);
+  const typeLabel    = payment_type === 'deposit' ? 'Deposit (50%)'
+                     : payment_type === 'balance' ? 'Balance'
+                     : 'Booking Payment';
 
   // Build description
   const checkIn  = new Date(booking.check_in_date  + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
@@ -197,7 +238,7 @@ async function createPaymentLink(req, res) {
     currency:    'usd',
     unit_amount: amountCents,
     product_data: {
-      name:        'Generations Getaway LLC — Booking Payment',
+      name:        `Generations Getaway LLC — ${typeLabel}`,
       description: `${nights} night stay · ${checkIn} – ${checkOut} · ${guest.first_name} ${guest.last_name}`,
     },
   });
@@ -211,6 +252,7 @@ async function createPaymentLink(req, res) {
     },
     metadata: {
       booking_id,
+      payment_type,
       guest_email: guest.email,
       check_in:    booking.check_in_date,
       check_out:   booking.check_out_date,
@@ -221,6 +263,7 @@ async function createPaymentLink(req, res) {
       description: `Generations Getaway LLC — ${checkIn} to ${checkOut}`,
       metadata: {
         booking_id,
+        payment_type,
         check_in:  booking.check_in_date,
         check_out: booking.check_out_date,
       },
@@ -229,32 +272,71 @@ async function createPaymentLink(req, res) {
     phone_number_collection: { enabled: false },
   });
 
-  // Save link to booking
-  await supabase
-    .from('bookings')
-    .update({
-      stripe_payment_link_id: paymentLink.id,
+  // Save link to booking. Deposit and balance links are stored in their
+  // own columns so one doesn't overwrite the other.
+  const updates = {
+    stripe_payment_link_id:  paymentLink.id,
+    stripe_payment_link_url: paymentLink.url,
+    payment_status: 'pending',
+  };
+  if (payment_type === 'deposit') {
+    updates.deposit_link_url  = paymentLink.url;
+    updates.deposit_sent_at   = new Date().toISOString();
+  } else if (payment_type === 'balance') {
+    updates.balance_link_url  = paymentLink.url;
+    updates.balance_sent_at   = new Date().toISOString();
+  }
+
+  const { error: saveErr } = await supabase
+    .from('bookings').update(updates).eq('id', booking_id);
+  if (saveErr) {
+    // Retry without the newer columns so a missing migration doesn't
+    // lose a link that Stripe has already created.
+    console.error('[stripe] Save failed, retrying minimal:', saveErr.message);
+    await supabase.from('bookings').update({
+      stripe_payment_link_id:  paymentLink.id,
       stripe_payment_link_url: paymentLink.url,
       payment_status: 'pending',
-    })
-    .eq('id', booking_id);
+    }).eq('id', booking_id);
+  }
+
+  // Email the link to the guest.
+  let emailed = null;
+  try {
+    const { sendPaymentRequest } = await import('./_lib/email.js');
+    const result = await sendPaymentRequest({
+      guest,
+      booking,
+      payment_type,
+      amount,
+      payment_url: paymentLink.url,
+    });
+    emailed = result?.success
+      ? `Emailed ${guest.email}`
+      : `Email failed: ${result?.error || 'unknown'}`;
+  } catch (mailErr) {
+    console.error('[stripe] Payment email failed:', mailErr.message);
+    emailed = `Email failed: ${mailErr.message}`;
+  }
 
   // Log to audit
   await supabase.from('audit_logs').insert({
-    admin_id:   admin.id,
+    admin_id:   admin_id,
     action:     'stripe_payment_link_created',
     table_name: 'bookings',
     record_id:  booking_id,
-    new_values: { payment_link: paymentLink.url, amount: booking.total_amount },
+    new_values: { payment_link: paymentLink.url, amount, payment_type },
   });
 
-  return res.status(200).json({
+  return { status: 200, body: {
     success:      true,
     payment_url:  paymentLink.url,
     payment_link_id: paymentLink.id,
-    amount:       booking.total_amount,
+    payment_type,
+    amount,
+    emailed,
     refund_policy: refundPolicy,
-  });
+  } };
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -507,16 +589,49 @@ async function handleWebhook(req, res) {
   switch (event.type) {
 
     case 'payment_intent.succeeded': {
-      const bookingId = obj.metadata?.booking_id;
+      const bookingId   = obj.metadata?.booking_id;
+      const paymentType = obj.metadata?.payment_type || 'full';
       if (bookingId) {
-        const amountPaid = (obj.amount_received / 100).toFixed(2);
-        await supabase.from('bookings').update({
-          payment_status:            'paid',
-          amount_received:           amountPaid,
-          balance_due:               0,
-          stripe_payment_intent_id:  obj.id,
-        }).eq('id', bookingId);
-        console.log(`[stripe/webhook] Booking ${bookingId} paid: $${amountPaid}`);
+        const amountPaid = Number((obj.amount_received / 100).toFixed(2));
+
+        // A deposit is NOT the whole stay. Marking it 'paid' and zeroing
+        // balance_due would hide the outstanding half, so accumulate what
+        // has actually been received and only settle when it covers the total.
+        const { data: current } = await supabase
+          .from('bookings')
+          .select('amount_received, quoted_total, total_amount, deposit_amount, balance_amount')
+          .eq('id', bookingId)
+          .single();
+
+        const previous = Number(current?.amount_received || 0);
+        const received = Number((previous + amountPaid).toFixed(2));
+        const owed     = Number(current?.quoted_total ?? current?.total_amount ?? 0);
+        const settled  = owed > 0 && received + 0.01 >= owed;
+
+        const update = {
+          amount_received:          received,
+          balance_due:              owed > 0 ? Math.max(0, Number((owed - received).toFixed(2))) : 0,
+          payment_status:           settled ? 'paid' : 'partial',
+          stripe_payment_intent_id: obj.id,
+        };
+        if (paymentType === 'deposit') update.deposit_paid_at = new Date().toISOString();
+        if (paymentType === 'balance') update.balance_paid_at = new Date().toISOString();
+
+        const { error: upErr } = await supabase
+          .from('bookings').update(update).eq('id', bookingId);
+
+        if (upErr) {
+          // Retry without the newer columns rather than lose the payment record.
+          console.error('[stripe/webhook] Update failed, retrying minimal:', upErr.message);
+          await supabase.from('bookings').update({
+            amount_received:          received,
+            payment_status:           settled ? 'paid' : 'partial',
+            stripe_payment_intent_id: obj.id,
+          }).eq('id', bookingId);
+        }
+
+        console.log(`[stripe/webhook] Booking ${bookingId} ${paymentType} $${amountPaid} ` +
+                    `(received $${received} of $${owed}) → ${update.payment_status}`);
       }
       break;
     }

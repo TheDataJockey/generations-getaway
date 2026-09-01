@@ -70,6 +70,7 @@ export default async function handler(req, res) {
     dayBefore:{ sent: 0, errors: 0 },
     checkout: { sent: 0, errors: 0 },
     review:   { sent: 0, errors: 0 },
+    balance:  { sent: 0, errors: 0, skipped: 0 },
   };
 
   try {
@@ -82,6 +83,8 @@ export default async function handler(req, res) {
         booking_source, special_requests,
         email_welcome_sent, email_day_before_sent,
         email_checkout_sent, email_review_sent,
+        balance_amount, balance_due_date, balance_sent_at,
+        deposit_paid_at, payment_status,
         guests(id, first_name, last_name, email, phone)
       `)
       .eq('status', 'confirmed')
@@ -97,6 +100,37 @@ export default async function handler(req, res) {
     for (const booking of bookings) {
       const guest = booking.guests;
       if (!guest?.email) continue;
+
+      // 0. Balance payment request — on the balance due date
+      //    (14 days before arrival, set when the quote was captured).
+      //    Sent once: balance_sent_at guards against repeats.
+      if (booking.balance_due_date &&
+          booking.balance_due_date <= today &&
+          Number(booking.balance_amount) > 0 &&
+          !booking.balance_sent_at &&
+          booking.payment_status !== 'paid') {
+        try {
+          const { buildPaymentLink } = await import('./stripe.js');
+          const out = await buildPaymentLink({
+            booking_id:   booking.id,
+            payment_type: 'balance',
+          });
+          if (out.status === 200) {
+            results.balance.sent++;
+            console.log(`[cron] Balance request sent for booking ${booking.id}`);
+          } else {
+            results.balance.errors++;
+            console.error(`[cron] Balance request failed for ${booking.id}:`, out.body?.error);
+          }
+        } catch (balErr) {
+          results.balance.errors++;
+          console.error(`[cron] Balance request threw for ${booking.id}:`, balErr.message);
+        }
+      } else if (booking.balance_due_date &&
+                 booking.balance_due_date <= today &&
+                 booking.balance_sent_at) {
+        results.balance.skipped++;
+      }
 
       // 1. Welcome email — 3 days before check-in
       if (booking.check_in_date === in3Days && !booking.email_welcome_sent) {

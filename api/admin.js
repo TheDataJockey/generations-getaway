@@ -352,15 +352,51 @@ async function handleBookings(req, res, token) {
       const updates = {};
 
       if (status) {
-        const valid = ['inquiry','confirmed','cancelled','completed'];
+        const valid = ['inquiry','pending','confirmed','cancelled','completed','paid','refunded'];
         if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
         updates.status = status;
         if (status === 'cancelled') updates.cancelled_at = new Date().toISOString();
 
-        // Activate guest record when booking is confirmed
         if (status === 'confirmed') {
           const { data: bk } = await supabase
-            .from('bookings').select('guest_id').eq('id', id).single();
+            .from('bookings')
+            .select('guest_id, check_in_date, check_out_date')
+            .eq('id', id).single();
+
+          // Refuse to confirm a stay that overlaps one already confirmed.
+          // The guest calendar hides taken dates, but nothing previously
+          // stopped an admin approving two requests for the same week.
+          if (bk?.check_in_date && bk?.check_out_date) {
+            const { data: clashes } = await supabase
+              .from('bookings')
+              .select('id, request_id, check_in_date, check_out_date, guests(first_name, last_name)')
+              .in('status', ['confirmed', 'paid', 'checked_in'])
+              .neq('id', id)
+              .lt('check_in_date', bk.check_out_date)
+              .gt('check_out_date', bk.check_in_date);
+
+            if (clashes && clashes.length) {
+              const c = clashes[0];
+              const who = c.guests
+                ? `${c.guests.first_name || ''} ${c.guests.last_name || ''}`.trim()
+                : 'another guest';
+              return res.status(409).json({
+                error: `These dates clash with a confirmed booking ` +
+                       `(${c.check_in_date} to ${c.check_out_date}` +
+                       `${who ? ' — ' + who : ''}` +
+                       `${c.request_id ? ', ' + c.request_id : ''}). ` +
+                       `Decline this request or change the dates first.`,
+                conflict: {
+                  id: c.id,
+                  request_id: c.request_id,
+                  check_in_date: c.check_in_date,
+                  check_out_date: c.check_out_date,
+                },
+              });
+            }
+          }
+
+          // Activate guest record when booking is confirmed
           if (bk?.guest_id) {
             await supabase.from('guests')
               .update({ is_active: true })
@@ -376,7 +412,16 @@ async function handleBookings(req, res, token) {
         return res.status(400).json({ error: 'Nothing to update.' });
 
       const { error } = await supabase.from('bookings').update(updates).eq('id', id);
-      if (error) throw error;
+      if (error) {
+        // 23P01 = exclusion_violation, raised by the overlap constraint.
+        if (error.code === '23P01') {
+          return res.status(409).json({
+            error: 'These dates clash with a booking that is already confirmed. ' +
+                   'Refresh the bookings list to see the conflict.',
+          });
+        }
+        throw error;
+      }
       await logAudit(auth.admin, 'updated', 'bookings', id, `Status → ${status}`);
 
       // Tell the guest. Email failure must never undo a status change,
