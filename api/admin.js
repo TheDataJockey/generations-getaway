@@ -34,7 +34,7 @@
  */
 
 import crypto from 'crypto';
-import { supabase } from './_lib/supabase.js';
+import { supabase, missingSupabaseEnv } from './_lib/supabase.js';
 import { setCors } from './_lib/cors.js';
 
 const ADMIN_CORS_OPTS = {
@@ -88,6 +88,22 @@ async function logAudit(admin, action, tableName, recordId = null, notes = null)
 
 // ── Main router ──
 export default async function handler(req, res) {
+  // Any uncaught throw here would otherwise become Vercel's plain-text
+  // "A server error has occurred" page, which the browser can't parse.
+  try {
+    return await route(req, res);
+  } catch (err) {
+    console.error('[admin] Unhandled:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'The admin API could not start.',
+        detail: err.message,
+      });
+    }
+  }
+}
+
+async function route(req, res) {
   setCors(req, res, ADMIN_CORS_OPTS);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -95,6 +111,25 @@ export default async function handler(req, res) {
     req.url.split('resource=')[1]?.split('&')[0];
 
   const token = extractToken(req);
+
+  // Health check — no auth, reports configuration only. Never returns
+  // any secret value, just whether each variable is present.
+  if (resource === 'health') {
+    const missing = missingSupabaseEnv();
+    return res.status(200).json({
+      ok: missing.length === 0,
+      missing_env: missing,
+      configured: {
+        supabase_url:      !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+        supabase_key:      !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        anthropic_api_key: !!process.env.ANTHROPIC_API_KEY,
+        resend_api_key:    !!process.env.RESEND_API_KEY,
+        stripe_secret_key: !!process.env.STRIPE_SECRET_KEY,
+        stripe_webhook:    !!process.env.STRIPE_WEBHOOK_SECRET,
+        cron_secret:       !!process.env.CRON_SECRET,
+      },
+    });
+  }
 
   switch (resource) {
     case 'dashboard':        return handleDashboard(req, res, token);
@@ -312,7 +347,7 @@ async function handleBookings(req, res, token) {
       }
       let query = supabase
         .from('bookings')
-        .select('id, status, check_in_date, check_out_date, num_nights, num_guests, booking_source, total_amount, amount_received, balance_due, payment_method, payment_status, stripe_payment_link_url, created_at, guests(first_name, last_name, email, phone)')
+        .select('id, status, check_in_date, check_out_date, num_nights, num_guests, booking_source, total_amount, quoted_total, amount_received, balance_due, payment_method, payment_status, stripe_payment_link_url, request_id, created_at, guests(first_name, last_name, email, phone)')
         .order('check_in_date', { ascending: false });
       if (status) query = query.eq('status', status);
       if (year && month) {
@@ -349,11 +384,21 @@ async function handleBookings(req, res, token) {
         data = second.data;
       }
 
+      // NOTE: the bookings table in the dashboard renders payment state and
+      // decides which action buttons to show. Those fields must be returned
+      // here or the buttons key off undefined and never appear.
       let bookings = (data || []).map(b => ({
         id: b.id, status: b.status,
         check_in_date: b.check_in_date, check_out_date: b.check_out_date,
         num_nights: b.num_nights, num_guests: b.num_guests,
         booking_source: b.booking_source,
+        total_amount:  b.total_amount ?? b.quoted_total ?? null,
+        amount_received: b.amount_received ?? null,
+        balance_due:   b.balance_due ?? null,
+        payment_status: b.payment_status ?? null,
+        stripe_payment_link_url: b.stripe_payment_link_url ?? null,
+        request_id:    b.request_id ?? null,
+        created_at:    b.created_at ?? null,
         guest_first: b.guests?.first_name || '—', guest_last: b.guests?.last_name || '',
         guest_email: b.guests?.email || '', guest_phone: b.guests?.phone || '',
       }));

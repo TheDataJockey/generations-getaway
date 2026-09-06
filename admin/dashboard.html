@@ -1439,6 +1439,19 @@
     }
 
     // ── BOOKINGS ──
+    // Show a load failure in the page itself instead of only the console.
+    // Every loader below used to swallow errors, so a broken API call was
+    // indistinguishable from "no data".
+    function showLoadError(containerId, err, colspan) {
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      const msg = `Could not load: ${err.message || err}`;
+      el.innerHTML = el.tagName === 'TBODY'
+        ? `<tr><td colspan="${colspan || 8}" style="text-align:center;color:#E8A0A0;padding:2rem;">${msg}</td></tr>`
+        : `<div style="color:#E8A0A0;padding:1.5rem;text-align:center;">${msg}</div>`;
+      console.error('[dashboard]', err);
+    }
+
     async function loadBookings() {
       try {
         const status = document.getElementById('bookingFilter').value;
@@ -1447,7 +1460,8 @@
           `/api/admin?resource=bookings&status=${status}&search=${encodeURIComponent(search)}`,
           { headers: authHeaders() }
         );
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
         const tbody = document.getElementById('allBookingsBody');
         if (data.bookings?.length) {
           tbody.innerHTML = data.bookings.map(b => `
@@ -1496,7 +1510,7 @@
           tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;">No bookings found</td></tr>';
         }
       } catch (err) {
-        console.error('Bookings load error:', err);
+        showLoadError('allBookingsBody', err, 8);
       }
     }
 
@@ -1700,7 +1714,8 @@
           `/api/admin?resource=guests&search=${encodeURIComponent(search)}&filter=${filter}`,
           { headers: authHeaders() }
         );
-        const data  = await res.json();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
         const tbody = document.getElementById('guestListBody');
         if (data.guests?.length) {
           tbody.innerHTML = data.guests.map(g => `
@@ -1839,7 +1854,8 @@
     async function loadKnowledge() {
       try {
         const res  = await fetch('/api/admin?resource=knowledge', { headers: authHeaders() });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
         const el   = document.getElementById('kbList');
         if (data.entries?.length) {
           el.innerHTML = data.entries.map(e => `
@@ -1856,7 +1872,7 @@
         } else {
           el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;">No KB entries yet — add your first one!</div>';
         }
-      } catch (err) { console.error(err); }
+      } catch (err) { showLoadError('guestListBody', err, 7); }
     }
 
     // ── CHAT LOG ──
@@ -1867,7 +1883,8 @@
           `/api/admin?resource=chat-logs&filter=${filter}`,
           { headers: authHeaders() }
         );
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
         const el   = document.getElementById('chatLogList');
         if (data.logs?.length) {
           el.innerHTML = data.logs.map(c => `
@@ -1896,7 +1913,7 @@
         } else {
           el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;">No chat messages found</div>';
         }
-      } catch (err) { console.error(err); }
+      } catch (err) { showLoadError('kbList', err); }
     }
 
     document.getElementById('chatFilter').addEventListener('change', loadChatLog);
@@ -1905,7 +1922,8 @@
     async function loadEventSources() {
       try {
         const res  = await fetch('/api/admin?resource=event-sources', { headers: authHeaders() });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
         const el   = document.getElementById('eventSourceList');
         const icons = { eventbrite: '🎟', ticketmaster: '🎵', google_events: '🔍', meetup: '👥', manual: '✏️' };
         if (data.sources?.length) {
@@ -1936,14 +1954,15 @@
               </div>
             </div>`).join('');
         }
-      } catch (err) { console.error(err); }
+      } catch (err) { showLoadError('chatLogList', err); }
     }
 
     // ── ADMIN USERS ──
     async function loadAdminUsers() {
       try {
         const res  = await fetch('/api/admin?resource=users', { headers: authHeaders() });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
         const tbody = document.getElementById('adminUsersList');
         if (data.users?.length) {
           tbody.innerHTML = data.users.map(u => `
@@ -1966,7 +1985,7 @@
               </td>
             </tr>`).join('');
         }
-      } catch (err) { console.error(err); }
+      } catch (err) { showLoadError('eventSourceList', err); }
     }
 
     // ── ACTION HANDLERS ──
@@ -2255,7 +2274,7 @@
         });
         loadPageData('chat-log');
         loadPageData('dashboard');
-      } catch (err) { console.error(err); }
+      } catch (err) { showLoadError('adminUsersList', err); }
     };
 
     // Clear every field in the KB modal. Used by all entry points so a
