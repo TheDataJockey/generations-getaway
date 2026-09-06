@@ -1,0 +1,267 @@
+/**
+ * FILE: api/cron.js
+ * ENDPOINT: GET /api/cron
+ * USED BY: Vercel Cron Scheduler - runs automatically daily
+ * ============================================================
+ * PURPOSE:
+ *   Runs every day at 8:00 AM Eastern time (configured in
+ *   vercel.json). Checks all confirmed bookings and sends
+ *   the appropriate automated email for that day.
+ *
+ * DAILY SCHEDULE:
+ *   - Guests checking in 3 days from now: send Welcome Email
+ *     (includes door PIN and guest portal link)
+ *   - Guests checking in tomorrow: send Day Before Reminder
+ *     (includes directions and door PIN)
+ *   - Guests checking out today: send Checkout Reminder
+ *     (includes checkout checklist)
+ *   - Guests who checked out yesterday: send Review Request
+ *     (includes Google review link)
+ *
+ * DUPLICATE PREVENTION:
+ *   Each email type has a boolean flag in the bookings table.
+ *   Once an email is sent the flag is set to true, so the
+ *   same email is never sent twice even if the cron runs twice.
+ *
+ * SECURITY:
+ *   Protected by CRON_SECRET environment variable.
+ *   Only Vercel's internal scheduler can call this.
+ *
+ * DATABASE TABLES USED:
+ *   - bookings (reads dates, updates email_*_sent flags)
+ *   - guests   (reads email address for sending)
+ */
+
+import { supabase } from './_lib/supabase.js';
+import {
+  sendWelcomeEmail,
+  sendDayBeforeReminder,
+  sendCheckoutReminder,
+  sendReviewRequest,
+} from './_lib/email.js';
+
+export default async function handler(req, res) {
+  // ── Verify cron secret ──
+  // NOTE: the !CRON_SECRET check matters. Without it, an unset
+  // secret makes the comparison string "Bearer undefined", which
+  // anyone could send to trigger this endpoint.
+  const authHeader = req.headers['authorization'];
+  if (!process.env.CRON_SECRET ||
+      authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: 'Unauthorized.' });
+  }
+
+  if (req.method !== 'GET') return res.status(405).end();
+
+  // ?dry_run=1 reports what today's run would do without sending anything.
+  const dryRun = req.query?.dry_run === '1' || req.query?.dry_run === 'true';
+
+  // ── Get today's date in Fort Lauderdale local time ──
+  // Uses the IANA zone so EST/EDT is handled automatically. The old
+  // hardcoded -5 offset was wrong for ~8 months of the year.
+  const estNow = easternToday();
+
+  const today     = toDateStr(estNow);
+  const tomorrow  = toDateStr(addDays(estNow, 1));
+  const in3Days   = toDateStr(addDays(estNow, 3));
+  const yesterday = toDateStr(addDays(estNow, -1));
+
+  console.log(`[cron] Running for date: ${today}`);
+
+  const results = {
+    welcome:  { sent: 0, errors: 0 },
+    dayBefore:{ sent: 0, errors: 0 },
+    checkout: { sent: 0, errors: 0 },
+    review:   { sent: 0, errors: 0 },
+    balance:  { sent: 0, errors: 0, skipped: 0 },
+  };
+
+  try {
+    // ── Fetch all confirmed bookings with guest data ──
+    const { data: bookings, error } = await supabase
+      .from('bookings')
+      .select(`
+        id, check_in_date, check_out_date,
+        num_guests, yale_pin_code, welcome_note,
+        booking_source, special_requests,
+        email_welcome_sent, email_day_before_sent,
+        email_checkout_sent, email_review_sent,
+        balance_amount, balance_due_date, balance_sent_at,
+        deposit_paid_at, payment_status,
+        guests(id, first_name, last_name, email, phone)
+      `)
+      .eq('status', 'confirmed')
+      .not('guests', 'is', null);
+
+    if (error) throw error;
+    if (!bookings?.length) {
+      console.log('[cron] No confirmed bookings found.');
+      return res.status(200).json({
+        dry_run: dryRun || undefined,
+        message: 'No confirmed bookings found, so nothing to process.',
+        dates_checked: { today, tomorrow, in3Days, yesterday },
+        results,
+      });
+    }
+
+    // ── Dry run: report only, send nothing ──
+    // /api/cron?dry_run=1 confirms the job is reachable and authenticated,
+    // and shows exactly what today's run would do, without emailing anyone
+    // or writing to the database.
+    if (dryRun) {
+      const plan = [];
+      for (const booking of bookings) {
+        const g = booking.guests;
+        if (!g?.email) continue;
+        const who = `${g.email} (${booking.request_id || booking.id})`;
+        if (booking.balance_due_date && booking.balance_due_date <= today &&
+            Number(booking.balance_amount) > 0 && !booking.balance_sent_at &&
+            booking.payment_status !== 'paid') {
+          plan.push(`Balance request $${booking.balance_amount} → ${who}`);
+        }
+        if (booking.check_in_date === in3Days && !booking.email_welcome_sent) {
+          plan.push(`Welcome email (door PIN) → ${who}`);
+        }
+        if (booking.check_in_date === tomorrow && !booking.email_day_before_sent) {
+          plan.push(`Day-before reminder → ${who}`);
+        }
+        if (booking.check_out_date === today && !booking.email_checkout_sent) {
+          plan.push(`Checkout reminder → ${who}`);
+        }
+        if (booking.check_out_date === yesterday && !booking.email_review_sent) {
+          plan.push(`Review request → ${who}`);
+        }
+      }
+      return res.status(200).json({
+        dry_run: true,
+        message: plan.length
+          ? `${plan.length} email(s) would be sent today. Nothing was sent.`
+          : 'Nothing is due today. Nothing was sent.',
+        dates_checked: { today, tomorrow, in3Days, yesterday },
+        confirmed_bookings: bookings.length,
+        would_send: plan,
+      });
+    }
+
+    // ── Process each booking ──
+    for (const booking of bookings) {
+      const guest = booking.guests;
+      if (!guest?.email) continue;
+
+      // 0. Balance payment request — on the balance due date
+      //    (14 days before arrival, set when the quote was captured).
+      //    Sent once: balance_sent_at guards against repeats.
+      if (booking.balance_due_date &&
+          booking.balance_due_date <= today &&
+          Number(booking.balance_amount) > 0 &&
+          !booking.balance_sent_at &&
+          booking.payment_status !== 'paid') {
+        try {
+          const { buildPaymentLink } = await import('./stripe.js');
+          const out = await buildPaymentLink({
+            booking_id:   booking.id,
+            payment_type: 'balance',
+          });
+          if (out.status === 200) {
+            results.balance.sent++;
+            console.log(`[cron] Balance request sent for booking ${booking.id}`);
+          } else {
+            results.balance.errors++;
+            console.error(`[cron] Balance request failed for ${booking.id}:`, out.body?.error);
+          }
+        } catch (balErr) {
+          results.balance.errors++;
+          console.error(`[cron] Balance request threw for ${booking.id}:`, balErr.message);
+        }
+      } else if (booking.balance_due_date &&
+                 booking.balance_due_date <= today &&
+                 booking.balance_sent_at) {
+        results.balance.skipped++;
+      }
+
+      // 1. Welcome email — 3 days before check-in
+      if (booking.check_in_date === in3Days && !booking.email_welcome_sent) {
+        const result = await sendWelcomeEmail({ guest, booking });
+        if (result.success) {
+          await markSent(booking.id, 'email_welcome_sent');
+          results.welcome.sent++;
+        } else {
+          results.welcome.errors++;
+          console.error(`[cron] Welcome failed for booking ${booking.id}:`, result.error);
+        }
+      }
+
+      // 2. Day-before reminder
+      if (booking.check_in_date === tomorrow && !booking.email_day_before_sent) {
+        const result = await sendDayBeforeReminder({ guest, booking });
+        if (result.success) {
+          await markSent(booking.id, 'email_day_before_sent');
+          results.dayBefore.sent++;
+        } else {
+          results.dayBefore.errors++;
+          console.error(`[cron] Day-before failed for booking ${booking.id}:`, result.error);
+        }
+      }
+
+      // 3. Checkout reminder — morning of checkout
+      if (booking.check_out_date === today && !booking.email_checkout_sent) {
+        const result = await sendCheckoutReminder({ guest, booking });
+        if (result.success) {
+          await markSent(booking.id, 'email_checkout_sent');
+          results.checkout.sent++;
+        } else {
+          results.checkout.errors++;
+          console.error(`[cron] Checkout failed for booking ${booking.id}:`, result.error);
+        }
+      }
+
+      // 4. Review request — 1 day after checkout
+      if (booking.check_out_date === yesterday && !booking.email_review_sent) {
+        const result = await sendReviewRequest({ guest, booking });
+        if (result.success) {
+          await markSent(booking.id, 'email_review_sent');
+          results.review.sent++;
+        } else {
+          results.review.errors++;
+          console.error(`[cron] Review failed for booking ${booking.id}:`, result.error);
+        }
+      }
+    }
+
+    console.log('[cron] Complete:', JSON.stringify(results));
+    return res.status(200).json({ success: true, date: today, results });
+
+  } catch (err) {
+    console.error('[cron] Fatal error:', err.message);
+    return res.status(500).json({ error: err.message, results });
+  }
+}
+
+// ── Mark an email as sent in Supabase ──
+async function markSent(bookingId, field) {
+  await supabase
+    .from('bookings')
+    .update({ [field]: true })
+    .eq('id', bookingId);
+}
+
+// ── Date helpers ──
+// Returns a Date whose UTC calendar date matches today's date in
+// America/New_York, so DST never shifts which day we act on.
+function easternToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  return new Date(`${parts}T00:00:00Z`);
+}
+
+function toDateStr(date) {
+  return date.toISOString().split('T')[0];
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}

@@ -811,9 +811,9 @@
           <div class="cal-header">
             <div class="cal-month-title" id="calMonthTitle">Loading...</div>
             <div class="cal-nav">
-              <button class="cal-nav-btn" id="calPrev" onclick="window._calPrev?.()" aria-label="Previous month">&larr;</button>
-              <button class="cal-nav-btn" id="calToday" onclick="window._calToday?.()" style="width:auto;padding:0 0.8rem;font-size:0.65rem;">Today</button>
-              <button class="cal-nav-btn" id="calNext" onclick="window._calNext?.()" aria-label="Next month">&rarr;</button>
+              <button class="cal-nav-btn" id="calPrev" type="button" aria-label="Previous month">&larr;</button>
+              <button class="cal-nav-btn" id="calToday" type="button" style="width:auto;padding:0 0.8rem;font-size:0.65rem;">Today</button>
+              <button class="cal-nav-btn" id="calNext" type="button" aria-label="Next month">&rarr;</button>
             </div>
           </div>
           <div class="cal-grid" id="calGrid">
@@ -1655,7 +1655,10 @@
       }
     }
 
-    // Calendar navigation — using onclick on elements directly for reliability
+    // Calendar navigation.
+    // NOTE: bind ONLY here. These buttons previously also carried inline
+    // onclick attributes, so every click fired twice and the calendar
+    // skipped a month (Oct -> Dec -> Feb).
     window._calPrev  = async function() { calMonth--; if (calMonth < 0)  { calMonth = 11; calYear--; } await renderCalendar(); };
     window._calNext  = async function() { calMonth++; if (calMonth > 11) { calMonth = 0;  calYear++; } await renderCalendar(); };
     window._calToday = async function() { calYear = new Date().getFullYear(); calMonth = new Date().getMonth(); await renderCalendar(); };
