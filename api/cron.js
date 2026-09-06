@@ -53,6 +53,9 @@ export default async function handler(req, res) {
 
   if (req.method !== 'GET') return res.status(405).end();
 
+  // ?dry_run=1 reports what today's run would do without sending anything.
+  const dryRun = req.query?.dry_run === '1' || req.query?.dry_run === 'true';
+
   // ── Get today's date in Fort Lauderdale local time ──
   // Uses the IANA zone so EST/EDT is handled automatically. The old
   // hardcoded -5 offset was wrong for ~8 months of the year.
@@ -93,7 +96,51 @@ export default async function handler(req, res) {
     if (error) throw error;
     if (!bookings?.length) {
       console.log('[cron] No confirmed bookings found.');
-      return res.status(200).json({ message: 'No bookings to process.', results });
+      return res.status(200).json({
+        dry_run: dryRun || undefined,
+        message: 'No confirmed bookings found, so nothing to process.',
+        dates_checked: { today, tomorrow, in3Days, yesterday },
+        results,
+      });
+    }
+
+    // ── Dry run: report only, send nothing ──
+    // /api/cron?dry_run=1 confirms the job is reachable and authenticated,
+    // and shows exactly what today's run would do, without emailing anyone
+    // or writing to the database.
+    if (dryRun) {
+      const plan = [];
+      for (const booking of bookings) {
+        const g = booking.guests;
+        if (!g?.email) continue;
+        const who = `${g.email} (${booking.request_id || booking.id})`;
+        if (booking.balance_due_date && booking.balance_due_date <= today &&
+            Number(booking.balance_amount) > 0 && !booking.balance_sent_at &&
+            booking.payment_status !== 'paid') {
+          plan.push(`Balance request $${booking.balance_amount} → ${who}`);
+        }
+        if (booking.check_in_date === in3Days && !booking.email_welcome_sent) {
+          plan.push(`Welcome email (door PIN) → ${who}`);
+        }
+        if (booking.check_in_date === tomorrow && !booking.email_day_before_sent) {
+          plan.push(`Day-before reminder → ${who}`);
+        }
+        if (booking.check_out_date === today && !booking.email_checkout_sent) {
+          plan.push(`Checkout reminder → ${who}`);
+        }
+        if (booking.check_out_date === yesterday && !booking.email_review_sent) {
+          plan.push(`Review request → ${who}`);
+        }
+      }
+      return res.status(200).json({
+        dry_run: true,
+        message: plan.length
+          ? `${plan.length} email(s) would be sent today. Nothing was sent.`
+          : 'Nothing is due today. Nothing was sent.',
+        dates_checked: { today, tomorrow, in3Days, yesterday },
+        confirmed_bookings: bookings.length,
+        would_send: plan,
+      });
     }
 
     // ── Process each booking ──

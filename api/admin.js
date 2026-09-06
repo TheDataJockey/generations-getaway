@@ -318,14 +318,37 @@ async function handleBookings(req, res, token) {
       if (year && month) {
         const y = parseInt(year), m = parseInt(month);
         const monthStart = `${y}-${String(m).padStart(2,'0')}-01`;
-        const monthEnd   = new Date(y, m, 0).toISOString().split('T')[0]; // last day of month
+        // Date.UTC avoids the last day slipping backwards on a server
+        // running behind UTC.
+        const monthEnd   = new Date(Date.UTC(y, m, 0)).toISOString().split('T')[0];
         // Fetch bookings that overlap with this month at all
         query = query
           .lte('check_in_date',  monthEnd)    // starts on or before last day
           .gte('check_out_date', monthStart); // ends on or after first day
       }
-      const { data, error } = await query;
-      if (error) throw error;
+      let { data, error } = await query;
+
+      // If a column in the wide select doesn't exist yet (a migration not
+      // run), Postgres rejects the WHOLE query and the calendar shows
+      // nothing. Retry with only the columns the calendar actually needs.
+      if (error) {
+        console.error('[admin/bookings] Wide select failed, retrying minimal:', error.message);
+        let retry = supabase
+          .from('bookings')
+          .select('id, status, check_in_date, check_out_date, num_nights, num_guests, guests(first_name, last_name, email, phone)')
+          .order('check_in_date', { ascending: false });
+        if (status) retry = retry.eq('status', status);
+        if (year && month) {
+          const y = parseInt(year), m = parseInt(month);
+          const monthStart = `${y}-${String(m).padStart(2, '0')}-01`;
+          const monthEnd   = new Date(Date.UTC(y, m, 0)).toISOString().split('T')[0];
+          retry = retry.lte('check_in_date', monthEnd).gte('check_out_date', monthStart);
+        }
+        const second = await retry;
+        if (second.error) throw second.error;
+        data = second.data;
+      }
+
       let bookings = (data || []).map(b => ({
         id: b.id, status: b.status,
         check_in_date: b.check_in_date, check_out_date: b.check_out_date,

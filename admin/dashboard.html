@@ -816,6 +816,7 @@
               <button class="cal-nav-btn" id="calNext" type="button" aria-label="Next month">&rarr;</button>
             </div>
           </div>
+          <p id="calNote" style="font-size:0.72rem;color:var(--muted);margin:0 0 0.7rem;"></p>
           <div class="cal-grid" id="calGrid">
             <div class="cal-dow">Sun</div>
             <div class="cal-dow">Mon</div>
@@ -1539,10 +1540,33 @@
           { headers: authHeaders() }
         );
         const data = await res.json();
-        calBookings = (data.bookings || []).filter(b =>
-          b.status === 'confirmed' || b.status === 'inquiry' || b.status === 'completed'
-        );
-      } catch { calBookings = []; }
+        if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
+
+        // Show every status that occupies dates. 'paid' and 'checked_in'
+        // were previously missing, so a booking that had been paid for
+        // vanished from the calendar.
+        const SHOW = ['confirmed', 'inquiry', 'pending', 'paid', 'checked_in', 'completed'];
+        calBookings = (data.bookings || []).filter(b => SHOW.includes(b.status));
+
+        const note = document.getElementById('calNote');
+        if (note) {
+          const total = (data.bookings || []).length;
+          note.textContent = total === 0
+            ? 'No bookings overlap this month.'
+            : `${calBookings.length} of ${total} booking(s) shown.`;
+          note.style.color = 'var(--muted)';
+        }
+      } catch (err) {
+        // Never fail silently — an error here used to look identical
+        // to "no bookings this month".
+        console.error('[calendar]', err);
+        calBookings = [];
+        const note = document.getElementById('calNote');
+        if (note) {
+          note.textContent = `Could not load bookings: ${err.message}`;
+          note.style.color = '#E8A0A0';
+        }
+      }
 
       const months = ['January','February','March','April','May','June',
                       'July','August','September','October','November','December'];
