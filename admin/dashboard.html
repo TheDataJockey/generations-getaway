@@ -2188,25 +2188,6 @@
                     ? ' \u2014 ' + new Date(data.terms_accepted_at).toLocaleString('en-US') : '')
                 : 'Not recorded'}
             </div></div>
-          ${Number(data.quoted_total) > 0 ? `
-          <div class="form-group" style="margin-top:1.2rem;"><label>Payment Requests</label>
-            <div style="display:flex;gap:0.6rem;flex-wrap:wrap;padding:0.5rem 0;">
-              <button class="btn btn-ghost" id="sendDepositBtn" data-id="${data.id}"
-                ${data.deposit_amount == null ? 'disabled' : ''}>
-                ${data.deposit_status === 'paid' ? 'Deposit Paid'
-                  : data.deposit_status === 'sent' ? 'Resend Deposit Request'
-                  : 'Send Deposit Request'}${data.deposit_amount != null ? ' · ' + money(data.deposit_amount) : ''}
-              </button>
-              <button class="btn btn-ghost" id="sendBalanceBtn" data-id="${data.id}"
-                ${!data.balance_amount ? 'disabled' : ''}>
-                ${data.balance_status === 'paid' ? 'Balance Paid'
-                  : data.balance_status === 'sent' ? 'Resend Balance Request'
-                  : 'Send Balance Request'}${data.balance_amount ? ' · ' + money(data.balance_amount) : ''}
-              </button>
-            </div>
-            <div id="payResult" style="font-size:0.82rem;line-height:1.7;color:rgba(164,196,224,0.85);"></div>
-          </div>
-          ` : ''}
           ${(data.status === 'confirmed' || data.status === 'paid') ? `
           <div class="form-group" style="margin-top:1.2rem;padding-top:1rem;border-top:1px solid rgba(46,95,163,0.25);">
             <label>Payment Requests</label>
@@ -2240,18 +2221,11 @@
             sendPaymentRequest(btn.dataset.booking, btn.dataset.pay, btn);
           });
         });
-
-        ['sendDepositBtn','sendBalanceBtn'].forEach(function (btnId) {
-          var el = document.getElementById(btnId);
-          if (!el || el.disabled) return;
-          el.addEventListener('click', function () {
-            sendPaymentRequest(bookingId,
-              btnId === 'sendDepositBtn' ? 'deposit' : 'balance', el);
-          });
-        });
       } catch (err) {
+        console.error('[booking modal]', err);
         document.getElementById('bookingModalBody').innerHTML =
-          '<div class="alert alert-error">Failed to load booking details.</div>';
+          '<div class="alert alert-error">Could not load booking details: ' +
+          (err.message || err) + '</div>';
       }
     };
 

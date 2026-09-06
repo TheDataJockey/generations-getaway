@@ -102,7 +102,12 @@ function setCors(req, res) {
 
 // ── Validate admin session ──
 async function validateAdmin(req) {
-  const token = req.headers['x-session-token'] || req.body?.session_token;
+  // Accept the same Authorization: Bearer header the rest of the admin
+  // API uses. This file originally only read x-session-token, so calls
+  // from the dashboard (which sends Bearer) always came back Unauthorized.
+  const authHeader = req.headers['authorization'] || '';
+  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const token = bearer || req.headers['x-session-token'] || req.body?.session_token;
   if (!token) return null;
   const { data } = await supabase
     .from('admin_users')
