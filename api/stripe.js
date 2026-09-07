@@ -239,12 +239,22 @@ export async function buildPaymentLink({ booking_id, payment_type = 'full', admi
   const nights   = booking.num_nights || Math.round((new Date(booking.check_out_date) - new Date(booking.check_in_date)) / 86400000);
 
   // Create Stripe Price (one-off)
+  // NOTE: price.product_data accepts name, metadata, statement_descriptor,
+  // tax_code and unit_label — but NOT description. Sending description
+  // returns "Received unknown parameter: product_data[description]".
+  // The stay details go in metadata instead, where they stay searchable
+  // in the Stripe dashboard.
   const price = await stripe('POST', '/prices', {
     currency:    'usd',
     unit_amount: amountCents,
     product_data: {
-      name:        `Generations Getaway LLC — ${typeLabel}`,
-      description: `${nights} night stay · ${checkIn} – ${checkOut} · ${guest.first_name} ${guest.last_name}`,
+      name: `Generations Getaway LLC — ${typeLabel}`,
+      metadata: {
+        stay:     `${checkIn} to ${checkOut}`,
+        nights:   String(nights),
+        guest:    `${guest.first_name} ${guest.last_name || ''}`.trim(),
+        booking_id,
+      },
     },
   });
 
