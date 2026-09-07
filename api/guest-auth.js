@@ -176,6 +176,12 @@ export default async function handler(req, res) {
   if (req.body?.action === 'get_requests') {
     return handleGetRequests(req, res, supabase);
   }
+  if (req.body?.action === 'verify_activation') {
+    return handleVerifyActivation(req, res);
+  }
+  if (req.body?.action === 'create_account') {
+    return handleCreateAccount(req, res);
+  }
 
   // ── IP-level rate limit: max 20 attempts per hour ──
   const ip         = req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
@@ -392,4 +398,206 @@ export default async function handler(req, res) {
       error: 'An unexpected error occurred. Please try again.'
     });
   }
+}
+
+// Read the account-security settings. Defaults are the SAFE option, so
+// a missing table or failed read never opens the gate by accident.
+async function getSecuritySettings() {
+  try {
+    const { data } = await supabase
+      .from('system_settings')
+      .select('require_deposit_for_account, allow_guest_account_creation')
+      .eq('id', 1)
+      .single();
+    return {
+      require_deposit_for_account: data?.require_deposit_for_account !== false,
+      allow_guest_account_creation: data?.allow_guest_account_creation !== false,
+    };
+  } catch {
+    return { require_deposit_for_account: true, allow_guest_account_creation: true };
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   GUEST ACCOUNT SETUP
+   After the deposit is paid the guest is emailed a link. They
+   confirm who they are with their last name and the request ID
+   from that email, then choose their own 4-digit PIN.
+   ════════════════════════════════════════════════════════════ */
+
+// Look up the booking behind an activation token, so the page can
+// greet the guest by name before asking them to set a PIN.
+async function handleVerifyActivation(req, res) {
+  const settings = await getSecuritySettings();
+  if (!settings.allow_guest_account_creation) {
+    return res.status(403).json({
+      error: 'Online account setup is currently unavailable. Please contact us directly.',
+    });
+  }
+
+  const token = (req.body?.token || '').trim();
+  if (!token || token.length < 20) {
+    return res.status(400).json({ error: 'That link is not valid.' });
+  }
+
+  const { data: guest } = await supabase
+    .from('guests')
+    .select('id, first_name, last_name, activation_expires_at, activated_at')
+    .eq('activation_token', token)
+    .single();
+
+  if (!guest) {
+    return res.status(404).json({ error: 'That link is not valid or has already been used.' });
+  }
+  if (guest.activated_at) {
+    return res.status(409).json({
+      error: 'This account has already been set up. Use your last name and PIN to sign in.',
+      already_active: true,
+    });
+  }
+  if (guest.activation_expires_at && new Date(guest.activation_expires_at) < new Date()) {
+    return res.status(410).json({ error: 'That link has expired. Please contact us for a new one.' });
+  }
+
+  // Only the first name — never confirm the last name, since that is
+  // one of the two things the guest must supply to prove who they are.
+  return res.status(200).json({ ok: true, first_name: guest.first_name });
+}
+
+async function handleCreateAccount(req, res) {
+  const settings0 = await getSecuritySettings();
+  if (!settings0.allow_guest_account_creation) {
+    return res.status(403).json({
+      error: 'Online account setup is currently unavailable. Please contact us directly.',
+    });
+  }
+
+  const token     = (req.body?.token || '').trim();
+  const lastName  = (req.body?.last_name || '').trim();
+  const reference = (req.body?.reference || '').trim().toUpperCase();
+  const pin       = (req.body?.pin || '').trim();
+  const confirm   = (req.body?.pin_confirm || '').trim();
+
+  if (!token)            return res.status(400).json({ error: 'That link is not valid.' });
+  if (!lastName)         return res.status(400).json({ error: 'Enter your last name.' });
+  if (!reference)        return res.status(400).json({ error: 'Enter the reference from your email.' });
+  if (!/^\d{4}$/.test(pin)) {
+    return res.status(400).json({ error: 'Your PIN must be exactly 4 digits.' });
+  }
+  if (pin !== confirm)   return res.status(400).json({ error: 'The two PINs do not match.' });
+
+  // Reject PINs that are trivially guessable at a front door.
+  const WEAK = ['0000','1111','2222','3333','4444','5555','6666','7777','8888','9999',
+                '1234','4321','1212','2580','0123'];
+  if (WEAK.includes(pin)) {
+    return res.status(400).json({
+      error: 'Please choose a less predictable PIN — this opens the front door.',
+    });
+  }
+
+  const { data: guest } = await supabase
+    .from('guests')
+    .select('id, first_name, last_name, activation_expires_at, activated_at')
+    .eq('activation_token', token)
+    .single();
+
+  if (!guest) return res.status(404).json({ error: 'That link is not valid or has already been used.' });
+  if (guest.activated_at) {
+    return res.status(409).json({ error: 'This account has already been set up.' });
+  }
+  if (guest.activation_expires_at && new Date(guest.activation_expires_at) < new Date()) {
+    return res.status(410).json({ error: 'That link has expired. Please contact us for a new one.' });
+  }
+
+  // Identity check: last name plus a reference from their own email.
+  if (guest.last_name?.trim().toLowerCase() !== lastName.toLowerCase()) {
+    return res.status(401).json({ error: 'Those details do not match our records.' });
+  }
+
+  const { data: booking } = await supabase
+    .from('bookings')
+    .select('id, request_id, confirmation_id, status, payment_status, ' +
+            'deposit_paid_at, amount_received, check_in_date, check_out_date')
+    .eq('guest_id', guest.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!booking) {
+    return res.status(401).json({ error: 'Those details do not match our records.' });
+  }
+
+  // ── Gate: only a CONFIRMED reservation may create an account ──
+  // The reference must be the GG-RES confirmation number. A GG-REQ
+  // request ID is issued to every enquiry, including ones that were
+  // declined, so accepting it would let a stranger who was turned away
+  // set a PIN that opens the front door.
+  if (!booking.confirmation_id) {
+    return res.status(403).json({
+      error: 'This reservation is not confirmed yet. Account setup opens once ' +
+             'your booking is confirmed and your deposit is received.',
+    });
+  }
+
+  if (reference !== booking.confirmation_id.toUpperCase()) {
+    return res.status(401).json({ error: 'Those details do not match our records.' });
+  }
+
+  // ── Gate: deposit must be received (configurable) ──
+  const settings = await getSecuritySettings();
+  if (settings.require_deposit_for_account) {
+    const paid = !!booking.deposit_paid_at ||
+                 booking.payment_status === 'paid' ||
+                 Number(booking.amount_received || 0) > 0;
+    if (!paid) {
+      return res.status(403).json({
+        error: 'Account setup opens once your deposit has been received. ' +
+               'Please complete your payment first.',
+      });
+    }
+  }
+
+  if (!['confirmed', 'paid', 'checked_in', 'completed'].includes(booking.status)) {
+    return res.status(403).json({
+      error: 'This reservation is no longer active. Please contact us.',
+    });
+  }
+
+  const { error: updErr } = await supabase.from('guests').update({
+    pin_code:              pin,
+    pin_set_by_guest:      true,
+    is_active:             true,
+    activated_at:          new Date().toISOString(),
+    activation_token:      null,     // single use
+    activation_expires_at: null,
+    failed_pin_attempts:   0,
+  }).eq('id', guest.id);
+
+  if (updErr) {
+    console.error('[guest-auth] account setup failed:', updErr.message);
+    return res.status(500).json({ error: 'Could not save your PIN. Please try again.' });
+  }
+
+  await supabase.from('audit_logs').insert({
+    action:     'guest_account_created',
+    table_name: 'guests',
+    record_id:  guest.id,
+    notes:      `Guest set their own PIN (${booking?.confirmation_id || ''})`,
+  });
+
+  // The Yale lock has no API, so Kyle programs the code by hand. Email it
+  // to him or he would have to dig it out of the database.
+  try {
+    const { sendPinNotification } = await import('./_lib/email.js');
+    await sendPinNotification({ guest, booking, pin });
+  } catch (notifyErr) {
+    // Never fail the guest's setup because an internal email didn't send.
+    console.error('[guest-auth] PIN notification failed:', notifyErr.message);
+  }
+
+  return res.status(200).json({
+    success: true,
+    first_name: guest.first_name,
+    confirmation_id: booking?.confirmation_id || null,
+  });
 }

@@ -119,6 +119,39 @@
       <button class="btn btn-primary" id="saveBtn">Save Settings</button>
       <p class="meta" id="metaLine"></p>
     </section>
+
+    <section class="card">
+      <h2>Guest Account Security</h2>
+      <p class="hint">
+        Controls who can set the 4-digit PIN that unlocks the front door.
+      </p>
+
+      <div class="field">
+        <label style="text-transform:none;letter-spacing:0;font-size:0.85rem;color:var(--cream);">
+          <input type="checkbox" id="allowAccounts" style="width:auto;margin-right:0.5rem;"/>
+          Allow guests to set up their own account online
+        </label>
+        <p class="note">
+          Turn off to disable the self-service setup page entirely. Existing
+          accounts keep working; only new setups are blocked.
+        </p>
+      </div>
+
+      <div class="field">
+        <label style="text-transform:none;letter-spacing:0;font-size:0.85rem;color:var(--cream);">
+          <input type="checkbox" id="requireDeposit" style="width:auto;margin-right:0.5rem;"/>
+          Require a received deposit before a guest can set their PIN
+        </label>
+        <p class="note">
+          Recommended. A guest must have a confirmed reservation
+          (<strong>GG-RES</strong> number) <em>and</em> a deposit on record before
+          they can choose the code that opens the door. Turning this off means a
+          confirmed booking alone is enough.
+        </p>
+      </div>
+
+      <button class="btn btn-primary" id="saveSecurityBtn">Save Security Settings</button>
+    </section>
   </div>
 </div>
 
@@ -157,9 +190,12 @@
       document.getElementById('idleTimeout').value    = d.idle_timeout_minutes;
       document.getElementById('warningSeconds').value = d.idle_warning_seconds;
       document.getElementById('sessionHours').value   = d.session_hours;
+      document.getElementById('allowAccounts').checked  = d.allow_guest_account_creation !== false;
+      document.getElementById('requireDeposit').checked = d.require_deposit_for_account  !== false;
 
       if (!canEdit) {
-        ['idleTimeout','warningSeconds','sessionHours','saveBtn']
+        ['idleTimeout','warningSeconds','sessionHours','saveBtn',
+         'allowAccounts','requireDeposit','saveSecurityBtn']
           .forEach(function (id) { document.getElementById(id).disabled = true; });
         notify('You can view these settings, but only a super admin can change them.', false);
       }
@@ -178,17 +214,51 @@
     }
   }
 
+  // Both save buttons send the whole settings object, so saving one
+  // section can never blank out the other.
+  function currentSettings() {
+    return {
+      idle_timeout_minutes: document.getElementById('idleTimeout').value,
+      idle_warning_seconds: document.getElementById('warningSeconds').value,
+      session_hours:        document.getElementById('sessionHours').value,
+      allow_guest_account_creation: document.getElementById('allowAccounts').checked,
+      require_deposit_for_account:  document.getElementById('requireDeposit').checked,
+    };
+  }
+
+  async function save(btn, okMessage) {
+    btn.disabled = true;
+    try {
+      var res = await fetch('/api/admin?resource=system-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify(currentSettings()),
+      });
+      var d = await res.json().catch(function () { return {}; });
+      if (!res.ok) throw new Error(d.error || 'Save failed');
+      notify(okMessage, true);
+      await load();
+    } catch (e) { notify(e.message, false); }
+    btn.disabled = false;
+  }
+
+  document.getElementById('saveSecurityBtn').addEventListener('click', function () {
+    if (!document.getElementById('requireDeposit').checked &&
+        !confirm('Allow a guest to set the front door PIN before their deposit ' +
+                 'has been received?\n\nThis is not recommended.')) {
+      document.getElementById('requireDeposit').checked = true;
+      return;
+    }
+    save(this, 'Security settings saved.');
+  });
+
   document.getElementById('saveBtn').addEventListener('click', async function () {
     var btn = this; btn.disabled = true;
     try {
       var res = await fetch('/api/admin?resource=system-settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({
-          idle_timeout_minutes: document.getElementById('idleTimeout').value,
-          idle_warning_seconds: document.getElementById('warningSeconds').value,
-          session_hours:        document.getElementById('sessionHours').value,
-        }),
+        body: JSON.stringify(currentSettings()),
       });
       var d = await res.json().catch(function () { return {}; });
       if (!res.ok) throw new Error(d.error || 'Save failed');

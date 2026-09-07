@@ -717,6 +717,67 @@ async function handleWebhook(req, res) {
         if (paymentType === 'deposit') update.deposit_paid_at = new Date().toISOString();
         if (paymentType === 'balance') update.balance_paid_at = new Date().toISOString();
 
+        // Once money has arrived, invite the guest to set up their account
+        // and choose the PIN that opens the door. Sent once.
+        if (paymentType === 'deposit' || settled) {
+          try {
+            const { data: full } = await supabase
+              .from('bookings')
+              .select('id, request_id, confirmation_id, check_in_date, check_out_date, ' +
+                      'account_email_sent_at, guest_id, ' +
+                      'guests(id, first_name, last_name, email, activated_at, pin_set_by_guest)')
+              .eq('id', bookingId).single();
+
+            const g = full?.guests;
+
+            // Only a confirmed reservation can set up an account, because
+            // the confirmation number is one of the two identity checks.
+            if (g?.email && !full.account_email_sent_at && full.confirmation_id) {
+              const mail = await import('./_lib/email.js');
+              const returning = !!g.activated_at;
+              let sent;
+
+              if (returning) {
+                // A repeat guest already has a PIN. Asking them to "create
+                // an account" would send them to a page that rejects them,
+                // so confirm their booking and remind them of their PIN instead.
+                sent = await mail.sendReturningGuestConfirmation({
+                  guest: g, booking: full,
+                });
+              } else {
+                const cryptoMod = await import('crypto');
+                const activationToken = cryptoMod.randomBytes(24).toString('hex');
+                const expires = new Date(Date.now() + 30 * 86400000).toISOString();
+
+                await supabase.from('guests').update({
+                  activation_token:      activationToken,
+                  activation_expires_at: expires,
+                }).eq('id', g.id);
+
+                sent = await mail.sendAccountSetup({
+                  guest: g,
+                  booking: full,
+                  activation_url: `${BASE_URL}/activate.html?t=${activationToken}`,
+                });
+              }
+
+              if (sent?.success) {
+                await supabase.from('bookings')
+                  .update({ account_email_sent_at: new Date().toISOString() })
+                  .eq('id', bookingId);
+                console.log(`[stripe/webhook] ${returning ? 'Returning-guest' : 'Account setup'} email sent for ${bookingId}`);
+              } else {
+                console.error('[stripe/webhook] Guest email failed:', sent?.error);
+              }
+            } else if (g?.email && !full?.confirmation_id) {
+              console.log(`[stripe/webhook] Skipping account email for ${bookingId} — no confirmation number yet`);
+            }
+          } catch (acctErr) {
+            // Never let this break the payment record.
+            console.error('[stripe/webhook] Account setup step failed:', acctErr.message);
+          }
+        }
+
         const { error: upErr } = await supabase
           .from('bookings').update(update).eq('id', bookingId);
 

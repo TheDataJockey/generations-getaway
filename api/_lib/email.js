@@ -97,7 +97,7 @@ function money(n) {
   });
 }
 
-export async function sendEmail({ to, from, subject, html, text }) {
+export async function sendEmail({ to, from, subject, html, text, reply_to }) {
   if (!RESEND_API_KEY) {
     console.error('[email] RESEND_API_KEY not set');
     return { success: false, error: 'API key not configured' };
@@ -110,7 +110,15 @@ export async function sendEmail({ to, from, subject, html, text }) {
         'Content-Type':  'application/json',
         'Authorization': `Bearer ${RESEND_API_KEY}`,
       },
-      body: JSON.stringify({ from, to, subject, html, text }),
+      // Resend is send-only — it does not host a mailbox. Without an
+      // explicit reply-to, a guest replying to bookings@ or welcome@ only
+      // reaches you if those addresses exist with your email provider.
+      // Several templates say "reply to this email", so default replies
+      // to Kyle's real inbox unless a caller overrides it.
+      body: JSON.stringify({
+        from, to, subject, html, text,
+        reply_to: reply_to || (to === KYLE_EMAIL ? undefined : KYLE_EMAIL),
+      }),
     });
 
     const data = await res.json();
@@ -589,4 +597,152 @@ export async function sendPaymentRequest({ guest, booking, payment_type, amount,
     + `Amount due: ${money(amount)}. Pay securely here: ${payment_url}`;
 
   return sendEmail({ to: guest.email, from: FROM_BOOKINGS, subject, html, text });
+}
+
+// ════════════════════════════════════════════════════════
+// TEMPLATE 10 — Set Up Your Guest Account (after deposit)
+// ════════════════════════════════════════════════════════
+export async function sendAccountSetup({ guest, booking, activation_url }) {
+  const reference = booking.confirmation_id || booking.request_id || '';
+  const subject   = `Set up your guest account \u2014 ${PROPERTY_NAME}`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>${emailStyles}</head>
+<body><div class="wrapper">
+  <div class="header">
+    <div class="header-title">Set Up Your Account</div>
+    <div class="header-sub">${PROPERTY_NAME}</div>
+  </div>
+  <div class="body">
+    <div class="greeting">Thank you, <em>${guest.first_name}</em>.</div>
+    <p>We've received your deposit and your stay is secured. The last step is
+       to set up your guest account, which gives you your arrival details and
+       your door code.</p>
+
+    <div class="info-card">
+      <div class="info-row"><span class="info-label">Reference</span><span class="info-value"><strong>${reference}</strong></span></div>
+      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)} after 4:00 PM</span></div>
+      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)} by 11:00 AM</span></div>
+    </div>
+
+    <p>You'll be asked for your <strong>last name</strong> and the
+       <strong>reference above</strong>, then you'll choose a 4-digit PIN.</p>
+
+    <div style="text-align:center;margin:24px 0;">
+      <a href="${activation_url}" class="btn">Set Up My Account</a>
+    </div>
+
+    <div style="background:rgba(46,95,163,0.10);border-left:3px solid #5B8DD9;
+                padding:14px 16px;margin:20px 0;border-radius:3px;">
+      <p style="margin:0;font-size:13px;line-height:1.7;color:#A8C4E0;">
+        <strong style="color:#F4F7FB;">Important:</strong> the 4-digit PIN you
+        choose is what <strong>unlocks the front door</strong> when you arrive,
+        and it's also how you sign in to your guest portal. Please choose
+        something you'll remember, keep it private, and don't share it outside
+        your party. For your security, common PINs such as 0000, 1111, 1234
+        and 4321 can't be used.
+      </p>
+    </div>
+
+    <p style="font-size:13px;color:#7A90AE;">
+      This link is single use and expires in 30 days. If the button doesn't
+      work, copy this into your browser:<br/>
+      <span style="word-break:break-all;">${activation_url}</span>
+    </p>
+  </div>
+  <div class="footer"><p>${PROPERTY_NAME}</p></div>
+</div></body></html>`;
+
+  const text = `Thank you ${guest.first_name} — your deposit is received. `
+    + `Set up your guest account here: ${activation_url} `
+    + `You'll need your last name and reference ${reference}. `
+    + `The 4-digit PIN you choose unlocks the front door and signs you in to your portal.`;
+
+  return sendEmail({ to: guest.email, from: FROM_BOOKINGS, subject, html, text });
+}
+
+// ════════════════════════════════════════════════════════
+// TEMPLATE 11 — Returning Guest (already has an account)
+// ════════════════════════════════════════════════════════
+export async function sendReturningGuestConfirmation({ guest, booking }) {
+  const reference = booking.confirmation_id || '';
+  const subject   = `You're all set \u2014 ${PROPERTY_NAME}`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>${emailStyles}</head>
+<body><div class="wrapper">
+  <div class="header">
+    <div class="header-title">Welcome Back</div>
+    <div class="header-sub">${PROPERTY_NAME}</div>
+  </div>
+  <div class="body">
+    <div class="greeting">Good to have you back, <em>${guest.first_name}</em>.</div>
+    <p>We've received your deposit and your stay is secured.</p>
+
+    <div class="info-card">
+      <div class="info-row"><span class="info-label">Confirmation</span><span class="info-value"><strong>${reference}</strong></span></div>
+      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)} after 4:00 PM</span></div>
+      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)} by 11:00 AM</span></div>
+    </div>
+
+    <p><strong>You already have an account with us</strong>, so there's nothing
+       to set up. Sign in to your guest portal with your last name and the same
+       4-digit PIN you used last time &mdash; that PIN will unlock the front
+       door for this stay too.</p>
+
+    <div style="text-align:center;margin:24px 0;">
+      <a href="${BASE_URL}/welcome.html" class="btn">Open My Guest Portal</a>
+    </div>
+
+    <p style="font-size:13px;color:#7A90AE;">
+      Forgotten your PIN? Reply to this email and we'll sort it out before you arrive.
+    </p>
+  </div>
+  <div class="footer"><p>${PROPERTY_NAME}</p></div>
+</div></body></html>`;
+
+  const text = `Welcome back ${guest.first_name}. Your deposit is received and `
+    + `confirmation ${reference} is secured. You already have an account — sign in `
+    + `with your last name and existing PIN, which also unlocks the front door. `
+    + `Forgotten it? Reply to this email.`;
+
+  return sendEmail({ to: guest.email, from: FROM_BOOKINGS, subject, html, text });
+}
+
+// ════════════════════════════════════════════════════════
+// TEMPLATE 12 — PIN chosen (to Kyle, for the door lock)
+// ════════════════════════════════════════════════════════
+// The Yale lock has no API, so the code has to be programmed by hand.
+// This email is what tells Kyle which code to enter.
+export async function sendPinNotification({ guest, booking, pin }) {
+  const reference = booking?.confirmation_id || booking?.request_id || '';
+  const subject   = `ACTION: set door code ${pin} for ${guest.first_name} ${guest.last_name || ''}`.trim();
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>${emailStyles}</head>
+<body><div class="wrapper">
+  <div class="header">
+    <div class="header-title">Door Code To Program</div>
+    <div class="header-sub">${PROPERTY_NAME}</div>
+  </div>
+  <div class="body">
+    <p>${guest.first_name} ${guest.last_name || ''} has set their PIN. Program this
+       into the Yale lock before their arrival.</p>
+    <div class="info-card">
+      <div class="info-row"><span class="info-label">Door Code</span><span class="info-value" style="font-size:22px;letter-spacing:4px;"><strong>${pin}</strong></span></div>
+      <div class="info-row"><span class="info-label">Guest</span><span class="info-value">${guest.first_name} ${guest.last_name || ''}</span></div>
+      ${reference ? `<div class="info-row"><span class="info-label">Reference</span><span class="info-value">${reference}</span></div>` : ''}
+      ${booking?.check_in_date ? `<div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)}</span></div>` : ''}
+      ${booking?.check_out_date ? `<div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)}</span></div>` : ''}
+    </div>
+    <p style="font-size:13px;color:#7A90AE;">
+      Remember to remove the code after checkout.
+    </p>
+  </div>
+  <div class="footer"><p>${PROPERTY_NAME}</p></div>
+</div></body></html>`;
+
+  const text = `Program door code ${pin} for ${guest.first_name} ${guest.last_name || ''}`
+    + `${reference ? ` (${reference})` : ''}`
+    + `${booking?.check_in_date ? `, check-in ${formatDate(booking.check_in_date)}` : ''}. `
+    + `Remove it after checkout.`;
+
+  return sendEmail({ to: KYLE_EMAIL, from: FROM_BOOKINGS, subject, html, text });
 }

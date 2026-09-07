@@ -466,6 +466,23 @@ async function handleBookings(req, res, token) {
             }
           }
 
+          // Issue a confirmation number on first confirmation. Requests
+          // that are declined never consume one, so the RES sequence
+          // reflects real bookings rather than enquiry volume.
+          try {
+            const { data: existing } = await supabase
+              .from('bookings').select('confirmation_id').eq('id', id).single();
+            if (!existing?.confirmation_id) {
+              const { data: confId, error: idErr } =
+                await supabase.rpc('next_public_id', { p_prefix: 'RES' });
+              if (idErr) console.error('[bookings] confirmation id failed:', idErr.message);
+              else updates.confirmation_id = confId;
+            }
+            updates.confirmed_at = new Date().toISOString();
+          } catch (cErr) {
+            console.error('[bookings] confirmation id threw:', cErr.message);
+          }
+
           // Activate guest record when booking is confirmed
           if (bk?.guest_id) {
             await supabase.from('guests')
@@ -1287,6 +1304,10 @@ const SETTINGS_FALLBACK = {
   idle_timeout_minutes: 30,
   session_hours: 8,
   idle_warning_seconds: 60,
+  // Defaults are the SAFE option: account setup requires a confirmed
+  // reservation and a received deposit.
+  allow_guest_account_creation: true,
+  require_deposit_for_account: true,
 };
 
 async function handleSystemSettings(req, res, token) {
@@ -1328,17 +1349,24 @@ async function handleSystemSettings(req, res, token) {
         return res.status(400).json({ error: 'The warning must be shorter than the idle timeout.' });
       }
 
+      const allowAccounts   = b.allow_guest_account_creation !== false;
+      const requireDeposit   = b.require_deposit_for_account   !== false;
+
       const { error } = await supabase.from('system_settings').update({
         idle_timeout_minutes: idle,
         session_hours:        hours,
         idle_warning_seconds: warning,
+        allow_guest_account_creation: allowAccounts,
+        require_deposit_for_account:  requireDeposit,
         updated_at:           new Date().toISOString(),
         updated_by:           auth.admin.email,
       }).eq('id', 1);
       if (error) throw error;
 
       await logAudit(auth.admin, 'update', 'system_settings', '1',
-        `Idle ${idle}m, session ${hours}h, warning ${warning}s`);
+        `Idle ${idle}m, session ${hours}h, warning ${warning}s, ` +
+        `guest accounts ${allowAccounts ? 'on' : 'OFF'}, ` +
+        `deposit required ${requireDeposit ? 'yes' : 'NO'}`);
       return res.status(200).json({ success: true });
     }
 

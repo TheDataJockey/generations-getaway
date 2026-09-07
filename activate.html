@@ -1,0 +1,274 @@
+<!--
+  FILE: activate.html
+  PAGE: Guest Account Setup
+  URL:  generationsgetawayfl.com/activate.html?t=TOKEN
+  ============================================================
+  PURPOSE:
+    Reached from the "Set up your account" email sent once a
+    guest's deposit is received. The guest confirms who they are
+    with their last name and the reference from that email, then
+    chooses the 4-digit PIN that unlocks the front door and signs
+    them in to the guest portal.
+
+  TALKS TO:
+    /api/guest-auth  (action=verify_activation, action=create_account)
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="robots" content="noindex, nofollow"/>
+<title>Set Up Your Account — Generations Getaway LLC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400&family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --navy-deep:#0D1B2E; --navy:#132339; --navy-light:#1B2A4A;
+    --blue:#2E5FA3; --blue-light:#5B8DD9; --sky:#A8C4E0;
+    --cream:#F4F7FB; --muted:#7A90AE; --white:#fff;
+    --good:#7FD1A4; --bad:#E8A0A0;
+    --font-serif:'Cormorant Garamond',Georgia,serif;
+    --font-sans:'Montserrat',-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{min-height:100vh;background:var(--navy-deep);color:var(--cream);
+       font-family:var(--font-sans);font-size:14px;line-height:1.65;
+       display:flex;align-items:center;justify-content:center;padding:1.5rem;
+       -webkit-font-smoothing:antialiased;}
+  .card{width:100%;max-width:430px;background:var(--navy);
+        border:1px solid rgba(46,95,163,.28);border-radius:8px;
+        padding:2.4rem 2rem;}
+  .brand{text-align:center;margin-bottom:1.6rem;}
+  .brand h1{font-family:var(--font-serif);font-size:1.9rem;font-weight:400;line-height:1.2;}
+  .brand h1 em{color:var(--blue-light);font-style:italic;}
+  .brand p{font-size:.62rem;letter-spacing:.24em;text-transform:uppercase;
+           color:var(--sky);margin-top:.5rem;}
+  label{display:block;font-size:.64rem;letter-spacing:.16em;
+        text-transform:uppercase;color:var(--sky);margin-bottom:.4rem;}
+  input{width:100%;padding:.7rem .85rem;background:var(--navy-light);
+        color:var(--cream);border:1px solid rgba(46,95,163,.35);
+        border-radius:4px;font-family:var(--font-sans);font-size:.95rem;}
+  input:focus{outline:none;border-color:var(--blue-light);}
+  .field{margin-bottom:1.15rem;}
+  .field .note{font-size:.7rem;color:var(--muted);margin-top:.3rem;line-height:1.6;}
+  .pin input{letter-spacing:.5em;text-align:center;font-size:1.3rem;}
+  .pin input.bad{border-color:rgba(232,160,160,.6);}
+  .pin input.good{border-color:rgba(127,209,164,.6);}
+  .pin-warn{margin-top:.35rem;font-size:.72rem;line-height:1.6;color:var(--bad);}
+  .pin-ok{color:var(--good);}
+  .btn{width:100%;padding:.8rem;border:none;border-radius:4px;
+       background:var(--blue);color:var(--white);cursor:pointer;
+       font-family:var(--font-sans);font-size:.72rem;font-weight:500;
+       letter-spacing:.14em;text-transform:uppercase;}
+  .btn:hover:not(:disabled){background:var(--blue-light);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .alert{padding:.75rem .9rem;border-radius:4px;font-size:.82rem;
+         line-height:1.6;margin-bottom:1.1rem;}
+  .alert-err{background:rgba(232,160,160,.12);border:1px solid rgba(232,160,160,.35);color:var(--bad);}
+  .alert-ok{background:rgba(127,209,164,.12);border:1px solid rgba(127,209,164,.35);color:var(--good);}
+  .door-notice{background:rgba(46,95,163,.12);border-left:3px solid var(--blue-light);
+               padding:.8rem .9rem;border-radius:3px;margin:1.1rem 0 1.3rem;
+               font-size:.76rem;line-height:1.7;color:var(--sky);}
+  .door-notice strong{color:var(--cream);}
+  .center{text-align:center;}
+  .muted{color:var(--muted);font-size:.75rem;}
+  #loading{text-align:center;color:var(--muted);padding:2rem 0;}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="brand">
+    <h1>Set Up Your <em>Account</em></h1>
+    <p>Generations Getaway LLC</p>
+  </div>
+
+  <div id="alertBox"></div>
+  <div id="loading">Checking your link…</div>
+
+  <form id="setupForm" hidden autocomplete="off">
+    <p class="muted" id="greeting" style="margin-bottom:1.2rem;"></p>
+
+    <div class="field">
+      <label for="lastName">Last Name</label>
+      <input type="text" id="lastName" required autocapitalize="words" spellcheck="false"/>
+    </div>
+
+    <div class="field">
+      <label for="reference">Reference Number</label>
+      <input type="text" id="reference" required spellcheck="false"
+             placeholder="GG-RES-2026-0001" style="text-transform:uppercase"/>
+      <p class="note">Shown near the top of the email that brought you here.</p>
+    </div>
+
+    <div class="door-notice">
+      <strong>Please read:</strong> the 4-digit PIN you choose below is what
+      <strong>unlocks the front door</strong> when you arrive. It is also how
+      you sign in to your guest portal. Choose something you will remember,
+      keep it private, and do not share it outside your party.
+    </div>
+
+    <div class="field pin">
+      <label for="pin">Choose a 4-Digit PIN</label>
+      <input type="password" id="pin" inputmode="numeric" pattern="\d{4}"
+             maxlength="4" required autocomplete="new-password"
+             aria-describedby="pinRule"/>
+      <p class="note" id="pinRule">
+        For your security, common PINs can't be used &mdash; no repeated digits
+        (0000, 1111) and no simple runs (1234, 4321).
+      </p>
+      <p class="pin-warn" id="pinWarn" hidden></p>
+    </div>
+
+    <div class="field pin">
+      <label for="pinConfirm">Confirm Your PIN</label>
+      <input type="password" id="pinConfirm" inputmode="numeric" pattern="\d{4}"
+             maxlength="4" required autocomplete="new-password"/>
+    </div>
+
+    <button type="submit" class="btn" id="submitBtn">Create My Account</button>
+  </form>
+
+  <div id="done" hidden class="center">
+    <p style="font-family:var(--font-serif);font-size:1.5rem;margin-bottom:.7rem;">
+      You're all set.</p>
+    <p class="muted" id="doneText" style="line-height:1.8;"></p>
+    <p style="margin-top:1.4rem;">
+      <a href="/welcome.html" class="btn" style="display:inline-block;text-decoration:none;
+         width:auto;padding:.7rem 1.4rem;">Go to Guest Portal</a>
+    </p>
+  </div>
+</div>
+
+<script>
+(function () {
+  var token = new URLSearchParams(location.search).get('t') || '';
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+    });
+  }
+  function notify(msg, ok) {
+    document.getElementById('alertBox').innerHTML =
+      '<div class="alert ' + (ok ? 'alert-ok' : 'alert-err') + '">' + esc(msg) + '</div>';
+  }
+  function post(body) {
+    return fetch('/api/guest-auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; })
+        .then(function (d) { return { ok: r.ok, status: r.status, d: d }; });
+    });
+  }
+
+  // Same list the server enforces, checked here too so the guest is told
+  // immediately rather than after submitting.
+  var WEAK = ['0000','1111','2222','3333','4444','5555','6666','7777','8888','9999',
+              '1234','4321','1212','2580','0123'];
+
+  function checkPin() {
+    var el   = document.getElementById('pin');
+    var warn = document.getElementById('pinWarn');
+    var v    = el.value;
+    el.classList.remove('bad','good');
+    warn.classList.remove('pin-ok');
+
+    if (v.length < 4) { warn.hidden = true; return; }
+
+    if (WEAK.indexOf(v) !== -1) {
+      el.classList.add('bad');
+      warn.textContent = 'That PIN is too easy to guess. Please choose another.';
+      warn.hidden = false;
+    } else {
+      el.classList.add('good');
+      warn.textContent = 'That works.';
+      warn.classList.add('pin-ok');
+      warn.hidden = false;
+    }
+  }
+
+  // Digits only in the PIN boxes.
+  ['pin','pinConfirm'].forEach(function (id) {
+    document.getElementById(id).addEventListener('input', function () {
+      this.value = this.value.replace(/\D/g, '').slice(0, 4);
+      if (id === 'pin') checkPin();
+    });
+  });
+
+  if (!token) {
+    document.getElementById('loading').hidden = true;
+    notify('This page needs the link from your email. Please open it from there.', false);
+    return;
+  }
+
+  post({ action: 'verify_activation', token: token }).then(function (res) {
+    document.getElementById('loading').hidden = true;
+    if (!res.ok) {
+      notify(res.d.error || 'That link is not valid.', false);
+      if (res.d.already_active) {
+        document.getElementById('done').hidden = false;
+        document.getElementById('doneText').textContent =
+          'Sign in to the guest portal with your last name and PIN.';
+      }
+      return;
+    }
+    document.getElementById('greeting').textContent =
+      'Hi ' + (res.d.first_name || 'there') + ' — confirm a couple of details and choose your PIN.';
+    document.getElementById('setupForm').hidden = false;
+    document.getElementById('lastName').focus();
+  });
+
+  document.getElementById('setupForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var btn = document.getElementById('submitBtn');
+    var pin = document.getElementById('pin').value;
+
+    if (!/^\d{4}$/.test(pin)) { notify('Your PIN must be exactly 4 digits.', false); return; }
+    if (WEAK.indexOf(pin) !== -1) {
+      notify('That PIN is too easy to guess. Please choose another — this opens the front door.', false);
+      return;
+    }
+    if (pin !== document.getElementById('pinConfirm').value) {
+      notify('The two PINs do not match.', false); return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+
+    post({
+      action:      'create_account',
+      token:       token,
+      last_name:   document.getElementById('lastName').value,
+      reference:   document.getElementById('reference').value,
+      pin:         pin,
+      pin_confirm: document.getElementById('pinConfirm').value,
+    }).then(function (res) {
+      if (!res.ok) {
+        notify(res.d.error || 'Could not create your account.', false);
+        btn.disabled = false;
+        btn.textContent = 'Create My Account';
+        return;
+      }
+      document.getElementById('setupForm').hidden = true;
+      document.getElementById('alertBox').innerHTML = '';
+      document.getElementById('done').hidden = false;
+      document.getElementById('doneText').innerHTML =
+        'Your PIN is saved. Use it with your last name to sign in to the guest portal, ' +
+        'and at the front door when you arrive.' +
+        (res.d.confirmation_id
+          ? '<br/><br/>Confirmation <strong>' + esc(res.d.confirmation_id) + '</strong>' : '');
+    }).catch(function () {
+      notify('Could not reach the server. Please try again.', false);
+      btn.disabled = false;
+      btn.textContent = 'Create My Account';
+    });
+  });
+})();
+</script>
+</body>
+</html>
