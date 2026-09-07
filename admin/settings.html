@@ -1,0 +1,207 @@
+<!--
+  FILE: admin/settings.html
+  PAGE: Admin — System Settings
+  URL:  generationsgetawayfl.com/admin/settings.html
+  ============================================================
+  PURPOSE:
+    Controls how long an admin session lasts and how long the
+    dashboard may sit idle before signing you out.
+
+  ACCESS:
+    Any admin can view. Only super_admin can save changes.
+
+  TALKS TO:
+    /api/admin?resource=system-settings
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="robots" content="noindex, nofollow"/>
+<title>System Settings — Generations Getaway Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --navy-deep:#0D1B2E; --navy:#132339; --navy-light:#1B2A4A;
+    --blue:#2E5FA3; --blue-light:#5B8DD9; --sky:#A8C4E0;
+    --cream:#F4F7FB; --muted:#7A90AE; --white:#fff;
+    --good:#7FD1A4; --bad:#E8A0A0;
+    --font-serif:'Cormorant Garamond',Georgia,serif;
+    --font-sans:'Montserrat',-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--navy-deep);color:var(--cream);
+       font-family:var(--font-sans);font-size:14px;line-height:1.65;
+       -webkit-font-smoothing:antialiased;}
+  a{color:var(--blue-light);text-decoration:none;}
+  header{display:flex;align-items:center;justify-content:space-between;
+         gap:1rem;flex-wrap:wrap;padding:1.1rem 1.5rem;background:var(--navy);
+         border-bottom:1px solid rgba(46,95,163,.3);}
+  header h1{font-family:var(--font-serif);font-size:1.5rem;font-weight:400;}
+  .wrap{max-width:720px;margin:0 auto;padding:1.5rem;}
+  .card{background:var(--navy);border:1px solid rgba(46,95,163,.25);
+        border-radius:6px;padding:1.4rem;margin-bottom:1.4rem;}
+  .card h2{font-family:var(--font-serif);font-size:1.25rem;font-weight:400;margin-bottom:.3rem;}
+  .hint{font-size:.78rem;color:var(--muted);margin-bottom:1.1rem;}
+  label{display:block;font-size:.68rem;letter-spacing:.14em;
+        text-transform:uppercase;color:var(--sky);margin-bottom:.4rem;}
+  input{width:100%;padding:.6rem .75rem;background:var(--navy-light);
+        color:var(--cream);border:1px solid rgba(46,95,163,.35);
+        border-radius:4px;font-family:var(--font-sans);font-size:.9rem;}
+  input:focus{outline:none;border-color:var(--blue-light);}
+  input:disabled{opacity:.5;cursor:not-allowed;}
+  .field{margin-bottom:1.2rem;}
+  .field .note{font-size:.72rem;color:var(--muted);margin-top:.35rem;line-height:1.6;}
+  .btn{padding:.6rem 1.1rem;border:none;border-radius:4px;
+       font-family:var(--font-sans);font-size:.72rem;font-weight:500;
+       letter-spacing:.12em;text-transform:uppercase;cursor:pointer;}
+  .btn-primary{background:var(--blue);color:var(--white);}
+  .btn-primary:hover{background:var(--blue-light);}
+  .btn-ghost{background:transparent;color:var(--sky);border:1px solid rgba(46,95,163,.45);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .alert{padding:.8rem 1rem;border-radius:4px;font-size:.82rem;margin-bottom:1rem;}
+  .alert-ok{background:rgba(127,209,164,.12);border:1px solid rgba(127,209,164,.35);color:var(--good);}
+  .alert-err{background:rgba(232,160,160,.12);border:1px solid rgba(232,160,160,.35);color:var(--bad);}
+  .meta{font-size:.72rem;color:var(--muted);margin-top:.8rem;}
+  #loading{padding:2.5rem;text-align:center;color:var(--muted);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>System Settings</h1>
+  <a class="btn btn-ghost" href="/admin/dashboard.html">&larr; Dashboard</a>
+</header>
+
+<div class="wrap">
+  <div id="alertBox"></div>
+  <div id="loading">Loading settings…</div>
+
+  <div id="content" hidden>
+    <section class="card">
+      <h2>Session Security</h2>
+      <p class="hint">
+        Controls how long you stay signed in to the admin area. Shorter
+        values are safer on a shared or portable device.
+      </p>
+
+      <div class="field">
+        <label for="idleTimeout">Inactivity Timeout (minutes)</label>
+        <input type="number" id="idleTimeout" min="0" max="1440" step="1"/>
+        <p class="note">
+          Sign out automatically after this long with no clicks, typing or
+          scrolling. Set to <strong>0</strong> to disable the idle check.
+          Typical: 15–30 minutes.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="warningSeconds">Warning Before Logout (seconds)</label>
+        <input type="number" id="warningSeconds" min="0" max="600" step="5"/>
+        <p class="note">
+          Show a countdown this long before signing out, so you can stay
+          signed in with one click. Must be shorter than the idle timeout.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="sessionHours">Maximum Session Length (hours)</label>
+        <input type="number" id="sessionHours" min="1" max="720" step="1"/>
+        <p class="note">
+          You are signed out this long after logging in, regardless of
+          activity. Takes effect at your next login.
+        </p>
+      </div>
+
+      <button class="btn btn-primary" id="saveBtn">Save Settings</button>
+      <p class="meta" id="metaLine"></p>
+    </section>
+  </div>
+</div>
+
+<script src="/js/admin-idle.js" defer></script>
+<script>
+(function () {
+  var token = sessionStorage.getItem('gg_admin_token');
+  var role  = sessionStorage.getItem('gg_admin_role');
+  if (!token) { window.location.href = '/admin/login.html'; return; }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+    });
+  }
+  function notify(msg, ok) {
+    document.getElementById('alertBox').innerHTML =
+      '<div class="alert ' + (ok ? 'alert-ok' : 'alert-err') + '">' + esc(msg) + '</div>';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (ok) setTimeout(function () {
+      document.getElementById('alertBox').innerHTML = '';
+    }, 4000);
+  }
+
+  var canEdit = role === 'super_admin';
+
+  async function load() {
+    try {
+      var res = await fetch('/api/admin?resource=system-settings', {
+        headers: { 'Authorization': 'Bearer ' + token },
+      });
+      if (res.status === 401) { window.location.href = '/admin/login.html'; return; }
+      var d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Request failed');
+
+      document.getElementById('idleTimeout').value    = d.idle_timeout_minutes;
+      document.getElementById('warningSeconds').value = d.idle_warning_seconds;
+      document.getElementById('sessionHours').value   = d.session_hours;
+
+      if (!canEdit) {
+        ['idleTimeout','warningSeconds','sessionHours','saveBtn']
+          .forEach(function (id) { document.getElementById(id).disabled = true; });
+        notify('You can view these settings, but only a super admin can change them.', false);
+      }
+
+      var meta = [];
+      if (d.fallback) meta.push('Showing defaults — run db/system-settings.sql in Supabase to save changes.');
+      if (d.updated_at) meta.push('Last changed ' + new Date(d.updated_at).toLocaleString('en-US') +
+                                  (d.updated_by ? ' by ' + esc(d.updated_by) : ''));
+      document.getElementById('metaLine').textContent = meta.join('  ·  ');
+
+      document.getElementById('loading').hidden = true;
+      document.getElementById('content').hidden = false;
+    } catch (e) {
+      document.getElementById('loading').innerHTML =
+        '<div class="alert alert-err">Could not load settings: ' + esc(e.message) + '</div>';
+    }
+  }
+
+  document.getElementById('saveBtn').addEventListener('click', async function () {
+    var btn = this; btn.disabled = true;
+    try {
+      var res = await fetch('/api/admin?resource=system-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({
+          idle_timeout_minutes: document.getElementById('idleTimeout').value,
+          idle_warning_seconds: document.getElementById('warningSeconds').value,
+          session_hours:        document.getElementById('sessionHours').value,
+        }),
+      });
+      var d = await res.json().catch(function () { return {}; });
+      if (!res.ok) throw new Error(d.error || 'Save failed');
+      notify('Settings saved. The new idle timeout applies on your next page load.', true);
+      await load();
+    } catch (e) {
+      notify(e.message, false);
+    }
+    btn.disabled = false;
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

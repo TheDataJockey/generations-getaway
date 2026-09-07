@@ -329,5 +329,19 @@
       window.location.href = '/admin/dashboard.html';
     }
   </script>
+  <script>
+  // Explain an automatic sign-out instead of dumping the admin at a
+  // blank login screen with no idea why.
+  (function () {
+    if (new URLSearchParams(location.search).get('reason') !== 'idle') return;
+    var box = document.querySelector('.login-card') || document.body;
+    var msg = document.createElement('p');
+    msg.textContent = 'You were signed out after a period of inactivity.';
+    msg.style.cssText = 'margin:0 0 1rem;padding:0.7rem 0.9rem;border-radius:4px;' +
+      'font-size:0.8rem;text-align:center;color:#FFD54F;' +
+      'background:rgba(255,213,79,0.10);border:1px solid rgba(255,213,79,0.3);';
+    box.insertBefore(msg, box.firstChild);
+  })();
+  </script>
 </body>
 </html>

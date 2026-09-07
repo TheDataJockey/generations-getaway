@@ -282,7 +282,10 @@ export async function buildPaymentLink({ booking_id, payment_type = 'full', admi
         check_in:  booking.check_in_date,
         check_out: booking.check_out_date,
       },
-      receipt_email: guest.email,
+      // NOTE: receipt_email is NOT valid inside payment_intent_data on a
+      // Payment Link — only on the PaymentIntents API directly. Stripe
+      // collects the payer's email at checkout and sends its own receipt,
+      // so nothing is lost by omitting it.
     },
     phone_number_collection: { enabled: false },
   });
@@ -511,11 +514,19 @@ async function refundPayment(req, res) {
     reason:         'requested_by_customer',
   });
 
-  const refundAmount = (refundCents / 100).toFixed(2);
+  const refundAmount = Number((refundCents / 100).toFixed(2));
+
+  // Subtract from what was actually received, not from total_amount —
+  // website bookings store their figure in quoted_total, so total_amount
+  // is often null and the old arithmetic produced NaN.
+  const receivedBefore = Number(booking.amount_received || 0);
+  const receivedAfter  = Number(Math.max(0, receivedBefore - refundAmount).toFixed(2));
+  const owed           = Number(booking.quoted_total ?? booking.total_amount ?? 0);
+
   await supabase.from('bookings').update({
-    payment_status:   'refunded',
-    amount_received:  (parseFloat(booking.total_amount) - parseFloat(refundAmount)).toFixed(2),
-    balance_due:      0,
+    payment_status:  receivedAfter <= 0 ? 'refunded' : 'partial',
+    amount_received: receivedAfter,
+    balance_due:     owed > 0 ? Number(Math.max(0, owed - receivedAfter).toFixed(2)) : 0,
   }).eq('id', booking_id);
 
   await supabase.from('audit_logs').insert({

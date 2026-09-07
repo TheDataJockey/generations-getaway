@@ -143,6 +143,7 @@ async function route(req, res) {
     case 'requests':         return handleRequests(req, res, auth);
     case 'users':            return handleUsers(req, res, token);
     case 'assistant':        return handleAssistant(req, res, token);
+    case 'system-settings':  return handleSystemSettings(req, res, token);
     case 'pricing-all':
     case 'season':
     case 'settings':
@@ -1275,4 +1276,74 @@ try {
     return res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 
+}
+
+// ════════════════════════════════════
+// SYSTEM SETTINGS
+// Admin session and idle-timeout configuration.
+// ════════════════════════════════════
+const SETTINGS_FALLBACK = {
+  idle_timeout_minutes: 30,
+  session_hours: 8,
+  idle_warning_seconds: 60,
+};
+
+async function handleSystemSettings(req, res, token) {
+  // Any signed-in admin may read (the dashboard needs the idle timeout on
+  // every page load). Only super_admin may change it.
+  const needsWrite = req.method !== 'GET';
+  const auth = await validateAdminToken(token, needsWrite ? 'super_admin' : null);
+  if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+  try {
+    if (req.method === 'GET') {
+      const { data, error } = await supabase
+        .from('system_settings').select('*').eq('id', 1).single();
+      // If the table doesn't exist yet, fall back rather than break the
+      // dashboard — the timeout simply uses its default.
+      if (error) {
+        console.error('[system-settings] read failed:', error.message);
+        return res.status(200).json({ ...SETTINGS_FALLBACK, fallback: true });
+      }
+      return res.status(200).json(data);
+    }
+
+    if (req.method === 'PUT') {
+      const b = req.body || {};
+      const idle    = parseInt(b.idle_timeout_minutes, 10);
+      const hours   = parseInt(b.session_hours, 10);
+      const warning = parseInt(b.idle_warning_seconds, 10);
+
+      if (!Number.isInteger(idle) || idle < 0 || idle > 1440) {
+        return res.status(400).json({ error: 'Idle timeout must be between 0 and 1440 minutes.' });
+      }
+      if (!Number.isInteger(hours) || hours < 1 || hours > 720) {
+        return res.status(400).json({ error: 'Session length must be between 1 and 720 hours.' });
+      }
+      if (!Number.isInteger(warning) || warning < 0 || warning > 600) {
+        return res.status(400).json({ error: 'Warning must be between 0 and 600 seconds.' });
+      }
+      if (idle > 0 && warning >= idle * 60) {
+        return res.status(400).json({ error: 'The warning must be shorter than the idle timeout.' });
+      }
+
+      const { error } = await supabase.from('system_settings').update({
+        idle_timeout_minutes: idle,
+        session_hours:        hours,
+        idle_warning_seconds: warning,
+        updated_at:           new Date().toISOString(),
+        updated_by:           auth.admin.email,
+      }).eq('id', 1);
+      if (error) throw error;
+
+      await logAudit(auth.admin, 'update', 'system_settings', '1',
+        `Idle ${idle}m, session ${hours}h, warning ${warning}s`);
+      return res.status(200).json({ success: true });
+    }
+
+    return res.status(405).json({ error: 'Method not allowed.' });
+  } catch (err) {
+    console.error('[system-settings]', err);
+    return res.status(500).json({ error: 'Could not load or save settings.', detail: err.message });
+  }
 }
