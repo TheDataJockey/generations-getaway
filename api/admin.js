@@ -144,6 +144,7 @@ async function route(req, res) {
     case 'users':            return handleUsers(req, res, token);
     case 'assistant':        return handleAssistant(req, res, token);
     case 'system-settings':  return handleSystemSettings(req, res, token);
+    case 'activity':         return handleActivity(req, res, token);
     case 'pricing-all':
     case 'season':
     case 'settings':
@@ -1345,5 +1346,80 @@ async function handleSystemSettings(req, res, token) {
   } catch (err) {
     console.error('[system-settings]', err);
     return res.status(500).json({ error: 'Could not load or save settings.', detail: err.message });
+  }
+}
+
+// ════════════════════════════════════
+// ACTIVITY FEED
+// A single chronological stream of what has happened: bookings
+// created, statuses changed, payments received, admin actions.
+// ════════════════════════════════════
+async function handleActivity(req, res, token) {
+  const auth = await validateAdminToken(token, 'maintenance');
+  if (auth.error) return res.status(auth.status).json({ error: auth.error });
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed.' });
+
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+
+  try {
+    const [audits, bookings] = await Promise.all([
+      supabase.from('audit_logs')
+        .select('id, admin_email, action, table_name, record_id, notes, created_at')
+        .order('created_at', { ascending: false }).limit(limit),
+      supabase.from('bookings')
+        .select('id, request_id, status, created_at, check_in_date, check_out_date, ' +
+                'quoted_total, amount_received, payment_status, ' +
+                'deposit_sent_at, deposit_paid_at, balance_sent_at, balance_paid_at, ' +
+                'guests(first_name, last_name)')
+        .order('created_at', { ascending: false }).limit(limit),
+    ]);
+
+    const events = [];
+    const who = (b) => b.guests
+      ? `${b.guests.first_name || ''} ${b.guests.last_name || ''}`.trim() || 'a guest'
+      : 'a guest';
+
+    for (const b of (bookings.data || [])) {
+      const ref = b.request_id || b.id?.slice(0, 8);
+      if (b.created_at) {
+        events.push({ at: b.created_at, kind: 'booking',
+          text: `Booking request ${ref} from ${who(b)} for ${b.check_in_date} to ${b.check_out_date}`,
+          amount: b.quoted_total, booking_id: b.id });
+      }
+      if (b.deposit_sent_at) {
+        events.push({ at: b.deposit_sent_at, kind: 'request',
+          text: `Deposit request sent to ${who(b)} (${ref})`, booking_id: b.id });
+      }
+      if (b.deposit_paid_at) {
+        events.push({ at: b.deposit_paid_at, kind: 'payment',
+          text: `Deposit paid by ${who(b)} (${ref})`,
+          amount: b.amount_received, booking_id: b.id });
+      }
+      if (b.balance_sent_at) {
+        events.push({ at: b.balance_sent_at, kind: 'request',
+          text: `Balance request sent to ${who(b)} (${ref})`, booking_id: b.id });
+      }
+      if (b.balance_paid_at) {
+        events.push({ at: b.balance_paid_at, kind: 'payment',
+          text: `Balance paid by ${who(b)} (${ref})`,
+          amount: b.amount_received, booking_id: b.id });
+      }
+    }
+
+    for (const a of (audits.data || [])) {
+      events.push({
+        at: a.created_at,
+        kind: 'admin',
+        text: `${a.admin_email || 'An admin'} ${a.action} ${a.table_name}` +
+              (a.notes ? ` — ${a.notes}` : ''),
+      });
+    }
+
+    events.sort((x, y) => new Date(y.at) - new Date(x.at));
+
+    return res.status(200).json({ events: events.slice(0, limit) });
+  } catch (err) {
+    console.error('[activity]', err);
+    return res.status(500).json({ error: 'Could not load activity.', detail: err.message });
   }
 }

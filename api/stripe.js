@@ -172,9 +172,11 @@ async function createPaymentLink(req, res) {
   if (!admin) return res.status(401).json({ error: 'Unauthorized.' });
 
   const result = await buildPaymentLink({
-    booking_id:   req.body?.booking_id,
-    payment_type: req.body?.payment_type || 'full',
-    admin_id:     admin.id,
+    booking_id:    req.body?.booking_id,
+    payment_type:  req.body?.payment_type || 'full',
+    admin_id:      admin.id,
+    custom_amount: req.body?.amount ?? null,
+    custom_reason: req.body?.reason ?? null,
   });
   return res.status(result.status).json(result.body);
 }
@@ -185,7 +187,13 @@ async function createPaymentLink(req, res) {
  * so both behave identically. Returns { status, body } rather than writing
  * to a response, because the cron has no response to write to.
  */
-export async function buildPaymentLink({ booking_id, payment_type = 'full', admin_id = null }) {
+export async function buildPaymentLink({
+  booking_id,
+  payment_type = 'full',
+  admin_id = null,
+  custom_amount = null,
+  custom_reason = null,
+}) {
   // payment_type: 'deposit' (50% now), 'balance' (remainder, due 14 days
   // before arrival) or 'full'. Defaults to full for backwards compatibility.
   if (!booking_id) return { status: 400, body: { error: 'booking_id required.' } };
@@ -215,6 +223,7 @@ export async function buildPaymentLink({ booking_id, payment_type = 'full', admi
     deposit: booking.deposit_amount,
     balance: booking.balance_amount,
     full:    fullAmount,
+    custom:  custom_amount,
   };
   const amount = amountMap[payment_type];
 
@@ -231,6 +240,7 @@ export async function buildPaymentLink({ booking_id, payment_type = 'full', admi
   const refundPolicy = getRefundPolicy(booking.check_in_date);
   const typeLabel    = payment_type === 'deposit' ? 'Deposit (50%)'
                      : payment_type === 'balance' ? 'Balance'
+                     : payment_type === 'custom'  ? (custom_reason || 'Additional Charge')
                      : 'Booking Payment';
 
   // Build description
@@ -581,34 +591,90 @@ export const config = { api: { bodyParser: false } };
 async function handleWebhook(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  // Read raw body for signature verification
-  const rawBody = await new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', chunk => { body += chunk.toString(); });
-    req.on('end', () => resolve(body));
-    req.on('error', reject);
-  });
+  // ── Read the body ──
+  // `export const config = { api: { bodyParser: false } }` is a Next.js
+  // convention that plain Vercel functions ignore, so the body is already
+  // parsed by the time we get here and the raw stream yields nothing.
+  // Read the stream if it has anything, otherwise fall back to req.body.
+  let rawBody = '';
+  try {
+    rawBody = await new Promise((resolve) => {
+      let body = '';
+      let settled = false;
+      const done = () => { if (!settled) { settled = true; resolve(body); } };
+      req.on('data', chunk => { body += chunk.toString(); });
+      req.on('end', done);
+      req.on('error', done);
+      setTimeout(done, 1000);        // never hang if the stream is spent
+    });
+  } catch { rawBody = ''; }
 
-  // Verify webhook signature if secret is set
-  if (STRIPE_WEBHOOK_SECRET) {
+  let event = null;
+  if (rawBody) {
+    try { event = JSON.parse(rawBody); } catch { /* fall through */ }
+  }
+  if (!event && req.body) {
+    event = typeof req.body === 'string'
+      ? (() => { try { return JSON.parse(req.body); } catch { return null; } })()
+      : req.body;
+  }
+  if (!event?.type) {
+    console.error('[stripe/webhook] No readable event body');
+    return res.status(400).json({ error: 'Invalid payload.' });
+  }
+
+  // ── Verify authenticity ──
+  // Preferred: HMAC over the raw body. If the body was already parsed we
+  // cannot reproduce the exact bytes, so instead we re-fetch the object
+  // straight from Stripe using its id. A forged payload fails that check
+  // because the id will not exist in our account.
+  let verified = false;
+
+  if (rawBody && STRIPE_WEBHOOK_SECRET) {
     const sig       = req.headers['stripe-signature'];
     const timestamp = sig?.match(/t=(\d+)/)?.[1];
     const sigHash   = sig?.match(/v1=([a-f0-9]+)/)?.[1];
-
     if (timestamp && sigHash) {
       const crypto   = await import('crypto');
-      const payload  = `${timestamp}.${rawBody}`;
-      const expected = crypto.createHmac('sha256', STRIPE_WEBHOOK_SECRET).update(payload).digest('hex');
+      const expected = crypto
+        .createHmac('sha256', STRIPE_WEBHOOK_SECRET)
+        .update(`${timestamp}.${rawBody}`)
+        .digest('hex');
       if (expected !== sigHash) {
         console.error('[stripe/webhook] Signature mismatch');
         return res.status(400).json({ error: 'Invalid signature.' });
       }
+      verified = true;
     }
   }
 
-  let event;
-  try { event = JSON.parse(rawBody); }
-  catch { return res.status(400).json({ error: 'Invalid JSON.' }); }
+  if (!verified) {
+    const objId = event.data?.object?.id;
+    if (!objId) {
+      console.error('[stripe/webhook] Cannot verify: no object id');
+      return res.status(400).json({ error: 'Unverifiable event.' });
+    }
+    try {
+      const path = objId.startsWith('pi_')  ? `/payment_intents/${objId}`
+                 : objId.startsWith('ch_')  ? `/charges/${objId}`
+                 : objId.startsWith('re_')  ? `/refunds/${objId}`
+                 : objId.startsWith('cs_')  ? `/checkout/sessions/${objId}`
+                 : null;
+      if (!path) {
+        console.log('[stripe/webhook] Ignoring unhandled object type:', objId);
+        return res.status(200).json({ received: true, ignored: true });
+      }
+      const fresh = await stripe('GET', path);
+      // Trust Stripe's copy, not the posted one.
+      event.data.object = fresh;
+      verified = true;
+      console.log('[stripe/webhook] Verified by re-fetch:', objId);
+    } catch (verifyErr) {
+      console.error('[stripe/webhook] Re-fetch failed:', verifyErr.message);
+      return res.status(400).json({ error: 'Could not verify event with Stripe.' });
+    }
+  }
+
 
   const obj = event.data?.object;
 
@@ -625,9 +691,17 @@ async function handleWebhook(req, res) {
         // has actually been received and only settle when it covers the total.
         const { data: current } = await supabase
           .from('bookings')
-          .select('amount_received, quoted_total, total_amount, deposit_amount, balance_amount')
+          .select('amount_received, quoted_total, total_amount, deposit_amount, balance_amount, stripe_payment_intent_id')
           .eq('id', bookingId)
           .single();
+
+        // Idempotency: Stripe retries a webhook until it gets a 200, and
+        // may deliver the same event more than once. Without this guard a
+        // retry would add the same payment twice.
+        if (current?.stripe_payment_intent_id === obj.id) {
+          console.log(`[stripe/webhook] ${obj.id} already recorded, skipping`);
+          return res.status(200).json({ received: true, duplicate: true });
+        }
 
         const previous = Number(current?.amount_received || 0);
         const received = Number((previous + amountPaid).toFixed(2));
