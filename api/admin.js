@@ -1575,7 +1575,7 @@ async function handleEditBooking(req, res, token) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
 
   const { booking_id, check_in_date, check_out_date, num_guests,
-          note, notify_guest = true, preview = false } = req.body || {};
+          discount_code, note, notify_guest = true, preview = false } = req.body || {};
 
   if (!booking_id) return res.status(400).json({ error: 'booking_id is required.' });
 
@@ -1594,6 +1594,40 @@ async function handleEditBooking(req, res, token) {
     const newIn    = check_in_date  || before.check_in_date;
     const newOut   = check_out_date || before.check_out_date;
     const newGuests = num_guests != null ? parseInt(num_guests, 10) : before.num_guests;
+
+    // Discount code. Pass an empty string to remove one; omit the field
+    // entirely to leave it untouched.
+    let newCode = before.discount_code || null;
+    if (discount_code !== undefined) {
+      const wanted = String(discount_code || '').trim().toUpperCase();
+      if (!wanted) {
+        newCode = null;
+      } else {
+        const { data: codeRow } = await supabase
+          .from('discount_codes')
+          .select('code, is_active, valid_from, valid_until, max_uses, times_used')
+          .eq('code', wanted)
+          .single();
+
+        if (!codeRow) {
+          return res.status(400).json({ error: `Discount code "${wanted}" does not exist.` });
+        }
+        if (!codeRow.is_active) {
+          return res.status(400).json({ error: `Discount code "${wanted}" is not active.` });
+        }
+        const todayIso = new Date().toISOString().slice(0, 10);
+        if (codeRow.valid_from && todayIso < codeRow.valid_from) {
+          return res.status(400).json({ error: `"${wanted}" is not valid until ${codeRow.valid_from}.` });
+        }
+        if (codeRow.valid_until && todayIso > codeRow.valid_until) {
+          return res.status(400).json({ error: `"${wanted}" expired on ${codeRow.valid_until}.` });
+        }
+        if (codeRow.max_uses != null && codeRow.times_used >= codeRow.max_uses) {
+          return res.status(400).json({ error: `"${wanted}" has reached its usage limit.` });
+        }
+        newCode = wanted;
+      }
+    }
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(newIn) || !/^\d{4}-\d{2}-\d{2}$/.test(newOut)) {
       return res.status(400).json({ error: 'Dates must be valid.' });
@@ -1643,7 +1677,7 @@ async function handleEditBooking(req, res, token) {
 
       const q = computeQuote(cfg, {
         check_in: newIn, check_out: newOut,
-        discount_code: before.discount_code,
+        discount_code: newCode,
       });
       if (!q.error) quote = q;
       else return res.status(400).json({ error: `Could not price those dates: ${q.error}` });
@@ -1670,6 +1704,13 @@ async function handleEditBooking(req, res, token) {
     }
     if (newGuests !== before.num_guests) {
       changes.push({ field: 'Guests', from: String(before.num_guests), to: String(newGuests) });
+    }
+    if ((newCode || null) !== (before.discount_code || null)) {
+      changes.push({
+        field: 'Discount',
+        from: before.discount_code || 'None',
+        to:   newCode || 'None',
+      });
     }
     if (quote.nights !== before.num_nights) {
       changes.push({ field: 'Nights', from: String(before.num_nights), to: String(quote.nights) });
@@ -1706,6 +1747,7 @@ async function handleEditBooking(req, res, token) {
       check_out_date:   newOut,
       num_guests:       newGuests,
       num_nights:       quote.nights,
+      discount_code:    newCode,
       quoted_subtotal:  quote.subtotal,
       quoted_discount:  quote.discount,
       quoted_tax:       quote.tax,

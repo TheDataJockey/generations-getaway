@@ -1517,6 +1517,21 @@
       console.error('[dashboard]', err);
     }
 
+    // Load the active discount codes once, so the edit form can offer them
+    // rather than relying on the admin typing an exact code.
+    async function loadDiscountCodes() {
+      if (window.__ggCodes) return window.__ggCodes;
+      try {
+        const res = await fetch('/api/admin?resource=pricing-all', { headers: authHeaders() });
+        if (!res.ok) return (window.__ggCodes = []);
+        const d = await res.json();
+        window.__ggCodes = (d.codes || []).filter(c => c.is_active);
+      } catch {
+        window.__ggCodes = [];
+      }
+      return window.__ggCodes;
+    }
+
     // Load the editable charge lists once, then reuse for every booking.
     async function loadChargeReasons() {
       if (window.__ggReasons) return;
@@ -2432,6 +2447,14 @@
                   style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
                          border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
               </div>
+              <div style="flex:1.2;min-width:170px;">
+                <label style="font-size:0.6rem;">Discount Code</label>
+                <select id="editDiscount"
+                  style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
+                         border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;">
+                  <option value="">No discount</option>
+                </select>
+              </div>
               <button class="btn btn-ghost" id="previewEditBtn" data-booking="${data.id}">Preview</button>
               <button class="btn btn-primary" id="saveEditBtn" data-booking="${data.id}">Save Changes</button>
             </div>
@@ -2565,6 +2588,28 @@
           fillReasons();
         }
 
+        // Populate the discount selector with live codes, preserving
+        // whatever this booking already has.
+        (async function () {
+          const sel = document.getElementById('editDiscount');
+          if (!sel) return;
+          const codes = await loadDiscountCodes();
+          const current = data.discount_code || '';
+          sel.innerHTML = '<option value="">No discount</option>' +
+            codes.map(c => {
+              const effect = c.kind === 'percent'
+                ? c.percent + '% off'
+                : (c.free_nights ? c.free_nights + ' night(s) free' : 'flat rate');
+              return `<option value="${c.code}">${c.code} — ${effect}</option>`;
+            }).join('');
+          // A code that has since been deactivated still shows, so editing
+          // an old booking does not silently strip its discount.
+          if (current && !codes.some(c => c.code === current)) {
+            sel.innerHTML += `<option value="${current}">${current} (inactive)</option>`;
+          }
+          sel.value = current;
+        })();
+
         // Edit booking. Preview first so the price impact is visible before
         // anything is committed or the guest is emailed.
         var previewBtn = document.getElementById('previewEditBtn');
@@ -2574,6 +2619,7 @@
             check_in_date:  document.getElementById('editCheckIn').value,
             check_out_date: document.getElementById('editCheckOut').value,
             num_guests:     document.getElementById('editGuests').value,
+            discount_code:  document.getElementById('editDiscount').value,
             note:           document.getElementById('editNote').value.trim(),
             notify_guest:   document.getElementById('editNotify').checked,
           });
