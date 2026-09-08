@@ -337,6 +337,10 @@
     .admin-table tr:last-child td { border-bottom: none; }
     .admin-table tr:hover td { background: rgba(46,95,163,0.06); }
 
+    /* The hidden attribute must beat any display rule from a class, or
+       hiding a .btn does nothing. Bit us once already on the quote rows. */
+    [hidden] { display: none !important; }
+
     /* Native dropdown options do not inherit the control's colours, so an
        open list renders as pale text on a white background. Set both. */
     select option,
@@ -2394,8 +2398,40 @@
           <div class="form-group" style="margin-top:1rem;"><label>Special Requests</label>
             <div style="color:rgba(164,196,224,0.8);padding:0.5rem 0;line-height:1.7;">${data.special_requests}</div></div>
           ` : ''}`;
-        document.getElementById('approveBookingBtn').dataset.id = bookingId;
-        document.getElementById('declineBookingBtn').dataset.id = bookingId;
+        // Approve/Decline only make sense while a request is still pending.
+        // Once a booking is confirmed, re-approving would reissue the
+        // confirmation email and re-run the overlap check for no reason,
+        // and "Decline" on a paid stay is a cancellation, not a decline.
+        const approveBtn = document.getElementById('approveBookingBtn');
+        const declineBtn = document.getElementById('declineBookingBtn');
+        const footer     = document.querySelector('#bookingModal .modal-footer');
+        const st         = data.status;
+        const pending    = st === 'inquiry' || st === 'pending';
+
+        approveBtn.dataset.id = bookingId;
+        declineBtn.dataset.id = bookingId;
+
+        // Clear any note left from a previously opened booking.
+        const oldNote = document.getElementById('bookingStatusNote');
+        if (oldNote) oldNote.remove();
+
+        approveBtn.hidden = !pending;
+        declineBtn.textContent = pending ? 'Decline' : 'Cancel Booking';
+
+        if (!pending) {
+          const note = document.createElement('span');
+          note.id = 'bookingStatusNote';
+          note.style.cssText =
+            'flex:1;font-size:0.78rem;color:var(--muted);align-self:center;';
+          note.textContent =
+            st === 'cancelled' ? 'This booking is cancelled.'
+            : st === 'completed' ? 'This stay is complete.'
+            : `Confirmed${data.confirmation_id ? ' — ' + data.confirmation_id : ''}.`;
+          if (footer) footer.insertBefore(note, footer.firstChild);
+        }
+
+        // Nothing to action on a cancelled booking.
+        declineBtn.hidden = st === 'cancelled' || st === 'completed';
 
         // Charge descriptions come from Admin -> System Settings so they can
         // be edited without a deploy. The hardcoded lists below are only a

@@ -431,8 +431,19 @@ async function handleBookings(req, res, token) {
         if (status === 'confirmed') {
           const { data: bk } = await supabase
             .from('bookings')
-            .select('guest_id, check_in_date, check_out_date')
+            .select('guest_id, check_in_date, check_out_date, status, confirmation_id')
             .eq('id', id).single();
+
+          // Guard against re-approving. The dashboard hides the button once
+          // a booking is confirmed, but a stale tab could still post this,
+          // which would reissue the confirmation email to the guest.
+          if (bk?.status === 'confirmed' || bk?.status === 'paid') {
+            return res.status(409).json({
+              error: `This booking is already confirmed${
+                bk.confirmation_id ? ` (${bk.confirmation_id})` : ''}.`,
+              already_confirmed: true,
+            });
+          }
 
           // Refuse to confirm a stay that overlaps one already confirmed.
           // The guest calendar hides taken dates, but nothing previously
