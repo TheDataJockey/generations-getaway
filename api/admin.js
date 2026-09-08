@@ -1326,7 +1326,7 @@ const SETTINGS_FALLBACK = {
   ],
   fee_reasons: [
     'Pet fee', 'Private chef', 'Additional cleaning', 'Early check-in',
-    'Late check-out', 'Additional guest', 'Pool heating', 'Damage charge',
+    'Late check-out', 'Additional guest', 'Pool heating ($25/night)', 'Damage charge',
     'Lost key or fob', 'Excessive trash removal', 'Smoking violation',
   ],
 };
