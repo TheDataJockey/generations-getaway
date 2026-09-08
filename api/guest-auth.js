@@ -182,6 +182,9 @@ export default async function handler(req, res) {
   if (req.body?.action === 'create_account') {
     return handleCreateAccount(req, res);
   }
+  if (req.body?.action === 'resend_activation') {
+    return handleResendActivation(req, res);
+  }
 
   // ── IP-level rate limit: max 20 attempts per hour ──
   const ip         = req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
@@ -600,4 +603,90 @@ async function handleCreateAccount(req, res) {
     first_name: guest.first_name,
     confirmation_id: booking?.confirmation_id || null,
   });
+}
+
+// Re-send the account setup link. Reached from the guest portal when a
+// guest lands there after paying but hasn't set up an account yet.
+//
+// Deliberately vague in its responses: it returns the same message whether
+// or not the details matched, so this cannot be used to discover whether a
+// name and confirmation number are valid.
+async function handleResendActivation(req, res) {
+  const VAGUE = 'If those details match a confirmed booking, your setup link is on its way.';
+
+  const settings = await getSecuritySettings();
+  if (!settings.allow_guest_account_creation) {
+    return res.status(403).json({
+      error: 'Online account setup is currently unavailable. Please contact us directly.',
+    });
+  }
+
+  const lastName  = (req.body?.last_name || '').trim();
+  const reference = (req.body?.reference || '').trim().toUpperCase();
+  if (!lastName || !reference) {
+    return res.status(400).json({ error: 'Enter both your last name and confirmation number.' });
+  }
+
+  // Rate limit: this sends email, so cap attempts per IP.
+  const ip = req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+  const hourAgo = new Date(Date.now() - 3600000).toISOString();
+  const { count } = await supabase
+    .from('visitor_logs')
+    .select('id', { count: 'exact', head: true })
+    .eq('ip_address', ip)
+    .eq('page_visited', '/api/guest-auth?resend')
+    .gte('created_at', hourAgo);
+  if ((count || 0) >= 5) {
+    return res.status(429).json({ error: 'Too many attempts. Please try again later.' });
+  }
+  await supabase.from('visitor_logs').insert({
+    ip_address: ip, page_visited: '/api/guest-auth?resend',
+    user_agent: req.headers['user-agent']?.slice(0, 250) || null,
+  });
+
+  try {
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('id, confirmation_id, status, deposit_paid_at, payment_status, ' +
+              'amount_received, check_in_date, check_out_date, request_id, ' +
+              'guests(id, first_name, last_name, email, activated_at)')
+      .eq('confirmation_id', reference)
+      .single();
+
+    const g = booking?.guests;
+    const nameOk = g?.last_name?.trim().toLowerCase() === lastName.toLowerCase();
+    const statusOk = ['confirmed', 'paid', 'checked_in'].includes(booking?.status);
+    const paidOk = !settings.require_deposit_for_account ||
+      !!booking?.deposit_paid_at || booking?.payment_status === 'paid' ||
+      Number(booking?.amount_received || 0) > 0;
+
+    if (!booking || !g?.email || !nameOk || !statusOk || !paidOk) {
+      return res.status(200).json({ message: VAGUE });   // never confirm or deny
+    }
+
+    if (g.activated_at) {
+      return res.status(200).json({
+        message: 'That account is already set up. Sign in with your last name and PIN.',
+      });
+    }
+
+    const cryptoMod = await import('crypto');
+    const token = cryptoMod.randomBytes(24).toString('hex');
+    await supabase.from('guests').update({
+      activation_token:      token,
+      activation_expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+    }).eq('id', g.id);
+
+    const { sendAccountSetup } = await import('./_lib/email.js');
+    await sendAccountSetup({
+      guest: g,
+      booking,
+      activation_url: `https://www.generationsgetawayfl.com/activate.html?t=${token}`,
+    });
+
+    return res.status(200).json({ message: VAGUE });
+  } catch (err) {
+    console.error('[guest-auth] resend failed:', err.message);
+    return res.status(200).json({ message: VAGUE });
+  }
 }

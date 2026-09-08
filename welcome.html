@@ -42,6 +42,25 @@
       background: linear-gradient(160deg, rgba(27,42,74,0.88) 0%, rgba(13,27,46,0.96) 100%),
         url('https://raw.githubusercontent.com/TheDataJockey/generations-getaway/main/assets/pool-day.jpg') center/cover no-repeat fixed;
     }
+    .setup-prompt {
+      margin-top: 1.6rem; padding-top: 1.3rem;
+      border-top: 1px solid rgba(46,95,163,0.25); text-align: center;
+    }
+    .setup-q { font-size: 0.86rem; color: #F4F7FB; margin-bottom: 0.35rem; }
+    .setup-help { font-size: 0.74rem; line-height: 1.65; color: #7A90AE; margin-bottom: 0.7rem; }
+    .btn-link {
+      background: none; border: none; cursor: pointer;
+      color: #5B8DD9; font-family: inherit; font-size: 0.78rem;
+      text-decoration: underline; padding: 0;
+    }
+    .resend-form { margin-top: 1.1rem; text-align: left; }
+    .payment-banner {
+      padding: 0.9rem 1rem; border-radius: 4px; margin-bottom: 1.2rem;
+      background: rgba(127,209,164,0.12); border: 1px solid rgba(127,209,164,0.35);
+      color: #7FD1A4; font-size: 0.84rem; line-height: 1.65; text-align: left;
+    }
+    .payment-banner strong { display: block; margin-bottom: 0.2rem; color: #F4F7FB; }
+
     .login-card {
       width: 100%; max-width: 420px;
       background: rgba(27,42,74,0.6); border: 1px solid rgba(91,141,217,0.25);
@@ -239,6 +258,29 @@
         <p class="attempt-warning" id="attemptWarning" aria-live="polite"></p>
         <button type="submit" class="btn btn-primary" id="loginBtn">Access My Portal</button>
       </form>
+
+      <div class="setup-prompt" id="setupPrompt">
+        <p class="setup-q">Haven't set up your account yet?</p>
+        <p class="setup-help">
+          Your account is created from the link we email once your deposit is
+          received. If you can't find it, we'll send it again.
+        </p>
+        <button type="button" class="btn-link" id="showResend">Resend my setup link</button>
+
+        <form class="resend-form" id="resendForm" hidden autocomplete="off">
+          <div class="form-group">
+            <label for="resendLastName">Last Name</label>
+            <input type="text" id="resendLastName" class="form-control" required/>
+          </div>
+          <div class="form-group">
+            <label for="resendRef">Confirmation Number</label>
+            <input type="text" id="resendRef" class="form-control"
+                   placeholder="GG-RES-2026-0001" style="text-transform:uppercase" required/>
+          </div>
+          <div id="resendAlert" role="alert"></div>
+          <button type="submit" class="btn btn-primary" id="resendBtn">Send My Link</button>
+        </form>
+      </div>
     </div>
   </main>
 
@@ -1064,6 +1106,85 @@
       } catch {}
     }
 
+  </script>
+
+  <script>
+  // Account setup helpers on the portal login screen.
+  (function () {
+    var params = new URLSearchParams(location.search);
+
+    // Arriving straight from a Stripe payment: say so, and point them at
+    // the setup email rather than leaving them staring at a PIN box they
+    // cannot fill in yet.
+    if (params.get('payment') === 'success') {
+      var alertBox = document.getElementById('loginAlert');
+      if (alertBox) {
+        alertBox.innerHTML =
+          '<div class="payment-banner">' +
+          '<strong>Payment received \u2014 thank you.</strong>' +
+          "If this is your first booking with us, check your email for a link " +
+          "to set up your account and choose your door PIN. Already set up? " +
+          "Sign in below." +
+          '</div>';
+      }
+      var prompt = document.getElementById('setupPrompt');
+      if (prompt) prompt.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    var showBtn = document.getElementById('showResend');
+    var form    = document.getElementById('resendForm');
+    if (showBtn && form) {
+      showBtn.addEventListener('click', function () {
+        form.hidden = !form.hidden;
+        if (!form.hidden) document.getElementById('resendLastName').focus();
+      });
+    }
+
+    function say(msg, ok) {
+      var el = document.getElementById('resendAlert');
+      if (!el) return;
+      el.innerHTML = '<p style="font-size:0.78rem;line-height:1.6;margin:0.5rem 0;color:' +
+        (ok ? '#7FD1A4' : '#E8A0A0') + ';">' + msg + '</p>';
+    }
+
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var btn = document.getElementById('resendBtn');
+        var last = document.getElementById('resendLastName').value.trim();
+        var ref  = document.getElementById('resendRef').value.trim();
+        if (!last || !ref) { say('Enter both your last name and confirmation number.', false); return; }
+
+        btn.disabled = true;
+        var original = btn.textContent;
+        btn.textContent = 'Sending\u2026';
+
+        fetch('/api/guest-auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'resend_activation', last_name: last, reference: ref }),
+        })
+          .then(function (r) { return r.json().catch(function () { return {}; })
+            .then(function (d) { return { ok: r.ok, d: d }; }); })
+          .then(function (res) {
+            if (res.ok) {
+              say(res.d.message || 'If those details match a confirmed booking, ' +
+                  'your setup link is on its way.', true);
+              form.reset();
+            } else {
+              say(res.d.error || 'Could not send your link. Please contact us.', false);
+            }
+            btn.disabled = false;
+            btn.textContent = original;
+          })
+          .catch(function () {
+            say('Could not reach the server. Please try again.', false);
+            btn.disabled = false;
+            btn.textContent = original;
+          });
+      });
+    }
+  })();
   </script>
 </body>
 </html>

@@ -824,13 +824,41 @@ async function handleWebhook(req, res) {
           .from('bookings').update(update).eq('id', bookingId);
 
         if (upErr) {
-          // Retry without the newer columns rather than lose the payment record.
-          console.error('[stripe/webhook] Update failed, retrying minimal:', upErr.message);
-          await supabase.from('bookings').update({
-            amount_received:          received,
-            payment_status:           settled ? 'paid' : 'partial',
-            stripe_payment_intent_id: obj.id,
-          }).eq('id', bookingId);
+          // Drop columns one tier at a time rather than falling straight to
+          // the bare minimum. The paid-at timestamps drive the activity feed
+          // and the "Deposit Paid" button state, so losing them makes a
+          // successful payment look like it never happened.
+          console.error('[stripe/webhook] Update failed, retrying without extras:', upErr.message);
+
+          const withoutExtras = { ...update };
+          delete withoutExtras.extra_charges;
+
+          const { error: err2 } = await supabase
+            .from('bookings').update(withoutExtras).eq('id', bookingId);
+
+          if (err2) {
+            console.error('[stripe/webhook] Retry failed, falling back to minimal:', err2.message);
+            const minimal = {
+              amount_received:          received,
+              payment_status:           settled ? 'paid' : 'partial',
+              stripe_payment_intent_id: obj.id,
+            };
+            // Keep the timestamps if those columns exist — try once with them.
+            if (update.deposit_paid_at) minimal.deposit_paid_at = update.deposit_paid_at;
+            if (update.balance_paid_at) minimal.balance_paid_at = update.balance_paid_at;
+
+            const { error: err3 } = await supabase
+              .from('bookings').update(minimal).eq('id', bookingId);
+
+            if (err3) {
+              console.error('[stripe/webhook] Minimal+timestamps failed, bare minimum:', err3.message);
+              await supabase.from('bookings').update({
+                amount_received:          received,
+                payment_status:           settled ? 'paid' : 'partial',
+                stripe_payment_intent_id: obj.id,
+              }).eq('id', bookingId);
+            }
+          }
         }
 
         console.log(`[stripe/webhook] Booking ${bookingId} ${paymentType} $${amountPaid} ` +

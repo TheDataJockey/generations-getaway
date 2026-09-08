@@ -1391,17 +1391,29 @@ async function handleActivity(req, res, token) {
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
 
   try {
-    const [audits, bookings] = await Promise.all([
+    let [audits, bookings] = await Promise.all([
       supabase.from('audit_logs')
         .select('id, admin_email, action, table_name, record_id, notes, created_at')
         .order('created_at', { ascending: false }).limit(limit),
       supabase.from('bookings')
-        .select('id, request_id, status, created_at, check_in_date, check_out_date, ' +
-                'quoted_total, amount_received, payment_status, ' +
+        .select('id, request_id, confirmation_id, status, created_at, ' +
+                'check_in_date, check_out_date, quoted_total, amount_received, ' +
+                'payment_status, extra_charges, ' +
                 'deposit_sent_at, deposit_paid_at, balance_sent_at, balance_paid_at, ' +
                 'guests(first_name, last_name)')
         .order('created_at', { ascending: false }).limit(limit),
     ]);
+
+    // If a column doesn't exist yet, Postgres rejects the whole query and
+    // the feed comes back empty. Retry with the columns that have always
+    // been there rather than showing nothing.
+    if (bookings.error) {
+      console.error('[activity] Wide select failed, retrying:', bookings.error.message);
+      bookings = await supabase.from('bookings')
+        .select('id, request_id, status, created_at, check_in_date, check_out_date, ' +
+                'guests(first_name, last_name)')
+        .order('created_at', { ascending: false }).limit(limit);
+    }
 
     const events = [];
     const who = (b) => b.guests
@@ -1409,7 +1421,7 @@ async function handleActivity(req, res, token) {
       : 'a guest';
 
     for (const b of (bookings.data || [])) {
-      const ref = b.request_id || b.id?.slice(0, 8);
+      const ref = b.confirmation_id || b.request_id || b.id?.slice(0, 8);
       if (b.created_at) {
         events.push({ at: b.created_at, kind: 'booking',
           text: `Booking request ${ref} from ${who(b)} for ${b.check_in_date} to ${b.check_out_date}`,
