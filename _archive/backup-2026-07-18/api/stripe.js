@@ -102,12 +102,7 @@ function setCors(req, res) {
 
 // ── Validate admin session ──
 async function validateAdmin(req) {
-  // Accept the same Authorization: Bearer header the rest of the admin
-  // API uses. This file originally only read x-session-token, so calls
-  // from the dashboard (which sends Bearer) always came back Unauthorized.
-  const authHeader = req.headers['authorization'] || '';
-  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  const token = bearer || req.headers['x-session-token'] || req.body?.session_token;
+  const token = req.headers['x-session-token'] || req.body?.session_token;
   if (!token) return null;
   const { data } = await supabase
     .from('admin_users')
@@ -171,101 +166,26 @@ async function createPaymentLink(req, res) {
   const admin = await validateAdmin(req);
   if (!admin) return res.status(401).json({ error: 'Unauthorized.' });
 
-  const result = await buildPaymentLink({
-    booking_id:    req.body?.booking_id,
-    payment_type:  req.body?.payment_type || 'full',
-    admin_id:      admin.id,
-    custom_amount: req.body?.amount ?? null,
-    custom_reason: req.body?.reason ?? null,
-  });
-  return res.status(result.status).json(result.body);
-}
-
-/**
- * Create a Stripe payment link for a booking and email it to the guest.
- * Shared by the admin endpoint above and the daily cron (balance reminders),
- * so both behave identically. Returns { status, body } rather than writing
- * to a response, because the cron has no response to write to.
- */
-export async function buildPaymentLink({
-  booking_id,
-  payment_type: requestedType = 'full',
-  admin_id = null,
-  custom_amount = null,
-  custom_reason = null,
-}) {
-  // payment_type: 'deposit' (50% now), 'balance' (remainder, due 14 days
-  // before arrival) or 'full'. Defaults to full for backwards compatibility.
-  if (!booking_id) return { status: 400, body: { error: 'booking_id required.' } };
-  // Two kinds of one-off request, and the difference matters:
-  //
-  //   'partial'  an extra payment TOWARD the existing balance. Reduces
-  //              what the guest owes. Does not change the stay total.
-  //   'fee'      a NEW charge on top of the stay (pet fee, extra
-  //              cleaning, damage). Raises what is owed as well as
-  //              what has been received, so the balance is unchanged
-  //              until they pay it.
-  //
-  // 'custom' is kept as an alias for 'fee' so older links keep working.
-  let payment_type = requestedType;
-  if (payment_type === 'custom') payment_type = 'fee';
-
-  if (!['deposit', 'balance', 'full', 'partial', 'fee'].includes(payment_type)) {
-    return { status: 400, body: {
-      error: 'payment_type must be deposit, balance, full, partial or fee.' } };
-  }
-  if (payment_type === 'partial' || payment_type === 'fee') {
-    const c = Number(custom_amount);
-    if (!Number.isFinite(c) || c <= 0 || c > 100000) {
-      return { status: 400, body: { error: 'Enter a charge between $0.01 and $100,000.' } };
-    }
-  }
+  const { booking_id } = req.body;
+  if (!booking_id) return res.status(400).json({ error: 'booking_id required.' });
 
   // Fetch booking + guest
   const { data: booking, error } = await supabase
     .from('bookings')
     .select(`
-      id, request_id, check_in_date, check_out_date, num_nights,
-      total_amount, quoted_total, deposit_amount, balance_amount,
-      balance_due_date, security_deposit, payment_status,
+      id, check_in_date, check_out_date, num_nights,
+      total_amount, security_deposit, payment_status,
       guests(first_name, last_name, email)
     `)
     .eq('id', booking_id)
     .single();
 
-  if (error || !booking) return { status: 404, body: { error: 'Booking not found.' } };
-
-  // Work out what to charge. Bookings taken through the website store
-  // quoted_total / deposit_amount / balance_amount; older ones only have
-  // total_amount, so fall back to that.
-  const fullAmount = booking.quoted_total ?? booking.total_amount;
-  const amountMap = {
-    deposit: booking.deposit_amount,
-    balance: booking.balance_amount,
-    full:    fullAmount,
-    partial: custom_amount,
-    fee:     custom_amount,
-  };
-  const amount = amountMap[payment_type];
-
-  if (amount == null || parseFloat(amount) <= 0) {
-    return { status: 400, body: {
-      error: (payment_type === 'partial' || payment_type === 'fee')
-        ? 'Enter an amount.'
-        : payment_type === 'full'
-          ? 'No total is set on this booking.'
-          : `No ${payment_type} amount is set on this booking. It may predate the deposit schedule.`,
-    } };
-  }
+  if (error || !booking) return res.status(404).json({ error: 'Booking not found.' });
+  if (!booking.total_amount) return res.status(400).json({ error: 'Total amount not set on booking.' });
 
   const guest        = booking.guests;
-  const amountCents  = Math.round(parseFloat(amount) * 100);
+  const amountCents  = Math.round(parseFloat(booking.total_amount) * 100);
   const refundPolicy = getRefundPolicy(booking.check_in_date);
-  const typeLabel    = payment_type === 'deposit' ? 'Deposit (50%)'
-                     : payment_type === 'balance' ? 'Balance'
-                     : payment_type === 'partial' ? (custom_reason || 'Additional Deposit')
-                     : payment_type === 'fee'     ? (custom_reason || 'Additional Charge')
-                     : 'Booking Payment';
 
   // Build description
   const checkIn  = new Date(booking.check_in_date  + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
@@ -273,22 +193,12 @@ export async function buildPaymentLink({
   const nights   = booking.num_nights || Math.round((new Date(booking.check_out_date) - new Date(booking.check_in_date)) / 86400000);
 
   // Create Stripe Price (one-off)
-  // NOTE: price.product_data accepts name, metadata, statement_descriptor,
-  // tax_code and unit_label — but NOT description. Sending description
-  // returns "Received unknown parameter: product_data[description]".
-  // The stay details go in metadata instead, where they stay searchable
-  // in the Stripe dashboard.
   const price = await stripe('POST', '/prices', {
     currency:    'usd',
     unit_amount: amountCents,
     product_data: {
-      name: `Generations Getaway LLC — ${typeLabel}`,
-      metadata: {
-        stay:     `${checkIn} to ${checkOut}`,
-        nights:   String(nights),
-        guest:    `${guest.first_name} ${guest.last_name || ''}`.trim(),
-        booking_id,
-      },
+      name:        'Generations Getaway LLC — Booking Payment',
+      description: `${nights} night stay · ${checkIn} – ${checkOut} · ${guest.first_name} ${guest.last_name}`,
     },
   });
 
@@ -301,7 +211,6 @@ export async function buildPaymentLink({
     },
     metadata: {
       booking_id,
-      payment_type,
       guest_email: guest.email,
       check_in:    booking.check_in_date,
       check_out:   booking.check_out_date,
@@ -312,85 +221,40 @@ export async function buildPaymentLink({
       description: `Generations Getaway LLC — ${checkIn} to ${checkOut}`,
       metadata: {
         booking_id,
-        payment_type,
         check_in:  booking.check_in_date,
         check_out: booking.check_out_date,
       },
-      // NOTE: receipt_email is NOT valid inside payment_intent_data on a
-      // Payment Link — only on the PaymentIntents API directly. Stripe
-      // collects the payer's email at checkout and sends its own receipt,
-      // so nothing is lost by omitting it.
+      receipt_email: guest.email,
     },
     phone_number_collection: { enabled: false },
   });
 
-  // Save link to booking. Deposit and balance links are stored in their
-  // own columns so one doesn't overwrite the other.
-  const updates = {
-    stripe_payment_link_id:  paymentLink.id,
-    stripe_payment_link_url: paymentLink.url,
-    payment_status: 'pending',
-  };
-  // A custom charge is a one-off; it must not overwrite the deposit or
-  // balance link columns, or the modal would show it as the deposit.
-  if (payment_type === 'deposit') {
-    updates.deposit_link_url  = paymentLink.url;
-    updates.deposit_sent_at   = new Date().toISOString();
-  } else if (payment_type === 'balance') {
-    updates.balance_link_url  = paymentLink.url;
-    updates.balance_sent_at   = new Date().toISOString();
-  }
-
-  const { error: saveErr } = await supabase
-    .from('bookings').update(updates).eq('id', booking_id);
-  if (saveErr) {
-    // Retry without the newer columns so a missing migration doesn't
-    // lose a link that Stripe has already created.
-    console.error('[stripe] Save failed, retrying minimal:', saveErr.message);
-    await supabase.from('bookings').update({
-      stripe_payment_link_id:  paymentLink.id,
+  // Save link to booking
+  await supabase
+    .from('bookings')
+    .update({
+      stripe_payment_link_id: paymentLink.id,
       stripe_payment_link_url: paymentLink.url,
       payment_status: 'pending',
-    }).eq('id', booking_id);
-  }
-
-  // Email the link to the guest.
-  let emailed = null;
-  try {
-    const { sendPaymentRequest } = await import('./_lib/email.js');
-    const result = await sendPaymentRequest({
-      guest,
-      booking,
-      payment_type,
-      amount,
-      payment_url: paymentLink.url,
-    });
-    emailed = result?.success
-      ? `Emailed ${guest.email}`
-      : `Email failed: ${result?.error || 'unknown'}`;
-  } catch (mailErr) {
-    console.error('[stripe] Payment email failed:', mailErr.message);
-    emailed = `Email failed: ${mailErr.message}`;
-  }
+    })
+    .eq('id', booking_id);
 
   // Log to audit
   await supabase.from('audit_logs').insert({
-    admin_id:   admin_id,
+    admin_id:   admin.id,
     action:     'stripe_payment_link_created',
     table_name: 'bookings',
     record_id:  booking_id,
-    new_values: { payment_link: paymentLink.url, amount, payment_type },
+    new_values: { payment_link: paymentLink.url, amount: booking.total_amount },
   });
 
-  return { status: 200, body: {
+  return res.status(200).json({
     success:      true,
     payment_url:  paymentLink.url,
     payment_link_id: paymentLink.id,
-    payment_type,
-    amount,
-    emailed,
+    amount:       booking.total_amount,
     refund_policy: refundPolicy,
-  } };
+  });
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -550,19 +414,11 @@ async function refundPayment(req, res) {
     reason:         'requested_by_customer',
   });
 
-  const refundAmount = Number((refundCents / 100).toFixed(2));
-
-  // Subtract from what was actually received, not from total_amount —
-  // website bookings store their figure in quoted_total, so total_amount
-  // is often null and the old arithmetic produced NaN.
-  const receivedBefore = Number(booking.amount_received || 0);
-  const receivedAfter  = Number(Math.max(0, receivedBefore - refundAmount).toFixed(2));
-  const owed           = Number(booking.quoted_total ?? booking.total_amount ?? 0);
-
+  const refundAmount = (refundCents / 100).toFixed(2);
   await supabase.from('bookings').update({
-    payment_status:  receivedAfter <= 0 ? 'refunded' : 'partial',
-    amount_received: receivedAfter,
-    balance_due:     owed > 0 ? Number(Math.max(0, owed - receivedAfter).toFixed(2)) : 0,
+    payment_status:   'refunded',
+    amount_received:  (parseFloat(booking.total_amount) - parseFloat(refundAmount)).toFixed(2),
+    balance_due:      0,
   }).eq('id', booking_id);
 
   await supabase.from('audit_logs').insert({
@@ -617,224 +473,50 @@ export const config = { api: { bodyParser: false } };
 async function handleWebhook(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  // ── Read the body ──
-  // `export const config = { api: { bodyParser: false } }` is a Next.js
-  // convention that plain Vercel functions ignore, so the body is already
-  // parsed by the time we get here and the raw stream yields nothing.
-  // Read the stream if it has anything, otherwise fall back to req.body.
-  let rawBody = '';
-  try {
-    rawBody = await new Promise((resolve) => {
-      let body = '';
-      let settled = false;
-      const done = () => { if (!settled) { settled = true; resolve(body); } };
-      req.on('data', chunk => { body += chunk.toString(); });
-      req.on('end', done);
-      req.on('error', done);
-      setTimeout(done, 1000);        // never hang if the stream is spent
-    });
-  } catch { rawBody = ''; }
+  // Read raw body for signature verification
+  const rawBody = await new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', () => resolve(body));
+    req.on('error', reject);
+  });
 
-  let event = null;
-  if (rawBody) {
-    try { event = JSON.parse(rawBody); } catch { /* fall through */ }
-  }
-  if (!event && req.body) {
-    event = typeof req.body === 'string'
-      ? (() => { try { return JSON.parse(req.body); } catch { return null; } })()
-      : req.body;
-  }
-  if (!event?.type) {
-    console.error('[stripe/webhook] No readable event body');
-    return res.status(400).json({ error: 'Invalid payload.' });
-  }
-
-  // ── Verify authenticity ──
-  // Preferred: HMAC over the raw body. If the body was already parsed we
-  // cannot reproduce the exact bytes, so instead we re-fetch the object
-  // straight from Stripe using its id. A forged payload fails that check
-  // because the id will not exist in our account.
-  let verified = false;
-
-  if (rawBody && STRIPE_WEBHOOK_SECRET) {
+  // Verify webhook signature if secret is set
+  if (STRIPE_WEBHOOK_SECRET) {
     const sig       = req.headers['stripe-signature'];
     const timestamp = sig?.match(/t=(\d+)/)?.[1];
     const sigHash   = sig?.match(/v1=([a-f0-9]+)/)?.[1];
+
     if (timestamp && sigHash) {
       const crypto   = await import('crypto');
-      const expected = crypto
-        .createHmac('sha256', STRIPE_WEBHOOK_SECRET)
-        .update(`${timestamp}.${rawBody}`)
-        .digest('hex');
+      const payload  = `${timestamp}.${rawBody}`;
+      const expected = crypto.createHmac('sha256', STRIPE_WEBHOOK_SECRET).update(payload).digest('hex');
       if (expected !== sigHash) {
         console.error('[stripe/webhook] Signature mismatch');
         return res.status(400).json({ error: 'Invalid signature.' });
       }
-      verified = true;
     }
   }
 
-  if (!verified) {
-    const objId = event.data?.object?.id;
-    if (!objId) {
-      console.error('[stripe/webhook] Cannot verify: no object id');
-      return res.status(400).json({ error: 'Unverifiable event.' });
-    }
-    try {
-      const path = objId.startsWith('pi_')  ? `/payment_intents/${objId}`
-                 : objId.startsWith('ch_')  ? `/charges/${objId}`
-                 : objId.startsWith('re_')  ? `/refunds/${objId}`
-                 : objId.startsWith('cs_')  ? `/checkout/sessions/${objId}`
-                 : null;
-      if (!path) {
-        console.log('[stripe/webhook] Ignoring unhandled object type:', objId);
-        return res.status(200).json({ received: true, ignored: true });
-      }
-      const fresh = await stripe('GET', path);
-      // Trust Stripe's copy, not the posted one.
-      event.data.object = fresh;
-      verified = true;
-      console.log('[stripe/webhook] Verified by re-fetch:', objId);
-    } catch (verifyErr) {
-      console.error('[stripe/webhook] Re-fetch failed:', verifyErr.message);
-      return res.status(400).json({ error: 'Could not verify event with Stripe.' });
-    }
-  }
-
+  let event;
+  try { event = JSON.parse(rawBody); }
+  catch { return res.status(400).json({ error: 'Invalid JSON.' }); }
 
   const obj = event.data?.object;
 
   switch (event.type) {
 
     case 'payment_intent.succeeded': {
-      const bookingId   = obj.metadata?.booking_id;
-      const paymentType = obj.metadata?.payment_type || 'full';
+      const bookingId = obj.metadata?.booking_id;
       if (bookingId) {
-        const amountPaid = Number((obj.amount_received / 100).toFixed(2));
-
-        // A deposit is NOT the whole stay. Marking it 'paid' and zeroing
-        // balance_due would hide the outstanding half, so accumulate what
-        // has actually been received and only settle when it covers the total.
-        const { data: current } = await supabase
-          .from('bookings')
-          .select('amount_received, quoted_total, total_amount, deposit_amount, ' +
-                  'balance_amount, extra_charges, stripe_payment_intent_id')
-          .eq('id', bookingId)
-          .single();
-
-        // Idempotency: Stripe retries a webhook until it gets a 200, and
-        // may deliver the same event more than once. Without this guard a
-        // retry would add the same payment twice.
-        if (current?.stripe_payment_intent_id === obj.id) {
-          console.log(`[stripe/webhook] ${obj.id} already recorded, skipping`);
-          return res.status(200).json({ received: true, duplicate: true });
-        }
-
-        const previous = Number(current?.amount_received || 0);
-        const received = Number((previous + amountPaid).toFixed(2));
-
-        // A custom charge is IN ADDITION to the quoted stay, so it raises
-        // what is owed as well as what has been received. Without this the
-        // extra payment would look like it had settled part of the stay and
-        // the outstanding balance would read too low.
-        const extrasBefore = Number(current?.extra_charges || 0);
-        // Only a service FEE raises the total. An additional deposit is a
-        // payment toward the existing balance, so it reduces what is owed
-        // without changing the stay total.
-        const extras = (paymentType === 'fee' || paymentType === 'custom')
-          ? Number((extrasBefore + amountPaid).toFixed(2))
-          : extrasBefore;
-
-        const base    = Number(current?.quoted_total ?? current?.total_amount ?? 0);
-        const owed    = Number((base + extras).toFixed(2));
-        const settled = owed > 0 && received + 0.01 >= owed;
-
-        const update = {
-          amount_received:          received,
-          extra_charges:            extras,
-          balance_due:              owed > 0 ? Math.max(0, Number((owed - received).toFixed(2))) : 0,
-          payment_status:           settled ? 'paid' : 'partial',
-          stripe_payment_intent_id: obj.id,
-        };
-        if (paymentType === 'deposit') update.deposit_paid_at = new Date().toISOString();
-        if (paymentType === 'balance') update.balance_paid_at = new Date().toISOString();
-
-        // Once money has arrived, invite the guest to set up their account
-        // and choose the PIN that opens the door. Sent once.
-        if (paymentType === 'deposit' || settled) {
-          try {
-            const { data: full } = await supabase
-              .from('bookings')
-              .select('id, request_id, confirmation_id, check_in_date, check_out_date, ' +
-                      'account_email_sent_at, guest_id, ' +
-                      'guests(id, first_name, last_name, email, activated_at, pin_set_by_guest)')
-              .eq('id', bookingId).single();
-
-            const g = full?.guests;
-
-            // Only a confirmed reservation can set up an account, because
-            // the confirmation number is one of the two identity checks.
-            if (g?.email && !full.account_email_sent_at && full.confirmation_id) {
-              const mail = await import('./_lib/email.js');
-              const returning = !!g.activated_at;
-              let sent;
-
-              if (returning) {
-                // A repeat guest already has a PIN. Asking them to "create
-                // an account" would send them to a page that rejects them,
-                // so confirm their booking and remind them of their PIN instead.
-                sent = await mail.sendReturningGuestConfirmation({
-                  guest: g, booking: full,
-                });
-              } else {
-                const cryptoMod = await import('crypto');
-                const activationToken = cryptoMod.randomBytes(24).toString('hex');
-                const expires = new Date(Date.now() + 30 * 86400000).toISOString();
-
-                await supabase.from('guests').update({
-                  activation_token:      activationToken,
-                  activation_expires_at: expires,
-                }).eq('id', g.id);
-
-                sent = await mail.sendAccountSetup({
-                  guest: g,
-                  booking: full,
-                  activation_url: `${BASE_URL}/activate.html?t=${activationToken}`,
-                });
-              }
-
-              if (sent?.success) {
-                await supabase.from('bookings')
-                  .update({ account_email_sent_at: new Date().toISOString() })
-                  .eq('id', bookingId);
-                console.log(`[stripe/webhook] ${returning ? 'Returning-guest' : 'Account setup'} email sent for ${bookingId}`);
-              } else {
-                console.error('[stripe/webhook] Guest email failed:', sent?.error);
-              }
-            } else if (g?.email && !full?.confirmation_id) {
-              console.log(`[stripe/webhook] Skipping account email for ${bookingId} — no confirmation number yet`);
-            }
-          } catch (acctErr) {
-            // Never let this break the payment record.
-            console.error('[stripe/webhook] Account setup step failed:', acctErr.message);
-          }
-        }
-
-        const { error: upErr } = await supabase
-          .from('bookings').update(update).eq('id', bookingId);
-
-        if (upErr) {
-          // Retry without the newer columns rather than lose the payment record.
-          console.error('[stripe/webhook] Update failed, retrying minimal:', upErr.message);
-          await supabase.from('bookings').update({
-            amount_received:          received,
-            payment_status:           settled ? 'paid' : 'partial',
-            stripe_payment_intent_id: obj.id,
-          }).eq('id', bookingId);
-        }
-
-        console.log(`[stripe/webhook] Booking ${bookingId} ${paymentType} $${amountPaid} ` +
-                    `(received $${received} of $${owed}) → ${update.payment_status}`);
+        const amountPaid = (obj.amount_received / 100).toFixed(2);
+        await supabase.from('bookings').update({
+          payment_status:            'paid',
+          amount_received:           amountPaid,
+          balance_due:               0,
+          stripe_payment_intent_id:  obj.id,
+        }).eq('id', bookingId);
+        console.log(`[stripe/webhook] Booking ${bookingId} paid: $${amountPaid}`);
       }
       break;
     }

@@ -1,0 +1,79 @@
+/**
+ * FILE: api/visitor-log.js
+ * ENDPOINT: POST /api/visitor-log
+ * USED BY: All public pages via /js/main.js (runs silently)
+ * ============================================================
+ * PURPOSE:
+ *   Basic anonymous analytics. Records page visits without
+ *   using any third-party tracking services.
+ *   Visitors are not aware this is running.
+ *
+ * WHAT IS RECORDED:
+ *   - Which page was visited
+ *   - Browser and device type
+ *   - IP address (also used for rate limiting in guest-auth)
+ *   - Where the visitor came from (referrer)
+ *
+ * DATABASE TABLES USED:
+ *   - visitor_logs (one row inserted per page visit)
+ */
+
+import { createClient } from '@supabase/supabase-js';
+
+// Strip any trailing /rest/v1 from URL — Vercel env vars sometimes include it
+const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || '')
+  .replace(/\/rest\/v1\/?$/, '')
+  .replace(/\/$/, '');
+
+const supabase = createClient(
+  SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { persistSession: false } }
+);
+
+
+export default async function handler(req, res) {
+  // Allow both www and non-www
+  const origin = req.headers.origin || '';
+  if (origin.includes('generationsgetawayfl.com') || origin.includes('localhost') || origin.includes('vercel.app')) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).end();
+
+  try {
+    const {
+      session_id,
+      page_visited,
+      referrer,
+      user_agent,
+      device_type,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+    } = req.body;
+
+    const ip = req.headers['x-forwarded-for']?.split(',')[0] || null;
+
+    await supabase.from('visitor_logs').insert({
+      session_id,
+      page_visited: page_visited || null,
+      referrer:     referrer     || null,
+      user_agent:   user_agent   || null,
+      device_type:  device_type  || 'unknown',
+      ip_address:   ip,
+      utm_source:   utm_source   || null,
+      utm_medium:   utm_medium   || null,
+      utm_campaign: utm_campaign || null,
+    });
+
+    return res.status(200).json({ success: true });
+  } catch {
+    // Silently fail — analytics must never break the site
+    return res.status(200).json({ success: true });
+  }
+}

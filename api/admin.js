@@ -349,7 +349,7 @@ async function handleBookings(req, res, token) {
       }
       let query = supabase
         .from('bookings')
-        .select('id, status, check_in_date, check_out_date, num_nights, num_guests, booking_source, total_amount, quoted_total, amount_received, balance_due, payment_method, payment_status, stripe_payment_link_url, request_id, created_at, guests(first_name, last_name, email, phone)')
+        .select('id, status, check_in_date, check_out_date, num_nights, num_guests, booking_source, total_amount, quoted_total, amount_received, balance_due, extra_charges, payment_method, payment_status, stripe_payment_link_url, request_id, created_at, guests(first_name, last_name, email, phone)')
         .order('check_in_date', { ascending: false });
       if (status) query = query.eq('status', status);
       if (year && month) {
@@ -397,6 +397,7 @@ async function handleBookings(req, res, token) {
         total_amount:  b.total_amount ?? b.quoted_total ?? null,
         amount_received: b.amount_received ?? null,
         balance_due:   b.balance_due ?? null,
+        extra_charges: b.extra_charges ?? 0,
         payment_status: b.payment_status ?? null,
         stripe_payment_link_url: b.stripe_payment_link_url ?? null,
         request_id:    b.request_id ?? null,

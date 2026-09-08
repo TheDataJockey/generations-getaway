@@ -2148,16 +2148,21 @@
     window.sendPaymentRequest = async function(bookingId, type, btn) {
       let amount = null, reason = null;
 
-      if (type === 'custom') {
+      if (type === 'oneoff') {
+        // Which kind matters: a deposit reduces the balance, a fee raises
+        // the total. The selector decides which payment_type we send.
+        type   = document.getElementById('extraType')?.value || 'partial';
         amount = parseFloat(document.getElementById('extraAmount')?.value || '');
         reason = (document.getElementById('extraReason')?.value || '').trim();
-        if (!amount || amount <= 0) { alert('Enter an amount to charge.'); return; }
-        if (!reason) reason = 'Additional charge';
+        if (!amount || amount <= 0) { alert('Enter an amount.'); return; }
+        if (!reason) reason = type === 'fee' ? 'Additional charge' : 'Additional deposit';
       }
 
       const label = type === 'deposit' ? 'deposit'
                   : type === 'balance' ? 'balance'
-                  : `${reason} of $${amount.toFixed(2)}`;
+                  : type === 'fee'
+                    ? `${reason} of $${amount.toFixed(2)} (added to their total)`
+                    : `${reason} of $${amount.toFixed(2)} (toward their balance)`;
       if (!confirm(`Send the ${label} payment request to the guest?\n\n` +
                    `A secure Stripe link will be created and emailed to them.`)) return;
 
@@ -2273,7 +2278,9 @@
                 : 'Not recorded'}
             </div></div>
           ${(data.status === 'confirmed' || data.status === 'paid') ? (() => {
-            const owed     = Number(data.quoted_total ?? data.total_amount ?? 0);
+            // Extra charges are on top of the quoted stay, not part of it.
+            const extras   = Number(data.extra_charges || 0);
+            const owed     = Number(data.quoted_total ?? data.total_amount ?? 0) + extras;
             const received = Number(data.amount_received || 0);
             const outstanding = Math.max(0, owed - received);
             const depositPaid = !!data.deposit_paid_at;
@@ -2287,7 +2294,8 @@
                 ${fullyPaid ? 'Paid in full' : received > 0 ? 'Partially paid' : 'Awaiting payment'}
               </span>
               <span style="color:rgba(164,196,224,0.85);">
-                &nbsp;&middot;&nbsp; ${money(received)} received of ${money(owed)}
+                &nbsp;&middot;&nbsp; ${money(received)} received of ${money(owed)}${
+                  extras > 0 ? ` (incl. ${money(extras)} extra)` : ''}
                 ${outstanding > 0 ? ` &middot; ${money(outstanding)} outstanding` : ''}
               </span>
             </div>
@@ -2306,21 +2314,34 @@
               </button>
             </div>
 
-            <div style="margin-top:0.9rem;display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;">
-              <div style="flex:1;min-width:150px;">
-                <label style="font-size:0.6rem;">Additional Charge ($)</label>
-                <input type="number" id="extraAmount" min="1" step="0.01" placeholder="e.g. 250.00"
+            <label style="margin-top:1rem;">One-Off Request</label>
+            <div style="margin-top:0.4rem;display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;">
+              <div style="flex:1.2;min-width:180px;">
+                <label style="font-size:0.6rem;">Type</label>
+                <select id="extraType"
+                  style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
+                         border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;">
+                  <option value="partial">Additional deposit — reduces balance</option>
+                  <option value="fee">Service fee — added to total</option>
+                </select>
+              </div>
+              <div style="flex:1;min-width:130px;">
+                <label style="font-size:0.6rem;">Amount ($)</label>
+                <input type="number" id="extraAmount" min="1" step="0.01" placeholder="250.00"
                   style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
                          border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
               </div>
               <div style="flex:1.4;min-width:170px;">
-                <label style="font-size:0.6rem;">Reason (shown to guest)</label>
-                <input type="text" id="extraReason" placeholder="Additional deposit"
+                <label style="font-size:0.6rem;">Description (shown to guest)</label>
+                <input type="text" id="extraReason" placeholder="Pet fee"
                   style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
                          border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
               </div>
-              <button class="btn btn-ghost" data-pay="custom" data-booking="${data.id}">Send Request</button>
+              <button class="btn btn-ghost" data-pay="oneoff" data-booking="${data.id}">Send Request</button>
             </div>
+            <p style="margin-top:0.4rem;font-size:0.7rem;color:var(--muted);line-height:1.6;" id="extraHint">
+              An additional deposit counts toward what they already owe.
+            </p>
 
             <div style="margin-top:0.7rem;font-size:0.75rem;color:var(--muted);line-height:1.7;">
               ${data.deposit_sent_at ? `Deposit request sent ${new Date(data.deposit_sent_at).toLocaleString('en-US')}${data.deposit_paid_at ? ` &middot; paid ${new Date(data.deposit_paid_at).toLocaleString('en-US')}` : ''}<br/>` : ''}
@@ -2336,6 +2357,15 @@
           ` : ''}`;
         document.getElementById('approveBookingBtn').dataset.id = bookingId;
         document.getElementById('declineBookingBtn').dataset.id = bookingId;
+
+        var typeSel = document.getElementById('extraType');
+        if (typeSel) {
+          typeSel.addEventListener('change', function () {
+            document.getElementById('extraHint').textContent = this.value === 'fee'
+              ? 'A service fee is added to their total, so the balance owed goes up by this amount.'
+              : 'An additional deposit counts toward what they already owe.';
+          });
+        }
 
         document.querySelectorAll('[data-pay]').forEach(function (btn) {
           btn.addEventListener('click', function () {
