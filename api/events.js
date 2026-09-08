@@ -209,7 +209,9 @@ async function fetchTicketmaster(year, month, lat, lng) {
 
   try {
     const startDate = `${year}-${String(month).padStart(2,'0')}-01T00:00:00Z`;
-    const endDate   = new Date(year, month, 0).toISOString().replace('.000', '');
+    const lastDay   = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const endDate   = `${year}-${String(month).padStart(2,'0')}-` +
+                      `${String(lastDay).padStart(2,'0')}T23:59:59Z`;
 
     const url = new URL('https://app.ticketmaster.com/discovery/v2/events.json');
     url.searchParams.set('apikey',       apiKey);
@@ -235,9 +237,10 @@ async function fetchTicketmaster(year, month, lat, lng) {
         name:            e.name || '',
         description:     e.info || e.pleaseNote || '',
         event_date:      dateInfo?.localDate || '',
-        start_time:      dateInfo?.localDate && dateInfo?.localTime
-          ? `${dateInfo.localDate}T${dateInfo.localTime}`
-          : null,
+        // Plain time only. Database rows store "19:00:00" and the events
+        // page parses it that way; a full ISO datetime here made the page
+        // read the year as the hour.
+        start_time:      dateInfo?.localTime || null,
         venue_name:      venue?.name || '',
         address:         venue?.address?.line1 || '',
         city:            venue?.city?.name    || 'Fort Lauderdale',
