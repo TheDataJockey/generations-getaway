@@ -739,5 +739,299 @@
   </footer>
 
   <script src="/js/main.js" defer></script>
+
+  <!-- Events: fetch by month, render calendar / week / list -->
+  <script>
+  (function () {
+    'use strict';
+
+    var events = [];
+    var year   = new Date().getFullYear();
+    var month  = new Date().getMonth();      // 0-11
+    var weekStart = null;                    // Date, when in week view
+
+    var MONTHS = ['January','February','March','April','May','June','July',
+                  'August','September','October','November','December'];
+    var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+    function esc(t) {
+      return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) {
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+      });
+    }
+    function iso(y, m, d) {
+      return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    }
+    function todayIso() { return new Date().toISOString().slice(0, 10); }
+
+    // The database uses values like 'music_concerts'; the colour classes
+    // are the short form (.evt-music). Map one to the other.
+    var TYPE_CLASS = {
+      music_concerts: 'music',   food_drink:      'food',
+      arts_culture:   'arts',    sports_outdoors: 'sports',
+      family_kids:    'family',  festivals_fairs: 'festivals',
+      nightlife:      'nightlife', community_local: 'community',
+      holiday_seasonal: 'holiday', theater_shows: 'theater',
+    };
+    function typeClass(t) {
+      var k = String(t || '').toLowerCase();
+      return 'evt-' + (TYPE_CLASS[k] || (/^(music|food|arts|sports|family|festivals|nightlife|community|holiday|theater)$/.test(k) ? k : 'other'));
+    }
+    function typeLabel(t) {
+      return String(t || '').replace(/_/g, ' ');
+    }
+    function timeLabel(e) {
+      if (!e.start_time) return '';
+      var p = String(e.start_time).split(':');
+      var h = parseInt(p[0], 10); var m = p[1] || '00';
+      var ap = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return h + ':' + m + ' ' + ap;
+    }
+    function priceLabel(e) {
+      if (e.is_free) return 'Free';
+      if (e.price_min != null && e.price_max != null && e.price_min !== e.price_max)
+        return '$' + e.price_min + '\u2013$' + e.price_max;
+      if (e.price_min != null) return '$' + e.price_min;
+      return '';
+    }
+
+    /* ── Filters ── */
+    function visible() {
+      var q    = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+      var date = document.getElementById('dateInput').value;
+      var type = document.getElementById('typeFilter').value;
+      var src  = document.getElementById('sourceFilter').value;
+
+      return events.filter(function (e) {
+        if (type && e.event_type !== type) return false;
+        if (src  && e.source !== src) return false;
+        if (date && e.event_date !== date) return false;
+        if (q) {
+          var hay = [e.name, e.description, e.short_description, e.venue_name, e.city]
+            .join(' ').toLowerCase();
+          if (hay.indexOf(q) === -1) return false;
+        }
+        return true;
+      });
+    }
+
+    /* ── Month grid ── */
+    function renderMonth() {
+      var list = visible();
+      var byDate = {};
+      list.forEach(function (e) { (byDate[e.event_date] = byDate[e.event_date] || []).push(e); });
+
+      document.getElementById('calMonthTitle').innerHTML =
+        MONTHS[month] + ' <em>' + year + '</em>';
+
+      var first = new Date(Date.UTC(year, month, 1)).getUTCDay();
+      var days  = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+      var today = todayIso();
+      var html  = '';
+
+      for (var i = 0; i < first; i++) html += '<div class="cal-day other-month"></div>';
+
+      for (var d = 1; d <= days; d++) {
+        var key = iso(year, month, d);
+        var dayEvents = byDate[key] || [];
+        var pills = dayEvents.slice(0, 3).map(function (e) {
+          return '<div class="cal-event-pill ' + typeClass(e.event_type) +
+                 '" data-id="' + esc(e.id) + '">' + esc(e.name) + '</div>';
+        }).join('');
+        var more = dayEvents.length > 3
+          ? '<button class="cal-more-btn" data-day="' + key + '">+' +
+            (dayEvents.length - 3) + ' more</button>' : '';
+
+        html += '<div class="cal-day' + (key === today ? ' today' : '') + '" data-day="' + key + '">' +
+                '<div class="cal-day-num">' + d + '</div>' +
+                '<div class="cal-day-events">' + pills + more + '</div></div>';
+      }
+
+      document.getElementById('calDaysGrid').innerHTML = html;
+      wireDayClicks();
+      renderList(list);
+    }
+
+    /* ── Week view ── */
+    function renderWeek() {
+      var list = visible();
+      var start = weekStart || new Date();
+      start = new Date(start); start.setDate(start.getDate() - start.getDay());
+
+      document.getElementById('weekTitle').innerHTML = 'Week of <em>' +
+        start.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) + '</em>';
+
+      var html = '';
+      for (var i = 0; i < 7; i++) {
+        var d = new Date(start); d.setDate(start.getDate() + i);
+        var key = iso(d.getFullYear(), d.getMonth(), d.getDate());
+        var dayEvents = list.filter(function (e) { return e.event_date === key; });
+        html += '<div class="week-day-col">' +
+          '<div class="week-day-header">' +
+            '<div class="week-day-name">' + DOW[i] + '</div>' +
+            '<div class="week-day-num' + (key === todayIso() ? ' today' : '') + '">' +
+              d.getDate() + '</div>' +
+          '</div>' +
+          '<div class="week-day-events">' +
+            (dayEvents.length
+              ? dayEvents.map(function (e) {
+                  return '<div class="week-event-item ' + typeClass(e.event_type) +
+                    '" data-id="' + esc(e.id) + '">' +
+                    (timeLabel(e) ? '<div class="week-event-time">' + timeLabel(e) + '</div>' : '') +
+                    esc(e.name) + '</div>';
+                }).join('')
+              : '') +
+          '</div></div>';
+      }
+      document.getElementById('weekGrid').innerHTML = html;
+      wireDayClicks();
+      renderList(list);
+    }
+
+    /* ── List below the calendar ── */
+    function renderList(list) {
+      var el = document.getElementById('eventList');
+      document.getElementById('listCount').textContent =
+        list.length + (list.length === 1 ? ' event' : ' events');
+
+      if (!list.length) {
+        el.innerHTML = '<p style="text-align:center;color:var(--muted);padding:2.5rem 1rem;">' +
+          'No events match those filters.</p>';
+        return;
+      }
+
+      el.innerHTML = list.map(function (e) {
+        var d = new Date(e.event_date + 'T00:00:00');
+        return '<div class="event-list-item" data-id="' + esc(e.id) + '">' +
+          '<div class="event-date-block">' +
+            '<div class="event-date-month">' + d.toLocaleDateString('en-US', { month: 'short' }) + '</div>' +
+            '<div class="event-date-day">' + d.getDate() + '</div>' +
+            '<div class="event-date-dow">' + d.toLocaleDateString('en-US', { weekday: 'short' }) + '</div>' +
+          '</div>' +
+          '<div class="event-info">' +
+            '<h3 class="event-name">' + esc(e.name) + '</h3>' +
+            '<div class="event-meta">' +
+              (timeLabel(e) ? '<span>' + timeLabel(e) + '</span>' : '') +
+              (e.venue_name ? '<span>' + esc(e.venue_name) + '</span>' : '') +
+              (priceLabel(e) ? '<span>' + priceLabel(e) + '</span>' : '') +
+              (e.event_type ? '<span class="event-type-badge ' + typeClass(e.event_type) + '">' +
+                esc(typeLabel(e.event_type)) + '</span>' : '') +
+            '</div>' +
+            (e.short_description || e.description
+              ? '<p class="event-desc">' + esc(e.short_description || e.description) + '</p>' : '') +
+          '</div>' +
+          '<div class="event-actions">' +
+            (e.ticket_url ? '<a class="event-ticket-btn" href="' + esc(e.ticket_url) +
+              '" target="_blank" rel="noopener">Tickets</a>' : '') +
+            (e.source_url && !e.ticket_url ? '<a class="event-ticket-btn" href="' + esc(e.source_url) +
+              '" target="_blank" rel="noopener">Details</a>' : '') +
+          '</div></div>';
+      }).join('');
+    }
+
+    /* ── Day popup ── */
+    function wireDayClicks() {
+      document.querySelectorAll('[data-day]').forEach(function (el) {
+        el.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          showDay(el.dataset.day);
+        });
+      });
+    }
+
+    function showDay(key) {
+      var list = visible().filter(function (e) { return e.event_date === key; });
+      if (!list.length) return;
+      var d = new Date(key + 'T00:00:00');
+      document.getElementById('dayPopupTitle').textContent =
+        d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      document.getElementById('dayPopupBody').innerHTML = list.map(function (e) {
+        return '<div style="padding:0.7rem 0;border-bottom:1px solid rgba(46,95,163,0.15);">' +
+          '<strong style="color:var(--cream);">' + esc(e.name) + '</strong>' +
+          '<div style="font-size:0.75rem;color:var(--muted);margin-top:0.2rem;">' +
+            [timeLabel(e), e.venue_name, priceLabel(e)].filter(Boolean).map(esc).join(' \u00b7 ') +
+          '</div>' +
+          (e.ticket_url ? '<a class="event-ticket-btn" style="margin-top:0.4rem;display:inline-block;" href="' +
+            esc(e.ticket_url) + '" target="_blank" rel="noopener">Tickets</a>' : '') +
+        '</div>';
+      }).join('');
+      document.getElementById('dayPopup').classList.add('open');
+    }
+
+    document.getElementById('closeDayPopup').addEventListener('click', function () {
+      document.getElementById('dayPopup').classList.remove('open');
+    });
+    document.getElementById('dayPopup').addEventListener('click', function (e) {
+      if (e.target === this) this.classList.remove('open');
+    });
+
+    /* ── Load ── */
+    function render() {
+      if (document.getElementById('weeklyView').classList.contains('active')) renderWeek();
+      else renderMonth();
+    }
+
+    function load() {
+      var grid = document.getElementById('calDaysGrid');
+      grid.innerHTML = '';
+      fetch('/api/events?year=' + year + '&month=' + (month + 1))
+        .then(function (r) { return r.json(); })
+        .then(function (d) { events = d.events || []; render(); })
+        .catch(function (err) {
+          console.error('[events]', err);
+          document.getElementById('eventList').innerHTML =
+            '<p style="text-align:center;color:#E8A0A0;padding:2.5rem 1rem;">' +
+            'We could not load events right now. Please try again shortly.</p>';
+          document.getElementById('listCount').textContent = '';
+        });
+    }
+
+    /* ── Controls ── */
+    document.getElementById('calPrev').addEventListener('click', function () {
+      month--; if (month < 0) { month = 11; year--; } load();
+    });
+    document.getElementById('calNext').addEventListener('click', function () {
+      month++; if (month > 11) { month = 0; year++; } load();
+    });
+    document.getElementById('calToday').addEventListener('click', function () {
+      var n = new Date(); year = n.getFullYear(); month = n.getMonth(); load();
+    });
+
+    document.getElementById('weekViewBtn').addEventListener('click', function () {
+      weekStart = new Date();
+      document.getElementById('weeklyView').classList.add('active');
+      document.getElementById('monthlyView').classList.add('hidden');
+      this.classList.add('active');
+      document.getElementById('monthViewBtn').classList.remove('active');
+      renderWeek();
+    });
+    function backToMonth() {
+      document.getElementById('weeklyView').classList.remove('active');
+      document.getElementById('monthlyView').classList.remove('hidden');
+      document.getElementById('monthViewBtn').classList.add('active');
+      document.getElementById('weekViewBtn').classList.remove('active');
+      renderMonth();
+    }
+    document.getElementById('monthViewBtn').addEventListener('click', backToMonth);
+    document.getElementById('backToMonth').addEventListener('click', backToMonth);
+
+    ['searchInput','dateInput','typeFilter','sourceFilter','radiusFilter'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener(id === 'searchInput' ? 'input' : 'change', render);
+    });
+    document.getElementById('clearFilters').addEventListener('click', function () {
+      ['searchInput','dateInput'].forEach(function (id) {
+        document.getElementById(id).value = '';
+      });
+      ['typeFilter','sourceFilter','radiusFilter'].forEach(function (id) {
+        var el = document.getElementById(id); if (el) el.value = '';
+      });
+      render();
+    });
+
+    load();
+  })();
+  </script>
 </body>
 </html>
