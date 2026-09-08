@@ -67,6 +67,20 @@
   .alert-err{background:rgba(232,160,160,.12);border:1px solid rgba(232,160,160,.35);color:var(--bad);}
   .meta{font-size:.72rem;color:var(--muted);margin-top:.8rem;}
   #loading{padding:2.5rem;text-align:center;color:var(--muted);}
+  .chip-list{display:flex;flex-wrap:wrap;gap:.45rem;margin-bottom:.6rem;min-height:2rem;}
+  .chip{
+    display:inline-flex;align-items:center;gap:.45rem;
+    padding:.35rem .5rem .35rem .7rem;border-radius:99px;font-size:.78rem;
+    background:var(--navy-light);border:1px solid rgba(46,95,163,.35);color:var(--cream);
+  }
+  .chip button{
+    background:none;border:none;color:var(--muted);cursor:pointer;
+    font-size:1rem;line-height:1;padding:0 .15rem;
+  }
+  .chip button:hover{color:var(--bad);}
+  .chip-add{display:flex;gap:.5rem;}
+  .chip-add input{flex:1;}
+  .chip-empty{font-size:.76rem;color:var(--muted);}
 </style>
 </head>
 <body>
@@ -152,6 +166,35 @@
 
       <button class="btn btn-primary" id="saveSecurityBtn">Save Security Settings</button>
     </section>
+
+    <section class="card">
+      <h2>Charge Descriptions</h2>
+      <p class="hint">
+        The options offered when you send a one-off payment request from a
+        booking. These appear on the guest's Stripe checkout page and in
+        their email, so keep the wording customer-facing.
+      </p>
+
+      <div class="field">
+        <label>Additional Deposit Options</label>
+        <div class="chip-list" id="depositList"></div>
+        <div class="chip-add">
+          <input type="text" id="newDeposit" placeholder="Add an option…" maxlength="60"/>
+          <button type="button" class="btn btn-ghost" id="addDeposit">Add</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Service Fee Options</label>
+        <div class="chip-list" id="feeList"></div>
+        <div class="chip-add">
+          <input type="text" id="newFee" placeholder="e.g. Private chef" maxlength="60"/>
+          <button type="button" class="btn btn-ghost" id="addFee">Add</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="saveReasonsBtn">Save Descriptions</button>
+    </section>
   </div>
 </div>
 
@@ -192,10 +235,15 @@
       document.getElementById('sessionHours').value   = d.session_hours;
       document.getElementById('allowAccounts').checked  = d.allow_guest_account_creation !== false;
       document.getElementById('requireDeposit').checked = d.require_deposit_for_account  !== false;
+      reasons.deposit = Array.isArray(d.deposit_reasons) ? d.deposit_reasons.slice() : [];
+      reasons.fee     = Array.isArray(d.fee_reasons)     ? d.fee_reasons.slice()     : [];
+      renderChips('deposit');
+      renderChips('fee');
 
       if (!canEdit) {
         ['idleTimeout','warningSeconds','sessionHours','saveBtn',
-         'allowAccounts','requireDeposit','saveSecurityBtn']
+         'allowAccounts','requireDeposit','saveSecurityBtn',
+         'newDeposit','newFee','addDeposit','addFee','saveReasonsBtn']
           .forEach(function (id) { document.getElementById(id).disabled = true; });
         notify('You can view these settings, but only a super admin can change them.', false);
       }
@@ -216,6 +264,63 @@
 
   // Both save buttons send the whole settings object, so saving one
   // section can never blank out the other.
+  // Editable charge description lists.
+  var reasons = { deposit: [], fee: [] };
+
+  function renderChips(kind) {
+    var el = document.getElementById(kind === 'deposit' ? 'depositList' : 'feeList');
+    if (!el) return;
+    var list = reasons[kind];
+    if (!list.length) {
+      el.innerHTML = '<span class="chip-empty">No options yet — add one below.</span>';
+      return;
+    }
+    el.innerHTML = list.map(function (r, i) {
+      return '<span class="chip">' + esc(r) +
+             '<button type="button" data-kind="' + kind + '" data-i="' + i +
+             '" aria-label="Remove ' + esc(r) + '">&times;</button></span>';
+    }).join('');
+    el.querySelectorAll('button[data-i]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (!canEdit) return;
+        reasons[btn.dataset.kind].splice(Number(btn.dataset.i), 1);
+        renderChips(btn.dataset.kind);
+      });
+    });
+  }
+
+  function addReason(kind, inputId) {
+    var input = document.getElementById(inputId);
+    var v = (input.value || '').trim();
+    if (!v) return;
+    if (reasons[kind].some(function (r) { return r.toLowerCase() === v.toLowerCase(); })) {
+      notify('That option is already in the list.', false);
+      return;
+    }
+    reasons[kind].push(v);
+    input.value = '';
+    renderChips(kind);
+    input.focus();
+  }
+
+  document.getElementById('addDeposit').addEventListener('click', function () {
+    addReason('deposit', 'newDeposit');
+  });
+  document.getElementById('addFee').addEventListener('click', function () {
+    addReason('fee', 'newFee');
+  });
+  ['newDeposit','newFee'].forEach(function (id) {
+    document.getElementById(id).addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addReason(id === 'newDeposit' ? 'deposit' : 'fee', id);
+      }
+    });
+  });
+  document.getElementById('saveReasonsBtn').addEventListener('click', function () {
+    save(this, 'Charge descriptions saved.');
+  });
+
   function currentSettings() {
     return {
       idle_timeout_minutes: document.getElementById('idleTimeout').value,
@@ -223,6 +328,8 @@
       session_hours:        document.getElementById('sessionHours').value,
       allow_guest_account_creation: document.getElementById('allowAccounts').checked,
       require_deposit_for_account:  document.getElementById('requireDeposit').checked,
+      deposit_reasons: reasons.deposit,
+      fee_reasons:     reasons.fee,
     };
   }
 

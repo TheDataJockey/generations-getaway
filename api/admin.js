@@ -1309,6 +1309,15 @@ const SETTINGS_FALLBACK = {
   // reservation and a received deposit.
   allow_guest_account_creation: true,
   require_deposit_for_account: true,
+  deposit_reasons: [
+    'Additional deposit', 'Second deposit instalment',
+    'Security deposit', 'Partial payment toward balance',
+  ],
+  fee_reasons: [
+    'Pet fee', 'Private chef', 'Additional cleaning', 'Early check-in',
+    'Late check-out', 'Additional guest', 'Pool heating', 'Damage charge',
+    'Lost key or fob', 'Excessive trash removal', 'Smoking violation',
+  ],
 };
 
 async function handleSystemSettings(req, res, token) {
@@ -1353,12 +1362,29 @@ async function handleSystemSettings(req, res, token) {
       const allowAccounts   = b.allow_guest_account_creation !== false;
       const requireDeposit   = b.require_deposit_for_account   !== false;
 
+      // Charge description lists. Trim, drop blanks and duplicates, and
+      // cap the length so a stray paste can't fill the dropdown.
+      const cleanList = (arr, fallback) => {
+        if (!Array.isArray(arr)) return fallback;
+        const out = [];
+        for (const raw of arr) {
+          const v = String(raw || '').trim().slice(0, 60);
+          if (v && !out.includes(v)) out.push(v);
+          if (out.length >= 30) break;
+        }
+        return out.length ? out : fallback;
+      };
+      const depositReasons = cleanList(b.deposit_reasons, SETTINGS_FALLBACK.deposit_reasons);
+      const feeReasons     = cleanList(b.fee_reasons,     SETTINGS_FALLBACK.fee_reasons);
+
       const { error } = await supabase.from('system_settings').update({
         idle_timeout_minutes: idle,
         session_hours:        hours,
         idle_warning_seconds: warning,
         allow_guest_account_creation: allowAccounts,
         require_deposit_for_account:  requireDeposit,
+        deposit_reasons:      depositReasons,
+        fee_reasons:          feeReasons,
         updated_at:           new Date().toISOString(),
         updated_by:           auth.admin.email,
       }).eq('id', 1);

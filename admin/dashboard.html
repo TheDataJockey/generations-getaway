@@ -337,6 +337,19 @@
     .admin-table tr:last-child td { border-bottom: none; }
     .admin-table tr:hover td { background: rgba(46,95,163,0.06); }
 
+    /* Native dropdown options do not inherit the control's colours, so an
+       open list renders as pale text on a white background. Set both. */
+    select option,
+    select optgroup {
+      background: #1B2A4A;
+      color: #F4F7FB;
+    }
+    select option:checked,
+    select option:hover {
+      background: #2E5FA3;
+      color: #FFFFFF;
+    }
+
     /* ── Status badges ── */
     .status {
       display: inline-flex; align-items: center; gap: 0.35rem;
@@ -1481,6 +1494,22 @@
       console.error('[dashboard]', err);
     }
 
+    // Load the editable charge lists once, then reuse for every booking.
+    async function loadChargeReasons() {
+      if (window.__ggReasons) return;
+      try {
+        const res = await fetch('/api/admin?resource=system-settings', { headers: authHeaders() });
+        if (!res.ok) return;
+        const d = await res.json();
+        if (Array.isArray(d.fee_reasons) && d.fee_reasons.length) {
+          window.__ggReasons = {
+            partial: d.deposit_reasons || [],
+            fee:     d.fee_reasons,
+          };
+        }
+      } catch { /* the built-in fallback covers this */ }
+    }
+
     async function loadActivity() {
       try {
         const res  = await fetch('/api/admin?resource=activity&limit=100', { headers: authHeaders() });
@@ -2153,7 +2182,10 @@
         // the total. The selector decides which payment_type we send.
         type   = document.getElementById('extraType')?.value || 'partial';
         amount = parseFloat(document.getElementById('extraAmount')?.value || '');
-        reason = (document.getElementById('extraReason')?.value || '').trim();
+        var picked = document.getElementById('extraReasonPick')?.value || '';
+        reason = picked === '__other'
+          ? (document.getElementById('extraReason')?.value || '').trim()
+          : picked.trim();
         if (!amount || amount <= 0) { alert('Enter an amount.'); return; }
         if (!reason) reason = type === 'fee' ? 'Additional charge' : 'Additional deposit';
       }
@@ -2211,6 +2243,7 @@
 
     // Open booking modal
     window.openBookingModal = async function(bookingId) {
+      await loadChargeReasons();
       document.getElementById('bookingModal').classList.add('open');
       document.getElementById('bookingModalBody').innerHTML = '<div class="spinner"></div>';
       try {
@@ -2315,7 +2348,7 @@
             </div>
 
             <label style="margin-top:1rem;">One-Off Request</label>
-            <div style="margin-top:0.4rem;display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;">
+            <div style="margin-top:0.4rem;display:flex;gap:0.5rem;align-items:flex-start;flex-wrap:wrap;">
               <div style="flex:1.2;min-width:180px;">
                 <label style="font-size:0.6rem;">Type</label>
                 <select id="extraType"
@@ -2331,13 +2364,19 @@
                   style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
                          border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
               </div>
-              <div style="flex:1.4;min-width:170px;">
+              <div style="flex:1.4;min-width:180px;">
                 <label style="font-size:0.6rem;">Description (shown to guest)</label>
-                <input type="text" id="extraReason" placeholder="Pet fee"
+                <select id="extraReasonPick"
                   style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
-                         border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
+                         border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;">
+                </select>
+                <input type="text" id="extraReason" placeholder="Describe the charge" hidden
+                  style="width:100%;margin-top:0.4rem;padding:0.5rem;background:var(--navy-light);
+                         color:var(--cream);border:1px solid rgba(46,95,163,0.35);
+                         border-radius:4px;font-size:0.85rem;"/>
               </div>
-              <button class="btn btn-ghost" data-pay="oneoff" data-booking="${data.id}">Send Request</button>
+              <button class="btn btn-ghost" data-pay="oneoff" data-booking="${data.id}"
+                style="margin-top:1.05rem;">Send Request</button>
             </div>
             <p style="margin-top:0.4rem;font-size:0.7rem;color:var(--muted);line-height:1.6;" id="extraHint">
               An additional deposit counts toward what they already owe.
@@ -2358,13 +2397,48 @@
         document.getElementById('approveBookingBtn').dataset.id = bookingId;
         document.getElementById('declineBookingBtn').dataset.id = bookingId;
 
+        // Charge descriptions come from Admin -> System Settings so they can
+        // be edited without a deploy. The hardcoded lists below are only a
+        // fallback for when that request fails.
+        var REASONS = window.__ggReasons || {
+          partial: ['Additional deposit', 'Second deposit instalment',
+                    'Security deposit', 'Partial payment toward balance'],
+          fee:     ['Pet fee', 'Private chef', 'Additional cleaning',
+                    'Early check-in', 'Late check-out', 'Additional guest',
+                    'Pool heating', 'Damage charge', 'Lost key or fob',
+                    'Excessive trash removal', 'Smoking violation'],
+        };
+
         var typeSel = document.getElementById('extraType');
+        var pick    = document.getElementById('extraReasonPick');
+        var freeTxt = document.getElementById('extraReason');
+
+        function fillReasons() {
+          if (!pick || !typeSel) return;
+          var list = REASONS[typeSel.value] || REASONS.fee;
+          pick.innerHTML = list.map(function (r) {
+            return '<option value="' + r + '">' + r + '</option>';
+          }).join('') + '<option value="__other">Other (type your own)…</option>';
+          toggleFreeText();
+        }
+
+        function toggleFreeText() {
+          if (!pick || !freeTxt) return;
+          var other = pick.value === '__other';
+          freeTxt.hidden = !other;
+          if (other) freeTxt.focus();
+        }
+
+        if (pick) pick.addEventListener('change', toggleFreeText);
+
         if (typeSel) {
           typeSel.addEventListener('change', function () {
             document.getElementById('extraHint').textContent = this.value === 'fee'
               ? 'A service fee is added to their total, so the balance owed goes up by this amount.'
               : 'An additional deposit counts toward what they already owe.';
+            fillReasons();
           });
+          fillReasons();
         }
 
         document.querySelectorAll('[data-pay]').forEach(function (btn) {
