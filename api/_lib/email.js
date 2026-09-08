@@ -746,3 +746,129 @@ export async function sendPinNotification({ guest, booking, pin }) {
 
   return sendEmail({ to: KYLE_EMAIL, from: FROM_BOOKINGS, subject, html, text });
 }
+
+// ════════════════════════════════════════════════════════
+// TEMPLATE 13 — Remove door code (to Kyle, after checkout)
+// ════════════════════════════════════════════════════════
+export async function sendDoorCodeRemoval({ guest, booking, code }) {
+  const reference = booking?.confirmation_id || booking?.request_id || '';
+  const subject   = `ACTION: remove door code ${code} — ${guest.first_name} ${guest.last_name || ''}`.trim();
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>${emailStyles}</head>
+<body><div class="wrapper">
+  <div class="header">
+    <div class="header-title">Remove Door Code</div>
+    <div class="header-sub">${PROPERTY_NAME}</div>
+  </div>
+  <div class="body">
+    <p>${guest.first_name} ${guest.last_name || ''} checked out yesterday.
+       Remove their code from the Yale lock.</p>
+    <div class="info-card">
+      <div class="info-row"><span class="info-label">Code To Remove</span><span class="info-value" style="font-size:22px;letter-spacing:4px;"><strong>${code}</strong></span></div>
+      <div class="info-row"><span class="info-label">Guest</span><span class="info-value">${guest.first_name} ${guest.last_name || ''}</span></div>
+      ${reference ? `<div class="info-row"><span class="info-label">Reference</span><span class="info-value">${reference}</span></div>` : ''}
+      <div class="info-row"><span class="info-label">Checked Out</span><span class="info-value">${formatDate(booking.check_out_date)}</span></div>
+    </div>
+    <p style="font-size:13px;color:#7A90AE;">
+      Old codes left on the lock stay valid until removed.
+    </p>
+  </div>
+  <div class="footer"><p>${PROPERTY_NAME}</p></div>
+</div></body></html>`;
+
+  const text = `Remove door code ${code} for ${guest.first_name} ${guest.last_name || ''}`
+    + `${reference ? ` (${reference})` : ''}. They checked out ${formatDate(booking.check_out_date)}.`;
+
+  return sendEmail({ to: KYLE_EMAIL, from: FROM_BOOKINGS, subject, html, text });
+}
+
+// ════════════════════════════════════════════════════════
+// TEMPLATE 14 — PIN reset link (to guest)
+// ════════════════════════════════════════════════════════
+export async function sendPinReset({ guest, booking, activation_url }) {
+  const reference = booking?.confirmation_id || '';
+  const subject   = `Reset your PIN — ${PROPERTY_NAME}`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>${emailStyles}</head>
+<body><div class="wrapper">
+  <div class="header">
+    <div class="header-title">Reset Your PIN</div>
+    <div class="header-sub">${PROPERTY_NAME}</div>
+  </div>
+  <div class="body">
+    <div class="greeting">Hi <em>${guest.first_name}</em>,</div>
+    <p>Use the link below to choose a new 4-digit PIN. Your previous PIN
+       stops working as soon as you set the new one.</p>
+    ${reference ? `<div class="info-card">
+      <div class="info-row"><span class="info-label">Confirmation</span><span class="info-value"><strong>${reference}</strong></span></div>
+    </div>` : ''}
+    <div style="text-align:center;margin:24px 0;">
+      <a href="${activation_url}" class="btn">Choose a New PIN</a>
+    </div>
+    <div style="background:rgba(46,95,163,0.10);border-left:3px solid #5B8DD9;
+                padding:14px 16px;margin:20px 0;border-radius:3px;">
+      <p style="margin:0;font-size:13px;line-height:1.7;color:#A8C4E0;">
+        <strong style="color:#F4F7FB;">Remember:</strong> this PIN unlocks the
+        front door as well as your guest portal. Keep it private.
+      </p>
+    </div>
+    <p style="font-size:13px;color:#7A90AE;">
+      This link is single use and expires in 7 days. If you did not ask for
+      this, you can ignore it &mdash; your current PIN still works.
+    </p>
+  </div>
+  <div class="footer"><p>${PROPERTY_NAME}</p></div>
+</div></body></html>`;
+
+  const text = `Reset your PIN for ${PROPERTY_NAME}: ${activation_url} `
+    + `This link expires in 7 days. The PIN unlocks the front door and your guest portal.`;
+
+  return sendEmail({ to: guest.email, from: FROM_BOOKINGS, subject, html, text });
+}
+
+// ════════════════════════════════════════════════════════
+// TEMPLATE 15 — Cancellation request (to Kyle)
+// ════════════════════════════════════════════════════════
+// Guests cannot cancel themselves, so a request has to reach a person.
+export async function sendCancellationRequest({ guest, booking, reason, refund }) {
+  const reference = booking?.confirmation_id || booking?.request_id || '';
+  const subject   = `CANCELLATION REQUEST — ${reference || 'booking'} — ${guest.first_name} ${guest.last_name || ''}`.trim();
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>${emailStyles}</head>
+<body><div class="wrapper">
+  <div class="header">
+    <div class="header-title">Cancellation Request</div>
+    <div class="header-sub">${PROPERTY_NAME}</div>
+  </div>
+  <div class="body">
+    <p><strong>${guest.first_name} ${guest.last_name || ''}</strong> has asked to
+       cancel their reservation. Nothing has been changed &mdash; review and
+       action it in the dashboard.</p>
+    <div class="info-card">
+      ${reference ? `<div class="info-row"><span class="info-label">Reference</span><span class="info-value"><strong>${reference}</strong></span></div>` : ''}
+      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)}</span></div>
+      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)}</span></div>
+      <div class="info-row"><span class="info-label">Guest Email</span><span class="info-value">${guest.email}</span></div>
+      ${guest.phone ? `<div class="info-row"><span class="info-label">Phone</span><span class="info-value">${guest.phone}</span></div>` : ''}
+      ${booking.amount_received != null ? `<div class="info-row"><span class="info-label">Paid To Date</span><span class="info-value">${money(booking.amount_received)}</span></div>` : ''}
+      ${refund ? `<div class="info-row"><span class="info-label">Policy Refund</span><span class="info-value"><strong>${refund.pct}%</strong> — ${refund.label} (${refund.days} days out)</span></div>` : ''}
+    </div>
+    ${reason ? `<p><strong>Their reason:</strong><br/>${reason}</p>` : ''}
+    <p style="font-size:13px;color:#7A90AE;">
+      Refund percentages follow the published policy: 30+ days 100%,
+      14&ndash;29 days 50%, 7&ndash;13 days 25%, under 7 days none.
+    </p>
+  </div>
+  <div class="footer"><p>${PROPERTY_NAME}</p></div>
+</div></body></html>`;
+
+  const text = `Cancellation request from ${guest.first_name} ${guest.last_name || ''} `
+    + `${reference ? `(${reference}) ` : ''}for ${formatDate(booking.check_in_date)} to `
+    + `${formatDate(booking.check_out_date)}. ${reason ? `Reason: ${reason}. ` : ''}`
+    + `${refund ? `Policy refund: ${refund.pct}%.` : ''} Nothing changed — action in the dashboard.`;
+
+  return sendEmail({
+    to: KYLE_EMAIL, from: FROM_BOOKINGS, subject, html, text,
+    reply_to: guest.email,      // so replying goes straight to the guest
+  });
+}

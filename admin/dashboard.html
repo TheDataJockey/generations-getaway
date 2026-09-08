@@ -354,6 +354,12 @@
       color: #FFFFFF;
     }
 
+    .btn-danger {
+      background: transparent; color: #E8A0A0;
+      border: 1px solid rgba(232,160,160,0.4);
+    }
+    .btn-danger:hover:not(:disabled) { background: rgba(232,160,160,0.12); }
+
     /* ── Status badges ── */
     .status {
       display: inline-flex; align-items: center; gap: 0.35rem;
@@ -2392,6 +2398,39 @@
               ${data.stripe_payment_link_url ? `<a href="${data.stripe_payment_link_url}" target="_blank" rel="noopener">Open most recent payment link</a>` : ''}
             </div>
             <div id="payResult" style="margin-top:0.6rem;font-size:0.8rem;"></div>
+
+            <label style="margin-top:1.1rem;">Guest Account &amp; Refunds</label>
+            <div style="display:flex;gap:0.6rem;flex-wrap:wrap;margin-top:0.5rem;">
+              <button class="btn btn-ghost" id="pinResetBtn" data-booking="${data.id}">
+                Send PIN Reset
+              </button>
+              <button class="btn btn-danger" id="refundBtn" data-booking="${data.id}"
+                ${received <= 0 ? 'disabled title="Nothing has been paid yet"' : ''}>
+                Refund…
+              </button>
+            </div>
+
+            <div id="refundPanel" hidden style="margin-top:0.7rem;padding:0.8rem;
+                 background:rgba(232,160,160,0.07);border:1px solid rgba(232,160,160,0.3);
+                 border-radius:4px;">
+              <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;">
+                <div style="flex:1;min-width:130px;">
+                  <label style="font-size:0.6rem;">Refund Amount ($)</label>
+                  <input type="number" id="refundAmount" min="0.01" step="0.01"
+                    max="${received}" value="${received}"
+                    style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
+                           border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
+                </div>
+                <button class="btn btn-danger" id="confirmRefundBtn">Issue Refund</button>
+                <button class="btn btn-ghost" id="cancelRefundBtn">Cancel</button>
+              </div>
+              <p style="margin-top:0.5rem;font-size:0.7rem;color:var(--muted);line-height:1.6;">
+                Refunds go back to the original card and cannot be undone.
+                Policy: 30+ days before check-in 100%, 14&ndash;29 days 50%,
+                7&ndash;13 days 25%, under 7 days none.
+              </p>
+              <div id="refundResult" style="margin-top:0.5rem;font-size:0.8rem;"></div>
+            </div>
           </div>`;
           })() : ''}
           ${data.special_requests ? `
@@ -2475,6 +2514,67 @@
             fillReasons();
           });
           fillReasons();
+        }
+
+        // PIN reset — the guest chooses the new PIN, we only send the link.
+        var pinBtn = document.getElementById('pinResetBtn');
+        if (pinBtn) {
+          pinBtn.addEventListener('click', async function () {
+            if (!confirm('Send this guest a link to choose a new PIN?\n\n' +
+                         'Their current PIN keeps working until they set a new one.')) return;
+            this.disabled = true;
+            var orig = this.textContent;
+            this.textContent = 'Sending…';
+            try {
+              const res = await fetch('/api/admin?resource=pin-reset', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ booking_id: bookingId }),
+              });
+              const d = await res.json().catch(() => ({}));
+              alert(res.ok ? (d.emailed || 'Reset link sent.')
+                           : `Could not send: ${d.error || res.status}`);
+            } catch (e) { alert(`Could not send: ${e.message}`); }
+            this.disabled = false;
+            this.textContent = orig;
+          });
+        }
+
+        // Refund — shown behind a panel so it can't be hit by accident.
+        var refundBtn   = document.getElementById('refundBtn');
+        var refundPanel = document.getElementById('refundPanel');
+        if (refundBtn && refundPanel) {
+          refundBtn.addEventListener('click', function () { refundPanel.hidden = false; });
+          document.getElementById('cancelRefundBtn')
+            .addEventListener('click', function () { refundPanel.hidden = true; });
+
+          document.getElementById('confirmRefundBtn').addEventListener('click', async function () {
+            var amt = parseFloat(document.getElementById('refundAmount').value || '');
+            var out = document.getElementById('refundResult');
+            if (!amt || amt <= 0) { out.innerHTML = '<span style="color:#E8A0A0;">Enter an amount.</span>'; return; }
+            if (!confirm(`Refund $${amt.toFixed(2)} to the original card?\n\nThis cannot be undone.`)) return;
+
+            this.disabled = true;
+            var orig = this.textContent;
+            this.textContent = 'Processing…';
+            try {
+              const res = await fetch('/api/stripe?action=refund', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ booking_id: bookingId, amount: amt }),
+              });
+              const d = await res.json().catch(() => ({}));
+              out.innerHTML = res.ok
+                ? '<span style="color:#7FD1A4;">Refund issued.</span>'
+                : `<span style="color:#E8A0A0;">${d.error || 'Refund failed (' + res.status + ')'}</span>`;
+              if (res.ok) {
+                loadPageData('bookings');
+                setTimeout(function () { openBookingModal(bookingId); }, 1500);
+              }
+            } catch (e) {
+              out.innerHTML = `<span style="color:#E8A0A0;">${e.message}</span>`;
+            }
+            this.disabled = false;
+            this.textContent = orig;
+          });
         }
 
         document.querySelectorAll('[data-pay]').forEach(function (btn) {

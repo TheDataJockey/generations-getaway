@@ -267,6 +267,35 @@
         </p>
         <button type="button" class="btn-link" id="showResend">Resend my setup link</button>
 
+        <p class="setup-help" style="margin-top:1.1rem;">
+          Need to cancel? <button type="button" class="btn-link" id="showCancel">Request a cancellation</button>
+        </p>
+
+        <form class="resend-form" id="cancelForm" hidden autocomplete="off">
+          <div class="form-group">
+            <label for="cancelLastName">Last Name</label>
+            <input type="text" id="cancelLastName" class="form-control" required/>
+          </div>
+          <div class="form-group">
+            <label for="cancelRef">Confirmation Number</label>
+            <input type="text" id="cancelRef" class="form-control"
+                   placeholder="GG-RES-2026-0001" style="text-transform:uppercase" required/>
+          </div>
+          <div class="form-group">
+            <label for="cancelReason">Reason (optional)</label>
+            <textarea id="cancelReason" class="form-control" rows="3"
+                      placeholder="Anything we should know?"></textarea>
+          </div>
+          <p class="setup-help" style="text-align:left;">
+            Requests are reviewed by us &mdash; your reservation stays active
+            until we confirm. Refunds follow the published policy: 30+ days
+            before check-in 100%, 14&ndash;29 days 50%, 7&ndash;13 days 25%,
+            under 7 days none.
+          </p>
+          <div id="cancelAlert" role="alert"></div>
+          <button type="submit" class="btn btn-primary" id="cancelSubmitBtn">Send Request</button>
+        </form>
+
         <form class="resend-form" id="resendForm" hidden autocomplete="off">
           <div class="form-group">
             <label for="resendLastName">Last Name</label>
@@ -1145,6 +1174,56 @@
       if (!el) return;
       el.innerHTML = '<p style="font-size:0.78rem;line-height:1.6;margin:0.5rem 0;color:' +
         (ok ? '#7FD1A4' : '#E8A0A0') + ';">' + msg + '</p>';
+    }
+
+    // Cancellation request. Guests cannot cancel themselves — this
+    // records the request and emails Kyle, who actions it.
+    var cancelBtn  = document.getElementById('showCancel');
+    var cancelForm = document.getElementById('cancelForm');
+    if (cancelBtn && cancelForm) {
+      cancelBtn.addEventListener('click', function () {
+        cancelForm.hidden = !cancelForm.hidden;
+        if (!cancelForm.hidden) document.getElementById('cancelLastName').focus();
+      });
+
+      cancelForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var btn = document.getElementById('cancelSubmitBtn');
+        var box = document.getElementById('cancelAlert');
+        var say = function (msg, ok) {
+          box.innerHTML = '<p style="font-size:0.78rem;line-height:1.6;margin:0.5rem 0;color:' +
+            (ok ? '#7FD1A4' : '#E8A0A0') + ';">' + msg + '</p>';
+        };
+        var last = document.getElementById('cancelLastName').value.trim();
+        var ref  = document.getElementById('cancelRef').value.trim();
+        if (!last || !ref) { say('Enter your last name and confirmation number.', false); return; }
+        if (!confirm('Send a cancellation request?\n\nYour reservation stays active until we confirm.')) return;
+
+        btn.disabled = true;
+        var orig = btn.textContent;
+        btn.textContent = 'Sending\u2026';
+
+        fetch('/api/guest-auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'cancellation_request',
+            last_name: last, reference: ref,
+            reason: document.getElementById('cancelReason').value,
+          }),
+        })
+          .then(function (r) { return r.json().catch(function () { return {}; })
+            .then(function (d) { return { ok: r.ok, d: d }; }); })
+          .then(function (res) {
+            if (res.ok) { say(res.d.message || 'Request sent.', true); cancelForm.reset(); }
+            else { say(res.d.error || 'Could not send. Please email us directly.', false); }
+            btn.disabled = false; btn.textContent = orig;
+          })
+          .catch(function () {
+            say('Could not reach the server. Please email kyle@generationsgetawayfl.com.', false);
+            btn.disabled = false; btn.textContent = orig;
+          });
+      });
     }
 
     if (form) {

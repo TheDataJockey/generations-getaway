@@ -185,6 +185,9 @@ export default async function handler(req, res) {
   if (req.body?.action === 'resend_activation') {
     return handleResendActivation(req, res);
   }
+  if (req.body?.action === 'cancellation_request') {
+    return handleCancellationRequest(req, res);
+  }
 
   // ── IP-level rate limit: max 20 attempts per hour ──
   const ip         = req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
@@ -688,5 +691,91 @@ async function handleResendActivation(req, res) {
   } catch (err) {
     console.error('[guest-auth] resend failed:', err.message);
     return res.status(200).json({ message: VAGUE });
+  }
+}
+
+// Guests cannot cancel their own booking — a cancellation has refund
+// consequences and needs a person to action it. This records the request
+// and emails Kyle so nothing depends on the guest finding his address.
+async function handleCancellationRequest(req, res) {
+  const lastName  = (req.body?.last_name || '').trim();
+  const reference = (req.body?.reference || '').trim().toUpperCase();
+  const reason    = (req.body?.reason || '').trim().slice(0, 1000);
+
+  if (!lastName || !reference) {
+    return res.status(400).json({ error: 'Enter your last name and confirmation number.' });
+  }
+
+  // Rate limit — this sends email.
+  const ip = req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+  const hourAgo = new Date(Date.now() - 3600000).toISOString();
+  const { count } = await supabase
+    .from('visitor_logs')
+    .select('id', { count: 'exact', head: true })
+    .eq('ip_address', ip)
+    .eq('page_visited', '/api/guest-auth?cancel')
+    .gte('created_at', hourAgo);
+  if ((count || 0) >= 5) {
+    return res.status(429).json({ error: 'Too many requests. Please email us directly.' });
+  }
+  await supabase.from('visitor_logs').insert({
+    ip_address: ip, page_visited: '/api/guest-auth?cancel',
+    user_agent: req.headers['user-agent']?.slice(0, 250) || null,
+  });
+
+  try {
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('id, request_id, confirmation_id, status, check_in_date, check_out_date, ' +
+              'amount_received, guests(id, first_name, last_name, email, phone)')
+      .eq('confirmation_id', reference)
+      .single();
+
+    const g = booking?.guests;
+    const nameOk = g?.last_name?.trim().toLowerCase() === lastName.toLowerCase();
+
+    if (!booking || !nameOk) {
+      return res.status(401).json({ error: 'Those details do not match a reservation.' });
+    }
+    if (['cancelled', 'completed'].includes(booking.status)) {
+      return res.status(409).json({ error: 'That reservation is no longer active.' });
+    }
+
+    // Work out what the published policy would refund, so Kyle sees it
+    // without doing the arithmetic himself.
+    const days = Math.ceil(
+      (new Date(booking.check_in_date + 'T15:00:00') - new Date()) / 86400000);
+    const refund =
+      days >= 30 ? { pct: 100, label: 'Full refund',    days } :
+      days >= 14 ? { pct: 50,  label: 'Half refund',    days } :
+      days >= 7  ? { pct: 25,  label: 'Quarter refund', days } :
+                   { pct: 0,   label: 'No refund',      days };
+
+    await supabase.from('audit_logs').insert({
+      action:     'cancellation_requested',
+      table_name: 'bookings',
+      record_id:  booking.id,
+      notes:      `Guest requested cancellation (${refund.pct}% per policy)` +
+                  (reason ? ` — ${reason.slice(0, 200)}` : ''),
+    });
+
+    const { sendCancellationRequest } = await import('./_lib/email.js');
+    const sent = await sendCancellationRequest({ guest: g, booking, reason, refund });
+
+    if (!sent?.success) {
+      console.error('[guest-auth] Cancellation email failed:', sent?.error);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Your cancellation request has been sent. We will confirm by email ' +
+               'within 24 hours. Your reservation is unchanged until we do.',
+      refund_pct: refund.pct,
+    });
+  } catch (err) {
+    console.error('[guest-auth] cancellation request failed:', err.message);
+    return res.status(500).json({
+      error: 'Could not send your request. Please email kyle@generationsgetawayfl.com directly.',
+    });
   }
 }

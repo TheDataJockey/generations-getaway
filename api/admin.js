@@ -145,6 +145,7 @@ async function route(req, res) {
     case 'assistant':        return handleAssistant(req, res, token);
     case 'system-settings':  return handleSystemSettings(req, res, token);
     case 'activity':         return handleActivity(req, res, token);
+    case 'pin-reset':        return handlePinReset(req, res, token);
     case 'pricing-all':
     case 'season':
     case 'settings':
@@ -1499,5 +1500,64 @@ async function handleActivity(req, res, token) {
   } catch (err) {
     console.error('[activity]', err);
     return res.status(500).json({ error: 'Could not load activity.', detail: err.message });
+  }
+}
+
+// ════════════════════════════════════
+// PIN RESET
+// Sends the guest a single-use link to choose a new PIN. Kyle never
+// sees or sets the PIN himself — the guest picks it, and the door-code
+// notification tells him what to program.
+// ════════════════════════════════════
+async function handlePinReset(req, res, token) {
+  const auth = await validateAdminToken(token, 'family_admin');
+  if (auth.error) return res.status(auth.status).json({ error: auth.error });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
+
+  const { booking_id } = req.body || {};
+  if (!booking_id) return res.status(400).json({ error: 'booking_id is required.' });
+
+  try {
+    const { data: booking, error } = await supabase
+      .from('bookings')
+      .select('id, request_id, confirmation_id, check_in_date, check_out_date, ' +
+              'guests(id, first_name, last_name, email)')
+      .eq('id', booking_id)
+      .single();
+
+    if (error || !booking) return res.status(404).json({ error: 'Booking not found.' });
+    const g = booking.guests;
+    if (!g?.email) return res.status(400).json({ error: 'No email on file for this guest.' });
+
+    const cryptoMod = await import('crypto');
+    const resetToken = cryptoMod.randomBytes(24).toString('hex');
+
+    // Clearing activated_at lets the setup page accept them again; the
+    // token is what actually authorises the change.
+    const { error: updErr } = await supabase.from('guests').update({
+      activation_token:      resetToken,
+      activation_expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+      activated_at:          null,
+    }).eq('id', g.id);
+    if (updErr) throw updErr;
+
+    const { sendPinReset } = await import('./_lib/email.js');
+    const sent = await sendPinReset({
+      guest: g,
+      booking,
+      activation_url: `https://www.generationsgetawayfl.com/activate.html?t=${resetToken}`,
+    });
+
+    await logAudit(auth.admin, 'pin_reset', 'guests', g.id,
+      `Reset link sent for ${booking.confirmation_id || booking.request_id || booking.id}`);
+
+    return res.status(200).json({
+      success: true,
+      emailed: sent?.success ? `Reset link sent to ${g.email}`
+                             : `Email failed: ${sent?.error || 'unknown'}`,
+    });
+  } catch (err) {
+    console.error('[pin-reset]', err);
+    return res.status(500).json({ error: 'Could not send the reset link.', detail: err.message });
   }
 }

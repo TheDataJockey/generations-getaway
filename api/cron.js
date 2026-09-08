@@ -74,6 +74,7 @@ export default async function handler(req, res) {
     checkout: { sent: 0, errors: 0 },
     review:   { sent: 0, errors: 0 },
     balance:  { sent: 0, errors: 0, skipped: 0 },
+    doorCodes:{ sent: 0, errors: 0 },
   };
 
   try {
@@ -88,9 +89,10 @@ export default async function handler(req, res) {
         email_checkout_sent, email_review_sent,
         balance_amount, balance_due_date, balance_sent_at,
         deposit_paid_at, payment_status,
-        guests(id, first_name, last_name, email, phone)
+        confirmation_id, door_code_removal_sent_at,
+        guests(id, first_name, last_name, email, phone, pin_code)
       `)
-      .eq('status', 'confirmed')
+      .in('status', ['confirmed', 'paid', 'checked_in', 'completed'])
       .not('guests', 'is', null);
 
     if (error) throw error;
@@ -177,6 +179,34 @@ export default async function handler(req, res) {
                  booking.balance_due_date <= today &&
                  booking.balance_sent_at) {
         results.balance.skipped++;
+      }
+
+      // 0b. Door code removal — the morning after checkout.
+      //     The Yale lock has no API, so codes are programmed and removed
+      //     by hand. Without this nothing prompts the removal and old
+      //     guest codes accumulate on the lock indefinitely.
+      if (booking.check_out_date === yesterday && !booking.door_code_removal_sent_at) {
+        const code = booking.guests?.pin_code || booking.yale_pin_code;
+        if (code) {
+          try {
+            const { sendDoorCodeRemoval } = await import('./_lib/email.js');
+            const sent = await sendDoorCodeRemoval({
+              guest: booking.guests, booking, code,
+            });
+            if (sent?.success) {
+              await supabase.from('bookings')
+                .update({ door_code_removal_sent_at: new Date().toISOString() })
+                .eq('id', booking.id);
+              results.doorCodes.sent++;
+            } else {
+              results.doorCodes.errors++;
+              console.error('[cron] Door code reminder failed:', sent?.error);
+            }
+          } catch (dcErr) {
+            results.doorCodes.errors++;
+            console.error('[cron] Door code reminder threw:', dcErr.message);
+          }
+        }
       }
 
       // 1. Welcome email — 3 days before check-in
