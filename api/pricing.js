@@ -84,7 +84,9 @@ export async function loadConfig() {
       // the night BEFORE check-out, so a new guest may arrive on the
       // day someone else leaves.
       supabase.from('bookings')
-        .select('check_in_date, check_out_date, status')
+        // id is needed so an edit can exclude the booking being changed
+        // from its own availability check.
+        .select('id, check_in_date, check_out_date, status')
         .in('status', ['confirmed', 'paid', 'completed'])
         .gte('check_out_date', today),
     ]);

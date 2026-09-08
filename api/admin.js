@@ -1632,6 +1632,15 @@ async function handleEditBooking(req, res, token) {
     try {
       const { loadConfig, computeQuote } = await import('./pricing.js');
       const cfg = await loadConfig();
+
+      // The pricing engine treats every confirmed booking as unavailable,
+      // including THIS one. Without removing it, extending a stay fails
+      // because the guest's own nights read as already taken. Genuine
+      // clashes with OTHER bookings are still caught, both by the check
+      // above and by the database exclusion constraint.
+      cfg.bookings = (cfg.bookings || []).filter(
+        b => String(b.id) !== String(booking_id));
+
       const q = computeQuote(cfg, {
         check_in: newIn, check_out: newOut,
         discount_code: before.discount_code,
