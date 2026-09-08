@@ -146,6 +146,7 @@ async function route(req, res) {
     case 'system-settings':  return handleSystemSettings(req, res, token);
     case 'activity':         return handleActivity(req, res, token);
     case 'pin-reset':        return handlePinReset(req, res, token);
+    case 'edit-booking':     return handleEditBooking(req, res, token);
     case 'pricing-all':
     case 'season':
     case 'settings':
@@ -1559,5 +1560,193 @@ async function handlePinReset(req, res, token) {
   } catch (err) {
     console.error('[pin-reset]', err);
     return res.status(500).json({ error: 'Could not send the reset link.', detail: err.message });
+  }
+}
+
+// ════════════════════════════════════
+// EDIT BOOKING
+// Change dates or guest count on an existing booking. Re-prices the
+// stay, re-checks availability, records what changed, and emails the
+// guest a before/after summary.
+// ════════════════════════════════════
+async function handleEditBooking(req, res, token) {
+  const auth = await validateAdminToken(token, 'family_admin');
+  if (auth.error) return res.status(auth.status).json({ error: auth.error });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
+
+  const { booking_id, check_in_date, check_out_date, num_guests,
+          note, notify_guest = true, preview = false } = req.body || {};
+
+  if (!booking_id) return res.status(400).json({ error: 'booking_id is required.' });
+
+  try {
+    const { data: before, error: loadErr } = await supabase
+      .from('bookings')
+      .select('*, guests(id, first_name, last_name, email, phone)')
+      .eq('id', booking_id)
+      .single();
+    if (loadErr || !before) return res.status(404).json({ error: 'Booking not found.' });
+
+    if (['cancelled', 'completed'].includes(before.status)) {
+      return res.status(409).json({ error: 'This booking is no longer active.' });
+    }
+
+    const newIn    = check_in_date  || before.check_in_date;
+    const newOut   = check_out_date || before.check_out_date;
+    const newGuests = num_guests != null ? parseInt(num_guests, 10) : before.num_guests;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newIn) || !/^\d{4}-\d{2}-\d{2}$/.test(newOut)) {
+      return res.status(400).json({ error: 'Dates must be valid.' });
+    }
+    if (newOut <= newIn) {
+      return res.status(400).json({ error: 'Check-out must be after check-in.' });
+    }
+    if (!Number.isInteger(newGuests) || newGuests < 1 || newGuests > 4) {
+      return res.status(400).json({ error: 'Guests must be between 1 and 4.' });
+    }
+
+    // Availability: a date change must not land on another confirmed stay.
+    if (newIn !== before.check_in_date || newOut !== before.check_out_date) {
+      const { data: clashes } = await supabase
+        .from('bookings')
+        .select('id, request_id, confirmation_id, check_in_date, check_out_date, guests(first_name, last_name)')
+        .in('status', ['confirmed', 'paid', 'checked_in'])
+        .neq('id', booking_id)
+        .lt('check_in_date', newOut)
+        .gt('check_out_date', newIn);
+
+      if (clashes?.length) {
+        const c = clashes[0];
+        const who = c.guests ? `${c.guests.first_name || ''} ${c.guests.last_name || ''}`.trim() : '';
+        return res.status(409).json({
+          error: `Those dates clash with a confirmed booking ` +
+                 `(${c.check_in_date} to ${c.check_out_date}` +
+                 `${who ? ' — ' + who : ''}${c.confirmation_id ? ', ' + c.confirmation_id : ''}).`,
+        });
+      }
+    }
+
+    // Re-price using the same engine the booking form uses, so an edited
+    // stay is costed identically to a new one.
+    let quote = null;
+    try {
+      const { loadConfig, computeQuote } = await import('./pricing.js');
+      const cfg = await loadConfig();
+      const q = computeQuote(cfg, {
+        check_in: newIn, check_out: newOut,
+        discount_code: before.discount_code,
+      });
+      if (!q.error) quote = q;
+      else return res.status(400).json({ error: `Could not price those dates: ${q.error}` });
+    } catch (qErr) {
+      console.error('[edit-booking] pricing failed:', qErr.message);
+      return res.status(500).json({ error: 'Could not re-price the stay.' });
+    }
+
+    const sched    = quote.payment_schedule || null;
+    const extras   = Number(before.extra_charges || 0);
+    const newOwed  = Number((quote.total + extras).toFixed(2));
+    const received = Number(before.amount_received || 0);
+
+    // What actually changed, in plain words for the guest and the log.
+    const changes = [];
+    const fmt = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-US',
+      { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+    if (newIn !== before.check_in_date) {
+      changes.push({ field: 'Check-in', from: fmt(before.check_in_date), to: fmt(newIn) });
+    }
+    if (newOut !== before.check_out_date) {
+      changes.push({ field: 'Check-out', from: fmt(before.check_out_date), to: fmt(newOut) });
+    }
+    if (newGuests !== before.num_guests) {
+      changes.push({ field: 'Guests', from: String(before.num_guests), to: String(newGuests) });
+    }
+    if (quote.nights !== before.num_nights) {
+      changes.push({ field: 'Nights', from: String(before.num_nights), to: String(quote.nights) });
+    }
+    const oldTotal = Number(before.quoted_total ?? before.total_amount ?? 0);
+    if (Math.abs(quote.total - oldTotal) > 0.005) {
+      changes.push({
+        field: 'Total',
+        from: `$${oldTotal.toFixed(2)}`,
+        to:   `$${quote.total.toFixed(2)}`,
+      });
+    }
+
+    if (!changes.length) {
+      return res.status(400).json({ error: 'Nothing was changed.' });
+    }
+
+    const balanceNow = Number(Math.max(0, newOwed - received).toFixed(2));
+    const overpaid   = Number(Math.max(0, received - newOwed).toFixed(2));
+
+    // Preview lets the dashboard show the impact before committing.
+    if (preview) {
+      return res.status(200).json({
+        preview: true, changes,
+        new_total: quote.total, new_owed: newOwed,
+        amount_received: received,
+        balance_due: balanceNow, overpaid,
+        nights: quote.nights,
+      });
+    }
+
+    const { error: updErr } = await supabase.from('bookings').update({
+      check_in_date:    newIn,
+      check_out_date:   newOut,
+      num_guests:       newGuests,
+      num_nights:       quote.nights,
+      quoted_subtotal:  quote.subtotal,
+      quoted_discount:  quote.discount,
+      quoted_tax:       quote.tax,
+      quoted_total:     quote.total,
+      deposit_amount:   sched ? sched.deposit_amount : null,
+      balance_amount:   sched ? sched.balance_amount : null,
+      balance_due_date: sched && sched.split ? sched.balance_due_date : null,
+      balance_due:      balanceNow,
+      updated_at:       new Date().toISOString(),
+    }).eq('id', booking_id);
+
+    if (updErr) {
+      if (updErr.code === '23P01') {
+        return res.status(409).json({
+          error: 'Those dates clash with a booking that is already confirmed.',
+        });
+      }
+      throw updErr;
+    }
+
+    await logAudit(auth.admin, 'update', 'bookings', booking_id,
+      'Booking changed — ' + changes.map(c => `${c.field}: ${c.from} → ${c.to}`).join('; ') +
+      (note ? ` (${note})` : ''));
+
+    // Tell the guest what moved.
+    let emailed = null;
+    if (notify_guest && before.guests?.email) {
+      try {
+        const { sendBookingChanged } = await import('./_lib/email.js');
+        const sent = await sendBookingChanged({
+          guest: before.guests,
+          booking: { ...before, check_in_date: newIn, check_out_date: newOut,
+                     num_guests: newGuests, quoted_total: quote.total },
+          changes, note,
+          balance_due: balanceNow, overpaid, amount_received: received,
+        });
+        emailed = sent?.success ? `Emailed ${before.guests.email}`
+                                : `Email failed: ${sent?.error || 'unknown'}`;
+      } catch (mailErr) {
+        console.error('[edit-booking] email failed:', mailErr.message);
+        emailed = `Email failed: ${mailErr.message}`;
+      }
+    }
+
+    return res.status(200).json({
+      success: true, changes, emailed,
+      new_total: quote.total, balance_due: balanceNow, overpaid,
+    });
+  } catch (err) {
+    console.error('[edit-booking]', err);
+    return res.status(500).json({ error: 'Could not update the booking.', detail: err.message });
   }
 }

@@ -2399,6 +2399,41 @@
             </div>
             <div id="payResult" style="margin-top:0.6rem;font-size:0.8rem;"></div>
 
+            <label style="margin-top:1.1rem;">Change This Booking</label>
+            <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;margin-top:0.4rem;">
+              <div style="flex:1;min-width:140px;">
+                <label style="font-size:0.6rem;">Check-In</label>
+                <input type="date" id="editCheckIn" value="${data.check_in_date || ''}"
+                  style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
+                         border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
+              </div>
+              <div style="flex:1;min-width:140px;">
+                <label style="font-size:0.6rem;">Check-Out</label>
+                <input type="date" id="editCheckOut" value="${data.check_out_date || ''}"
+                  style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
+                         border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
+              </div>
+              <div style="flex:0.6;min-width:90px;">
+                <label style="font-size:0.6rem;">Guests</label>
+                <input type="number" id="editGuests" min="1" max="4" value="${data.num_guests || 1}"
+                  style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
+                         border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
+              </div>
+              <button class="btn btn-ghost" id="previewEditBtn" data-booking="${data.id}">Preview</button>
+            </div>
+            <div style="margin-top:0.5rem;">
+              <label style="font-size:0.6rem;">Note to guest (optional)</label>
+              <input type="text" id="editNote" placeholder="e.g. Moved at your request"
+                style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
+                       border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
+            </div>
+            <label style="text-transform:none;letter-spacing:0;font-size:0.76rem;
+                          color:var(--cream);margin-top:0.5rem;display:block;">
+              <input type="checkbox" id="editNotify" checked style="width:auto;margin-right:0.4rem;"/>
+              Email the guest a summary of the changes
+            </label>
+            <div id="editResult" style="margin-top:0.6rem;font-size:0.8rem;"></div>
+
             <label style="margin-top:1.1rem;">Guest Account &amp; Refunds</label>
             <div style="display:flex;gap:0.6rem;flex-wrap:wrap;margin-top:0.5rem;">
               <button class="btn btn-ghost" id="pinResetBtn" data-booking="${data.id}">
@@ -2514,6 +2549,85 @@
             fillReasons();
           });
           fillReasons();
+        }
+
+        // Edit booking. Preview first so the price impact is visible before
+        // anything is committed or the guest is emailed.
+        var previewBtn = document.getElementById('previewEditBtn');
+        if (previewBtn) {
+          const editBody = () => ({
+            booking_id:     bookingId,
+            check_in_date:  document.getElementById('editCheckIn').value,
+            check_out_date: document.getElementById('editCheckOut').value,
+            num_guests:     document.getElementById('editGuests').value,
+            note:           document.getElementById('editNote').value.trim(),
+            notify_guest:   document.getElementById('editNotify').checked,
+          });
+
+          const post = async (body) => {
+            const res = await fetch('/api/admin?resource=edit-booking', {
+              method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
+            });
+            return { ok: res.ok, status: res.status, d: await res.json().catch(() => ({})) };
+          };
+
+          previewBtn.addEventListener('click', async function () {
+            const out = document.getElementById('editResult');
+            out.innerHTML = '<span style="color:var(--muted);">Checking…</span>';
+            this.disabled = true;
+            try {
+              const r = await post({ ...editBody(), preview: true });
+              if (!r.ok) {
+                out.innerHTML = `<span style="color:#E8A0A0;">${r.d.error || 'Could not preview.'}</span>`;
+                this.disabled = false;
+                return;
+              }
+              const d = r.d;
+              const rows = d.changes.map(c =>
+                `<div style="display:flex;gap:0.5rem;padding:0.15rem 0;">
+                   <span style="color:var(--sky);min-width:80px;">${c.field}</span>
+                   <span style="color:var(--muted);text-decoration:line-through;">${c.from}</span>
+                   <span style="color:var(--cream);">→ ${c.to}</span>
+                 </div>`).join('');
+              const money$ = v => '$' + Number(v).toLocaleString('en-US',
+                { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              const impact = d.balance_due > 0
+                ? `<strong style="color:#FFD54F;">${money$(d.balance_due)} will be owed</strong>`
+                : d.overpaid > 0
+                  ? `<strong style="color:#E8A0A0;">Overpaid by ${money$(d.overpaid)} — a refund is due</strong>`
+                  : '<strong style="color:#7FD1A4;">Fully paid, nothing further owed</strong>';
+
+              out.innerHTML =
+                `<div style="padding:0.7rem;background:rgba(46,95,163,0.10);
+                     border:1px solid rgba(46,95,163,0.3);border-radius:4px;">
+                   ${rows}
+                   <div style="margin-top:0.5rem;padding-top:0.5rem;
+                        border-top:1px solid rgba(46,95,163,0.2);">${impact}</div>
+                   <button class="btn btn-primary" id="applyEditBtn"
+                     style="margin-top:0.6rem;">Apply Changes</button>
+                 </div>`;
+
+              document.getElementById('applyEditBtn').addEventListener('click', async function () {
+                if (!confirm('Apply these changes?' +
+                    (document.getElementById('editNotify').checked
+                      ? '\n\nThe guest will be emailed a summary.' : ''))) return;
+                this.disabled = true;
+                this.textContent = 'Applying…';
+                const r2 = await post(editBody());
+                if (!r2.ok) {
+                  out.innerHTML = `<span style="color:#E8A0A0;">${r2.d.error || 'Could not apply.'}</span>`;
+                  return;
+                }
+                out.innerHTML = '<span style="color:#7FD1A4;">Booking updated.' +
+                  (r2.d.emailed ? ' ' + r2.d.emailed : '') + '</span>';
+                loadPageData('bookings');
+                setTimeout(() => openBookingModal(bookingId), 1500);
+              });
+            } catch (e) {
+              out.innerHTML = `<span style="color:#E8A0A0;">${e.message}</span>`;
+            }
+            this.disabled = false;
+          });
         }
 
         // PIN reset — the guest chooses the new PIN, we only send the link.

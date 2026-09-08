@@ -872,3 +872,87 @@ export async function sendCancellationRequest({ guest, booking, reason, refund }
     reply_to: guest.email,      // so replying goes straight to the guest
   });
 }
+
+// ════════════════════════════════════════════════════════
+// TEMPLATE 16 — Booking changed (to guest)
+// ════════════════════════════════════════════════════════
+// Shows what moved, old value beside new, plus any money implication.
+export async function sendBookingChanged({
+  guest, booking, changes, note, balance_due, overpaid, amount_received,
+}) {
+  const reference = booking?.confirmation_id || booking?.request_id || '';
+  const subject   = `Your reservation has been updated — ${PROPERTY_NAME}`;
+
+  const rows = (changes || []).map(c => `
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid rgba(46,95,163,0.15);
+                   color:#A8C4E0;font-size:13px;">${c.field}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid rgba(46,95,163,0.15);
+                   color:#7A90AE;font-size:13px;text-decoration:line-through;">${c.from}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid rgba(46,95,163,0.15);
+                   color:#F4F7FB;font-size:13px;"><strong>${c.to}</strong></td>
+      </tr>`).join('');
+
+  const moneyLine =
+    balance_due > 0
+      ? `<p><strong>Balance now due: ${money(balance_due)}</strong>${
+          amount_received ? ` (${money(amount_received)} received so far)` : ''
+        }. We will send a payment request shortly.</p>`
+      : overpaid > 0
+        ? `<p><strong>You have overpaid by ${money(overpaid)}.</strong> We will
+           refund the difference to your original card.</p>`
+        : `<p>No further payment is needed &mdash; your reservation is paid in full.</p>`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>${emailStyles}</head>
+<body><div class="wrapper">
+  <div class="header">
+    <div class="header-title">Reservation Updated</div>
+    <div class="header-sub">${PROPERTY_NAME}</div>
+  </div>
+  <div class="body">
+    <div class="greeting">Hi <em>${guest.first_name}</em>,</div>
+    <p>Your reservation${reference ? ` <strong>${reference}</strong>` : ''} has been
+       updated. Here is exactly what changed:</p>
+
+    <table style="width:100%;border-collapse:collapse;margin:16px 0;
+                  background:rgba(46,95,163,0.08);border-radius:4px;">
+      <tr>
+        <th style="text-align:left;padding:8px 10px;font-size:11px;letter-spacing:1px;
+                   text-transform:uppercase;color:#5B8DD9;">Item</th>
+        <th style="text-align:left;padding:8px 10px;font-size:11px;letter-spacing:1px;
+                   text-transform:uppercase;color:#5B8DD9;">Was</th>
+        <th style="text-align:left;padding:8px 10px;font-size:11px;letter-spacing:1px;
+                   text-transform:uppercase;color:#5B8DD9;">Now</th>
+      </tr>
+      ${rows}
+    </table>
+
+    ${note ? `<p style="background:rgba(46,95,163,0.10);border-left:3px solid #5B8DD9;
+              padding:12px 14px;border-radius:3px;font-size:13px;line-height:1.7;
+              color:#A8C4E0;margin:16px 0;">${note}</p>` : ''}
+
+    <div class="info-card">
+      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)} after 4:00 PM</span></div>
+      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)} by 11:00 AM</span></div>
+      <div class="info-row"><span class="info-label">Guests</span><span class="info-value">${booking.num_guests}</span></div>
+      <div class="info-row"><span class="info-label">Total</span><span class="info-value"><strong>${money(booking.quoted_total)}</strong></span></div>
+    </div>
+
+    ${moneyLine}
+
+    <p style="font-size:13px;color:#7A90AE;">
+      If anything here looks wrong, reply to this email and we will sort it out.
+    </p>
+  </div>
+  <div class="footer"><p>${PROPERTY_NAME}</p></div>
+</div></body></html>`;
+
+  const text = `Your reservation${reference ? ` ${reference}` : ''} has been updated. `
+    + (changes || []).map(c => `${c.field}: ${c.from} -> ${c.to}`).join('. ') + '. '
+    + (balance_due > 0 ? `Balance now due: ${money(balance_due)}.`
+       : overpaid > 0 ? `You have overpaid by ${money(overpaid)}; we will refund it.`
+       : 'No further payment needed.')
+    + (note ? ` Note: ${note}` : '');
+
+  return sendEmail({ to: guest.email, from: FROM_BOOKINGS, subject, html, text });
+}
