@@ -1418,11 +1418,24 @@
     }
 
     // ── DASHBOARD ──
+    // A booking change affects the bookings table, the dashboard summary
+    // card and the calendar. Refresh all three rather than just the one
+    // the admin happens to be looking at.
+    function refreshBookingViews() {
+      loadPageData('bookings');
+      loadPageData('dashboard');
+      const cal = document.getElementById('page-calendar');
+      if (cal && cal.classList.contains('active')) loadPageData('calendar');
+    }
+
     async function loadDashboard() {
       try {
         const res  = await fetch('/api/admin?resource=dashboard', { headers: authHeaders() });
-        const data = await res.json();
-        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          console.error('[dashboard]', data.error || res.status);
+          return;
+        }
 
         document.getElementById('statInquiries').textContent = data.inquiries  || 0;
         document.getElementById('statConfirmed').textContent = data.confirmed  || 0;
@@ -2124,7 +2137,7 @@
         alert(`Booking ${status === 'confirmed' ? 'approved' : 'declined'}.` +
               (data.emailed ? `\n\n${data.emailed}` : ''));
         loadPageData('dashboard');
-        loadPageData('bookings');
+        refreshBookingViews();
       } catch (err) {
         console.error(err);
         alert(`Could not ${verb} this booking. ${err.message}`);
@@ -2173,7 +2186,7 @@
           '<a href="' + data.payment_url + '" target="_blank" rel="noopener" ' +
           'style="word-break:break-all;">' + data.payment_url + '</a>';
         btn.textContent = 'Request Sent';
-        loadPageData('bookings');
+        refreshBookingViews();
       } catch (err) {
         console.error(err);
         if (out) out.innerHTML =
@@ -2239,7 +2252,7 @@
           (data.emailed ? ` — ${data.emailed}` : '') + `.</span><br/>` +
           `<a href="${data.payment_url}" target="_blank" rel="noopener">Open the link</a>`;
         btn.textContent = 'Sent';
-        loadPageData('bookings');
+        refreshBookingViews();
         // Reopen so payment status and button state reflect the change.
         setTimeout(function () { openBookingModal(bookingId); }, 1200);
       } catch (err) {
@@ -2591,7 +2604,7 @@
               }
               out.innerHTML = '<span style="color:#7FD1A4;">Booking updated.' +
                 (r.d.emailed ? ' ' + r.d.emailed : '') + '</span>';
-              loadPageData('bookings');
+              refreshBookingViews();
               setTimeout(() => openBookingModal(bookingId), 1500);
             } catch (e) {
               out.innerHTML = `<span style="color:#E8A0A0;">${e.message}</span>`;
@@ -2734,7 +2747,7 @@
                 ? '<span style="color:#7FD1A4;">Refund issued.</span>'
                 : `<span style="color:#E8A0A0;">${d.error || 'Refund failed (' + res.status + ')'}</span>`;
               if (res.ok) {
-                loadPageData('bookings');
+                refreshBookingViews();
                 setTimeout(function () { openBookingModal(bookingId); }, 1500);
               }
             } catch (e) {
