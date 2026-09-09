@@ -861,6 +861,18 @@ async function handleWebhook(req, res) {
           }
         }
 
+        // Record it in the audit trail so the Activity feed shows payments
+        // even if the booking timestamp columns are unavailable.
+        await supabase.from('audit_logs').insert({
+          action:     'payment_received',
+          table_name: 'bookings',
+          record_id:  bookingId,
+          notes:      `${paymentType} payment of $${amountPaid.toFixed(2)} received ` +
+                      `($${received.toFixed(2)} of $${owed.toFixed(2)})`,
+        }).then(({ error }) => {
+          if (error) console.error('[stripe/webhook] audit insert failed:', error.message);
+        });
+
         console.log(`[stripe/webhook] Booking ${bookingId} ${paymentType} $${amountPaid} ` +
                     `(received $${received} of $${owed}) → ${update.payment_status}`);
       }

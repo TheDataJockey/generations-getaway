@@ -75,7 +75,10 @@ async function validateAdminToken(token, requiredRole = null) {
 
 // ── Audit log helper ──
 async function logAudit(admin, action, tableName, recordId = null, notes = null) {
-  await supabase.from('audit_logs').insert({
+  // A silent failure here means admin actions never reach the Activity
+  // feed, with nothing to explain why. Log the reason, and retry with a
+  // reduced column set in case one of the optional columns is missing.
+  const full = {
     admin_id:    admin.id,
     admin_email: admin.email,
     admin_role:  admin.role,
@@ -83,7 +86,19 @@ async function logAudit(admin, action, tableName, recordId = null, notes = null)
     table_name:  tableName,
     record_id:   recordId || undefined,
     notes,
+  };
+
+  const { error } = await supabase.from('audit_logs').insert(full);
+  if (!error) return;
+
+  console.error('[audit] insert failed, retrying minimal:', error.message);
+  const { error: err2 } = await supabase.from('audit_logs').insert({
+    admin_email: admin.email,
+    action,
+    table_name:  tableName,
+    notes:       notes ? `${notes}${recordId ? ` [${recordId}]` : ''}` : null,
   });
+  if (err2) console.error('[audit] minimal insert also failed:', err2.message);
 }
 
 // ── Main router ──
@@ -147,6 +162,7 @@ async function route(req, res) {
     case 'activity':         return handleActivity(req, res, token);
     case 'pin-reset':        return handlePinReset(req, res, token);
     case 'edit-booking':     return handleEditBooking(req, res, token);
+    case 'resend-email':     return handleResendEmail(req, res, token);
     case 'pricing-all':
     case 'season':
     case 'settings':
@@ -236,7 +252,21 @@ async function handleGuests(req, res, token) {
 
   try {
     if (req.method === 'GET') {
-      const { search = '', filter = '' } = req.query;
+      const { search = '', filter = '', id } = req.query;
+
+      // Single guest lookup. Without this, ?id= was ignored and the Edit
+      // button received the whole list, so every field read as undefined
+      // and the form opened blank — indistinguishable from Add Guest.
+      if (id) {
+        const { data, error } = await supabase
+          .from('guests')
+          .select('*')
+          .eq('id', id)
+          .single();
+        if (error || !data) return res.status(404).json({ error: 'Guest not found.' });
+        return res.status(200).json(data);
+      }
+
       let query = supabase
         .from('guests')
         .select('id, first_name, last_name, email, phone, total_stays, is_active, is_blacklisted, vip_status, bookings(check_out_date)')
@@ -1447,11 +1477,22 @@ async function handleActivity(req, res, token) {
     // the feed comes back empty. Retry with the columns that have always
     // been there rather than showing nothing.
     if (bookings.error) {
+      // Step down one tier at a time. Dropping straight to the basics
+      // loses every payment event, which is most of what this feed is for.
       console.error('[activity] Wide select failed, retrying:', bookings.error.message);
       bookings = await supabase.from('bookings')
         .select('id, request_id, status, created_at, check_in_date, check_out_date, ' +
-                'guests(first_name, last_name)')
+                'amount_received, deposit_sent_at, deposit_paid_at, ' +
+                'balance_sent_at, balance_paid_at, guests(first_name, last_name)')
         .order('created_at', { ascending: false }).limit(limit);
+
+      if (bookings.error) {
+        console.error('[activity] Retry failed, falling back to basics:', bookings.error.message);
+        bookings = await supabase.from('bookings')
+          .select('id, request_id, status, created_at, check_in_date, check_out_date, ' +
+                  'guests(first_name, last_name)')
+          .order('created_at', { ascending: false }).limit(limit);
+      }
     }
 
     const events = [];
@@ -1799,5 +1840,61 @@ async function handleEditBooking(req, res, token) {
   } catch (err) {
     console.error('[edit-booking]', err);
     return res.status(500).json({ error: 'Could not update the booking.', detail: err.message });
+  }
+}
+
+// ════════════════════════════════════
+// RESEND EMAIL
+// Re-send a booking email a guest says they never received.
+// ════════════════════════════════════
+async function handleResendEmail(req, res, token) {
+  const auth = await validateAdminToken(token, 'family_admin');
+  if (auth.error) return res.status(auth.status).json({ error: auth.error });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
+
+  const { booking_id, type = 'confirmation' } = req.body || {};
+  if (!booking_id) return res.status(400).json({ error: 'booking_id is required.' });
+  if (!['confirmation', 'approved', 'welcome'].includes(type)) {
+    return res.status(400).json({ error: 'Unknown email type.' });
+  }
+
+  try {
+    const { data: booking, error } = await supabase
+      .from('bookings')
+      .select('*, guests(id, first_name, last_name, email, phone)')
+      .eq('id', booking_id)
+      .single();
+    if (error || !booking) return res.status(404).json({ error: 'Booking not found.' });
+
+    const g = booking.guests;
+    if (!g?.email) return res.status(400).json({ error: 'No email on file for this guest.' });
+
+    const mail = await import('./_lib/email.js');
+    let sent;
+
+    if (type === 'approved') {
+      sent = await mail.sendBookingApproved({ guest: g, booking });
+    } else if (type === 'welcome') {
+      if (!booking.yale_pin_code) {
+        return res.status(400).json({
+          error: 'No door code is set on this booking yet, so the welcome email would be incomplete.',
+        });
+      }
+      sent = await mail.sendWelcomeEmail({ guest: g, booking });
+    } else {
+      sent = await mail.sendBookingConfirmation({ guest: g, booking });
+    }
+
+    await logAudit(auth.admin, 'resend_email', 'bookings', booking_id,
+      `Resent ${type} email to ${g.email}`);
+
+    return res.status(200).json({
+      success: !!sent?.success,
+      emailed: sent?.success ? `Resent to ${g.email}`
+                             : `Email failed: ${sent?.error || 'unknown'}`,
+    });
+  } catch (err) {
+    console.error('[resend-email]', err);
+    return res.status(500).json({ error: 'Could not resend the email.', detail: err.message });
   }
 }

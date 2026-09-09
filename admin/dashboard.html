@@ -1607,13 +1607,27 @@
               <td style="text-transform:capitalize;">${b.booking_source || '—'}</td>
               <td><span class="status status-${b.status}">${b.status}</span></td>
               <td>
-                ${b.payment_status === 'paid'
-                  ? '<span class="status" style="background:rgba(52,199,89,0.15);color:#81C784;">Paid</span>'
-                  : b.payment_status === 'refunded'
-                  ? '<span class="status" style="background:rgba(239,154,154,0.15);color:#EF9A9A;">Refunded</span>'
-                  : b.stripe_payment_link_url
-                  ? '<span class="status" style="background:rgba(255,213,79,0.15);color:#FFD54F;">Link Sent</span>'
-                  : '<span class="status" style="background:rgba(142,142,147,0.15);color:#8e8e93;">Unpaid</span>'}
+                ${(() => {
+                  // Money received always beats link state. A deposit that
+                  // has cleared used to still read "Link Sent" because
+                  // 'partial' was not handled and it fell through.
+                  const owed = Number(b.quoted_total ?? b.total_amount ?? 0) +
+                               Number(b.extra_charges || 0);
+                  const got  = Number(b.amount_received || 0);
+                  const m    = v => '$' + Number(v).toLocaleString('en-US',
+                                 { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                  if (b.payment_status === 'refunded')
+                    return '<span class="status" style="background:rgba(239,154,154,0.15);color:#EF9A9A;">Refunded</span>';
+                  if (b.payment_status === 'paid' || (owed > 0 && got + 0.01 >= owed))
+                    return '<span class="status" style="background:rgba(52,199,89,0.15);color:#81C784;">Paid</span>';
+                  if (got > 0)
+                    return '<span class="status" style="background:rgba(255,213,79,0.15);color:#FFD54F;" ' +
+                           `title="${m(got)} of ${m(owed)} received">Partial &middot; ${m(got)}</span>`;
+                  if (b.stripe_payment_link_url)
+                    return '<span class="status" style="background:rgba(46,95,163,0.15);color:#5B8DD9;">Link Sent</span>';
+                  return '<span class="status" style="background:rgba(142,142,147,0.15);color:#8e8e93;">Unpaid</span>';
+                })()}
               </td>
               <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
                 <button class="action-btn action-btn-view"
@@ -2473,6 +2487,16 @@
 
             <label style="margin-top:1.1rem;">Guest Account &amp; Refunds</label>
             <div style="display:flex;gap:0.6rem;flex-wrap:wrap;margin-top:0.5rem;">
+              <select id="resendType"
+                style="padding:0.5rem;background:var(--navy-light);color:var(--cream);
+                       border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.8rem;">
+                <option value="confirmation">Booking confirmation</option>
+                <option value="approved">Approval / dates confirmed</option>
+                <option value="welcome">Welcome + door code</option>
+              </select>
+              <button class="btn btn-ghost" id="resendEmailBtn" data-booking="${data.id}">
+                Resend Email
+              </button>
               <button class="btn btn-ghost" id="pinResetBtn" data-booking="${data.id}">
                 Send PIN Reset
               </button>
@@ -2743,6 +2767,30 @@
           });
         }
 
+        // Resend a booking email the guest says never arrived.
+        var resendBtn = document.getElementById('resendEmailBtn');
+        if (resendBtn) {
+          resendBtn.addEventListener('click', async function () {
+            const type = document.getElementById('resendType').value;
+            const label = document.querySelector(`#resendType option[value="${type}"]`).textContent;
+            if (!confirm(`Resend the "${label}" email to this guest?`)) return;
+            this.disabled = true;
+            const orig = this.textContent;
+            this.textContent = 'Sending…';
+            try {
+              const res = await fetch('/api/admin?resource=resend-email', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ booking_id: bookingId, type }),
+              });
+              const d = await res.json().catch(() => ({}));
+              alert(res.ok ? (d.emailed || 'Email resent.')
+                           : `Could not resend: ${d.error || res.status}`);
+            } catch (e) { alert(`Could not resend: ${e.message}`); }
+            this.disabled = false;
+            this.textContent = orig;
+          });
+        }
+
         // PIN reset — the guest chooses the new PIN, we only send the link.
         var pinBtn = document.getElementById('pinResetBtn');
         if (pinBtn) {
@@ -2887,7 +2935,11 @@
     window.editGuest = async function(guestId) {
       try {
         const res  = await fetch(`/api/admin?resource=guests&id=${guestId}`, { headers: authHeaders() });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.id) {
+          alert(`Could not load that guest: ${data.error || res.status}`);
+          return;
+        }
         document.getElementById('guestId').value           = data.id;
         document.getElementById('gFirstName').value        = data.first_name || '';
         document.getElementById('gLastName').value         = data.last_name  || '';
@@ -2903,7 +2955,10 @@
         document.getElementById('gGeneralNotes').value     = data.general_notes     || '';
         document.getElementById('guestFormTitle').textContent = 'Edit Guest';
         showPage('add-guest');
-      } catch (err) { console.error(err); }
+      } catch (err) {
+        console.error(err);
+        alert(`Could not load that guest: ${err.message}`);
+      }
     };
 
     // KB modal
