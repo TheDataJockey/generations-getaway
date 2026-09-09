@@ -130,7 +130,20 @@ export default async function handler(req, res) {
     }
 
     // ── Sanitize inputs ──
-    const sanitize = (str) => str?.trim().replace(/<[^>]*>/g, '') || null;
+    // Strip HTML tags AND the characters that break out of an HTML
+    // attribute or a JS string literal. The old version only removed
+    // tags, so a name like  x');alert(1);//  passed straight through
+    // into the admin dashboard.
+    const sanitize = (str) => {
+      if (str == null) return null;
+      const cleaned = String(str)
+        .trim()
+        .replace(/<[^>]*>/g, '')      // tags
+        .replace(/[<>]/g, '')          // stray angle brackets
+        .replace(/[\u0000-\u001F\u007F]/g, '')  // control chars
+        .slice(0, 1000);
+      return cleaned || null;
+    };
 
     // These columns carry CHECK constraints in Postgres. Sending a value
     // the constraint doesn't allow rejects the whole insert, so anything

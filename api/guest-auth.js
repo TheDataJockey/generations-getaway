@@ -58,6 +58,23 @@ async function handleGetRequests(req, res, supabase) {
   const { session_token, booking_id } = req.body;
   if (!session_token || !booking_id) return res.status(400).json({ error: 'Missing parameters.' });
 
+  // Without this, any string plus a booking id returned that booking's
+  // request history — including another guest's.
+  const sessionGuestId = verifyGuestToken(session_token);
+  if (!sessionGuestId) {
+    return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
+  }
+
+  const { data: owns } = await supabase
+    .from('bookings')
+    .select('id')
+    .eq('id', booking_id)
+    .eq('guest_id', sessionGuestId)
+    .maybeSingle();
+  if (!owns) {
+    return res.status(403).json({ error: 'That reservation is not on your account.' });
+  }
+
   const { data: requests } = await supabase
     .from('reservation_requests')
     .select('id, request_number, request_type, status, requested_details, guest_notes, admin_notes, created_at, resolved_at')
@@ -71,10 +88,13 @@ async function handleGetRequests(req, res, supabase) {
 async function handleReservationRequest(req, res, supabase) {
   const { session_token, booking_id, guest_name, request_type, subject, details } = req.body;
 
-  // Validate session token
-  if (!session_token) return res.status(401).json({ error: 'Not authenticated.' });
+  // Validate the session token properly. Presence alone used to be
+  // enough, so any string plus a booking id was accepted.
+  const sessionGuestId = verifyGuestToken(session_token);
+  if (!sessionGuestId) {
+    return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
+  }
 
-  // Fetch booking to verify it belongs to this session
   const { data: booking } = await supabase
     .from('bookings')
     .select('id, check_in_date, check_out_date, guest_id, guests(first_name, last_name, email)')
@@ -83,6 +103,11 @@ async function handleReservationRequest(req, res, supabase) {
     .maybeSingle();
 
   if (!booking) return res.status(404).json({ error: 'Booking not found.' });
+
+  // The booking must belong to the signed-in guest.
+  if (String(booking.guest_id) !== String(sessionGuestId)) {
+    return res.status(403).json({ error: 'That reservation is not on your account.' });
+  }
 
   const guest = booking.guests;
   const fmt   = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
@@ -337,11 +362,12 @@ export default async function handler(req, res) {
       .limit(1)
       .maybeSingle();
 
-    // ── Generate a simple session token ──
-    const token = crypto
-      .createHmac('sha256', process.env.SUPABASE_SERVICE_ROLE_KEY)
-      .update(`${matchedGuest.id}:${Date.now()}`)
-      .digest('hex');
+    // ── Generate a signed, verifiable session token ──
+    // The previous token was an HMAC over id:timestamp that was never
+    // stored and never checked, so any non-empty string was accepted as
+    // authentication. This one carries the guest id and an expiry inside
+    // it, signed, so it can be verified without a database lookup.
+    const token = makeGuestToken(matchedGuest.id);
 
     // ── Log the successful login ──
     await supabase.from('audit_logs').insert({
@@ -396,6 +422,10 @@ export default async function handler(req, res) {
         nightly_rate:   booking?.nightly_rate   || null,
         past_stays:     pastStays,
       },
+      // Property details are returned ONLY here, after a PIN has been
+      // verified. They used to be hardcoded in welcome.html, which is a
+      // public file — the WiFi password was readable via View Source.
+      property: await getPropertyInfo(),
     });
 
   } catch (err) {
@@ -403,6 +433,64 @@ export default async function handler(req, res) {
     return res.status(500).json({
       error: 'An unexpected error occurred. Please try again.'
     });
+  }
+}
+
+/* ── Guest session tokens ──────────────────────────────────────
+   Format:  <guestId>.<expiresMs>.<hmac>
+   Self-verifying: no storage needed, tamper-evident, and expires.
+   ───────────────────────────────────────────────────────────── */
+const GUEST_SESSION_HOURS = 12;
+
+function guestTokenSecret() {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY || 'unset-secret';
+}
+
+function makeGuestToken(guestId) {
+  const expires = Date.now() + GUEST_SESSION_HOURS * 3600 * 1000;
+  const body    = `${guestId}.${expires}`;
+  const sig     = crypto.createHmac('sha256', guestTokenSecret())
+                        .update(body).digest('hex');
+  return `${body}.${sig}`;
+}
+
+/** Returns the guest id if the token is valid and unexpired, else null. */
+function verifyGuestToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+
+  const [guestId, expiresStr, sig] = parts;
+  const expires = Number(expiresStr);
+  if (!Number.isFinite(expires) || Date.now() > expires) return null;
+
+  const expected = crypto.createHmac('sha256', guestTokenSecret())
+                         .update(`${guestId}.${expiresStr}`).digest('hex');
+
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+
+  return guestId;
+}
+
+// Property details shown in the guest handbook. Returned only to an
+// authenticated guest, never rendered into the public HTML.
+async function getPropertyInfo() {
+  try {
+    const { data } = await supabase
+      .from('system_settings')
+      .select('wifi_ssid, wifi_password, property_address')
+      .eq('id', 1)
+      .single();
+    return {
+      wifi_ssid:     data?.wifi_ssid     || null,
+      wifi_password: data?.wifi_password || null,
+      address:       data?.property_address || null,
+    };
+  } catch (err) {
+    console.error('[guest-auth] property info failed:', err.message);
+    return { wifi_ssid: null, wifi_password: null, address: null };
   }
 }
 

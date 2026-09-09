@@ -1449,7 +1449,7 @@
         if (data.recent_bookings?.length) {
           tbody.innerHTML = data.recent_bookings.map(b => `
             <tr>
-              <td>${b.guest_first} ${b.guest_last}</td>
+              <td>${h(b.guest_first)} ${h(b.guest_last)}</td>
               <td>${formatDate(b.check_in_date)}</td>
               <td>${formatDate(b.check_out_date)}</td>
               <td><span class="status status-${b.status}">${b.status}</span></td>
@@ -1498,6 +1498,16 @@
     // Show a load failure in the page itself instead of only the console.
     // Every loader below used to swallow errors, so a broken API call was
     // indistinguishable from "no data".
+    // Escape anything a guest can control before it reaches innerHTML.
+    // Guest names, emails and free-text notes are attacker-controlled:
+    // the server sanitiser strips HTML tags but NOT quotes, so a name
+    // like  x');alert(1);//  would break out of an inline onclick.
+    function h(v) {
+      return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+      });
+    }
+
     // Shared currency formatter. Was previously declared inside the booking
     // modal only, so anything else using it threw "money is not defined".
     function money(v) {
@@ -1597,7 +1607,7 @@
           tbody.innerHTML = data.bookings.map(b => `
             <tr>
               <td>
-                ${b.guest_first} ${b.guest_last}
+                ${h(b.guest_first)} ${h(b.guest_last)}
 
               </td>
               <td>${formatDate(b.check_in_date)}</td>
@@ -1634,12 +1644,12 @@
                   onclick="openBookingModal('${b.id}')">View</button>
                 ${b.status === 'confirmed' && b.payment_status !== 'paid' ? `
                   <button class="action-btn" style="background:rgba(46,95,163,0.2);border-color:rgba(46,95,163,0.4);color:var(--sky);"
-                    onclick="openStripeModal('${b.id}','${b.guest_first} ${b.guest_last}','${b.total_amount||''}','${b.check_in_date}','${b.stripe_payment_link_url||''}')"
+                    data-stripe-booking="${h(b.id)}"
                     title="Send Payment Link">&#36; Pay</button>
                 ` : ''}
                 ${b.payment_status === 'paid' ? `
                   <button class="action-btn" style="background:rgba(239,154,154,0.1);border-color:rgba(239,154,154,0.3);color:#EF9A9A;"
-                    onclick="openRefundModal('${b.id}','${b.guest_first} ${b.guest_last}','${b.total_amount||''}','${b.check_in_date}')"
+                    data-refund-booking="${h(b.id)}"
                     title="Process Refund">&#8617; Refund</button>
                 ` : ''}
                 ${b.status === 'inquiry' ? `
@@ -1653,6 +1663,14 @@
         } else {
           tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;">No bookings found</td></tr>';
         }
+        // Bind the row action buttons. These used to be inline onclick
+        // handlers calling openStripeModal / openRefundModal, neither of
+        // which exists — both jobs are in the booking modal now.
+        tbody.querySelectorAll('[data-stripe-booking],[data-refund-booking]')
+          .forEach(function (btn) {
+            const id = btn.dataset.stripeBooking || btn.dataset.refundBooking;
+            btn.addEventListener('click', function () { openBookingModal(id); });
+          });
       } catch (err) {
         showLoadError('allBookingsBody', err, 8);
       }
@@ -1864,10 +1882,10 @@
         if (data.guests?.length) {
           tbody.innerHTML = data.guests.map(g => `
             <tr>
-              <td>${g.first_name} ${g.last_name}
+              <td>${h(g.first_name)} ${h(g.last_name)}
                 ${g.vip_status ? '<span class="badge badge-orange" style="font-size:0.55rem;margin-left:0.3rem;">VIP</span>' : ''}
               </td>
-              <td>${g.email}</td>
+              <td>${h(g.email)}</td>
               <td>${g.phone || '—'}</td>
               <td>${g.total_stays || 0}</td>
               <td>${g.last_stay ? formatDate(g.last_stay) : 'Never'}</td>
