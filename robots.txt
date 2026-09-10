@@ -1,0 +1,14 @@
+# Generations Getaway LLC
+User-agent: *
+Allow: /
+Allow: /booking.html
+Allow: /events.html
+Allow: /recommendations.html
+
+# Guest and admin areas hold personal data — keep them out of search.
+Disallow: /admin/
+Disallow: /welcome.html
+Disallow: /activate.html
+Disallow: /api/
+
+Sitemap: https://www.generationsgetawayfl.com/sitemap.xml
