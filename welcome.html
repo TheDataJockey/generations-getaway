@@ -376,8 +376,8 @@
             <span class="info-card-chevron">&#9660;</span>
           </div>
           <div class="info-card-body">
-            <div class="info-row"><span class="info-row-label">Network Name</span><span class="info-row-value highlight">Generations Getaway Guest</span></div>
-            <div class="info-row"><span class="info-row-label">Password</span><span class="info-row-value highlight">VictoriaparkFLL647!</span></div>
+            <div class="info-row"><span class="info-row-label">Network Name</span><span class="info-row-value highlight" id="wifiSsid">&#8943;</span></div>
+            <div class="info-row"><span class="info-row-label">Password</span><span class="info-row-value highlight" id="wifiPassword">&#8943;</span></div>
             <div class="info-row"><span class="info-row-label">Smart TV</span><span class="info-row-value">Netflix, Hulu, Disney+, HBO Max &mdash; log in with your own account</span></div>
             <div class="info-row"><span class="info-row-label">Speed</span><span class="info-row-value">High-speed fiber &mdash; suitable for remote work and streaming</span></div>
           </div>
@@ -531,7 +531,7 @@
           </div>
           <div class="info-card-body">
             <div class="info-row"><span class="info-row-label">Emergency</span><span class="info-row-value highlight">Call 911</span></div>
-            <div class="info-row"><span class="info-row-label">Property Address</span><span class="info-row-value">647 NE 16th Terrace, Fort Lauderdale, FL 33304</span></div>
+            <div class="info-row"><span class="info-row-label">Property Address</span><span class="info-row-value" id="propertyAddress">&#8943;</span></div>
             <div class="info-row"><span class="info-row-label">Police (Non-Emergency)</span><span class="info-row-value">(954) 764-4357 &mdash; Fort Lauderdale Police Department</span></div>
             <div class="info-row"><span class="info-row-label">Fire (Non-Emergency)</span><span class="info-row-value">(954) 828-6800 &mdash; Fort Lauderdale Fire Rescue</span></div>
             <div class="info-row"><span class="info-row-label">EMS (Non-Emergency)</span><span class="info-row-value">(954) 828-6800 &mdash; Broward Health Emergency</span></div>
@@ -783,8 +783,11 @@
     (function checkExistingSession() {
       const token = sessionStorage.getItem('gg_session_token');
       const guest = sessionStorage.getItem('gg_guest');
+      const prop  = sessionStorage.getItem('gg_property');
       if (token && guest) {
-        try { showPortal(JSON.parse(guest)); } catch { sessionStorage.clear(); }
+        try {
+          showPortal(JSON.parse(guest), prop ? JSON.parse(prop) : null);
+        } catch { sessionStorage.clear(); }
       }
     })();
 
@@ -819,7 +822,10 @@
           sessionStorage.removeItem('gg_attempts'); sessionStorage.removeItem('gg_locked');
           sessionStorage.setItem('gg_session_token', data.token);
           sessionStorage.setItem('gg_guest', JSON.stringify(data.guest));
-          showPortal(data.guest);
+          // Property details are held for this tab only so a session
+          // restore can repopulate without another round trip.
+          if (data.property) sessionStorage.setItem('gg_property', JSON.stringify(data.property));
+          showPortal(data.guest, data.property);
         } else if (res.status === 423) {
           lockoutMsg.style.display = 'block'; lockoutMsg.textContent = data.error || 'Account temporarily locked.'; loginBtn.disabled = true;
         } else {
@@ -843,7 +849,7 @@
       }
     });
 
-    function showPortal(guest) {
+    function showPortal(guest, property) {
       loginScreen.style.display  = 'none';
       portalScreen.style.display = 'block';
       document.getElementById('guestFirstName').textContent = guest.first_name || 'Guest';
@@ -856,6 +862,18 @@
       }
       if (guest.welcome_note) document.getElementById('welcomeNote').textContent = guest.welcome_note;
       if (guest.yale_pin_code) document.getElementById('doorPin').textContent = guest.yale_pin_code;
+
+      // Property details arrive with the authenticated response, never in
+      // the page source. Anything missing stays as a placeholder.
+      if (property) {
+        const setIf = (id, val) => {
+          const el = document.getElementById(id);
+          if (el && val) el.textContent = val;
+        };
+        setIf('wifiSsid',        property.wifi_ssid);
+        setIf('wifiPassword',    property.wifi_password);
+        setIf('propertyAddress', property.address);
+      }
       if (guest.check_out_date && new Date() > new Date(guest.check_out_date + 'T11:00:00'))
         document.getElementById('reviewCard').style.display = 'block';
       addChatMessage('bot', `Welcome, ${guest.first_name}! I&rsquo;m here to help make your stay wonderful. Ask me anything about the pool, WiFi, local restaurants, or anything else you need.`);
@@ -942,7 +960,8 @@
     chatInput.addEventListener('keydown', (e) => { if (e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); sendMessage(); } });
 
     document.getElementById('logoutBtn').addEventListener('click', () => {
-      sessionStorage.removeItem('gg_session_token'); sessionStorage.removeItem('gg_attempts');
+      sessionStorage.removeItem('gg_session_token');
+      sessionStorage.removeItem('gg_property'); sessionStorage.removeItem('gg_attempts');
       portalScreen.style.display = 'none'; loginScreen.style.display = 'flex';
       document.getElementById('lastNameInput').value = '';
       pinDigits.forEach(d => { d.value = ''; });
