@@ -35,7 +35,7 @@
       padding: 2rem;
       background:
         linear-gradient(160deg, rgba(13,27,46,0.97) 0%, rgba(27,42,74,0.95) 100%),
-        url('https://raw.githubusercontent.com/TheDataJockey/generations-getaway/main/assets/pool-night.jpg') center/cover no-repeat fixed;
+        url('/assets/pool-night.jpg') center/cover no-repeat fixed;
     }
     .login-wrap { width: 100%; max-width: 400px; }
     .login-card {
@@ -112,7 +112,7 @@
 <body>
   <div class="login-wrap">
     <div class="login-card">
-      <img src="https://raw.githubusercontent.com/TheDataJockey/generations-getaway/main/assets/logo.png" alt="Generations Getaway LLC" class="login-logo"/>
+      <img src="/assets/logo.png" alt="Generations Getaway LLC" class="login-logo"/>
       <h1 class="login-title">Admin <em>Portal</em></h1>
       <p class="login-sub">Secure Access Only</p>
       <div class="step-indicator" aria-hidden="true">
@@ -202,6 +202,12 @@
     let adminEmail   = '';
     let needsQrSetup = false;
 
+    // Short-lived token issued by step 1 once the password checks out.
+    // Step 2 will not accept a code without it — it is what proves the
+    // password was actually given, rather than the code being guessed
+    // straight at the second step.
+    let pendingToken = '';
+
     const alertBox   = document.getElementById('alertBox');
     const credBtn    = document.getElementById('credBtn');
     const totpBtn    = document.getElementById('totpBtn');
@@ -244,6 +250,7 @@
         if (res.ok) {
           adminEmail   = email;
           needsQrSetup = data.needs_setup;
+          pendingToken = data.pending || '';
           document.getElementById('step1').style.display = 'none';
           document.getElementById('step2').style.display = 'block';
           dot1.classList.replace('active', 'done');
@@ -280,7 +287,7 @@
         const res  = await fetch('/api/admin-auth?step=totp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: adminEmail, code }),
+          body: JSON.stringify({ email: adminEmail, code, pending: pendingToken }),
         });
         const data = await res.json();
         if (res.ok) {
@@ -290,9 +297,26 @@
         } else {
           alertBox.innerHTML = `<div class="alert alert-error">${data.error || 'Invalid code. Please try again.'}</div>`;
           totpDigits.forEach(d => { d.value = ''; });
-          totpDigits[0].focus();
           totpBtn.disabled = false;
           totpBtn.textContent = 'Verify & Sign In';
+
+          // The window to enter a code is 5 minutes. Once it lapses,
+          // step 2 can't succeed, so send them back rather than leaving
+          // them retyping codes that will never be accepted.
+          if (!pendingToken || /expired|start login again/i.test(data.error || '')) {
+            pendingToken = '';
+            document.getElementById('step2').style.display = 'none';
+            document.getElementById('step1').style.display = 'block';
+            dot2.classList.remove('active');
+            dot1.classList.replace('done', 'active');
+            document.getElementById('qrSetup').classList.remove('show');
+            credBtn.disabled = false;
+            credBtn.textContent = 'Continue';
+            document.getElementById('adminPassword').value = '';
+            document.getElementById('adminPassword').focus();
+          } else {
+            totpDigits[0].focus();
+          }
         }
       } catch {
         alertBox.innerHTML = '<div class="alert alert-error">Connection error. Please try again.</div>';
