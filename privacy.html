@@ -1,0 +1,505 @@
+<!--
+  FILE: privacy.html
+  PAGE: Privacy Policy
+  URL:  generationsgetawayfl.com/privacy.html
+  ============================================================
+  PURPOSE:
+    Discloses what personal information the site collects, why,
+    who it is shared with, and what rights guests have.
+
+  WHY THIS PAGE EXISTS:
+    - CalOPPA requires any commercial site collecting personal
+      info from California residents to post one. No size
+      threshold, so it applies to us.
+    - Stripe's merchant agreement requires merchants to post one.
+    - Google Ads and Google Analytics both require one.
+    - GDPR applies whenever a guest from the EU or UK books.
+
+  KEEPING IT ACCURATE:
+    This describes what the code ACTUALLY does. If you add a
+    service that touches guest data — analytics, a new email
+    provider, a channel manager — update the "Who we share
+    information with" table in the same change. An inaccurate
+    privacy policy is worse than none.
+
+  CONNECTS TO:
+    - /css/styles.css   Shared styles
+    - /js/main.js       Shared scripts (nav toggle)
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="How Generations Getaway LLC collects, uses and protects guest information — what we store, who processes it, and how to request deletion."/>
+  <title>Privacy Policy | Generations Getaway</title>
+  <link rel="canonical" href="https://www.generationsgetawayfl.com/privacy.html"/>
+  <meta property="og:type"        content="website"/>
+  <meta property="og:site_name"   content="Generations Getaway LLC"/>
+  <meta property="og:url"         content="https://www.generationsgetawayfl.com/privacy.html"/>
+  <meta property="og:title"       content="Privacy Policy — Generations Getaway"/>
+  <meta property="og:description" content="What guest information we collect, why, who processes it, and how to request access or deletion."/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/css/styles.css"/>
+  <style>
+    .legal-hero {
+      padding: 9rem 2rem 3rem;
+      text-align: center;
+      background: var(--navy-deep);
+    }
+    .legal-hero h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(2.2rem, 5vw, 3.4rem);
+      font-weight: 300;
+      line-height: 1.15;
+      margin-bottom: 1rem;
+    }
+    .legal-hero h1 em { font-style: italic; color: var(--sky); }
+    .legal-hero .eyebrow {
+      font-size: 0.62rem; letter-spacing: 0.32em;
+      text-transform: uppercase; color: var(--sky);
+      margin-bottom: 1.2rem;
+    }
+    .legal-hero .dates {
+      font-size: 0.74rem; color: var(--muted); line-height: 1.9;
+    }
+
+    .legal-wrap {
+      max-width: 780px; margin: 0 auto;
+      padding: 3rem 2rem 6rem;
+    }
+
+    /* Plain-language summary up top — most people read only this. */
+    .summary-card {
+      background: rgba(46, 95, 163, 0.10);
+      border-left: 3px solid var(--blue-light);
+      border-radius: 4px;
+      padding: 1.6rem 1.8rem;
+      margin-bottom: 3.5rem;
+    }
+    .summary-card h2 {
+      font-family: var(--font-serif);
+      font-size: 1.35rem; font-weight: 400;
+      margin-bottom: 0.9rem; color: var(--cream);
+    }
+    .summary-card ul { list-style: none; padding: 0; margin: 0; }
+    .summary-card li {
+      position: relative; padding-left: 1.4rem;
+      margin-bottom: 0.6rem;
+      font-size: 0.88rem; line-height: 1.75; color: var(--sky);
+    }
+    .summary-card li::before {
+      content: '—'; position: absolute; left: 0; color: var(--blue-light);
+    }
+    .summary-card li:last-child { margin-bottom: 0; }
+
+    .legal-wrap h2 {
+      font-family: var(--font-serif);
+      font-size: 1.6rem; font-weight: 300;
+      margin: 3rem 0 1rem; color: var(--cream);
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid rgba(91, 141, 217, 0.2);
+    }
+    .legal-wrap h3 {
+      font-size: 0.68rem; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--sky);
+      margin: 2rem 0 0.7rem;
+    }
+    .legal-wrap p {
+      font-size: 0.9rem; line-height: 1.85;
+      color: var(--muted); margin-bottom: 1rem;
+    }
+    .legal-wrap ul.plain {
+      list-style: none; padding: 0; margin: 0 0 1.4rem;
+    }
+    .legal-wrap ul.plain li {
+      position: relative; padding-left: 1.3rem;
+      font-size: 0.88rem; line-height: 1.8;
+      color: var(--muted); margin-bottom: 0.5rem;
+    }
+    .legal-wrap ul.plain li::before {
+      content: '·'; position: absolute; left: 0.35rem;
+      color: var(--blue-light); font-size: 1.2rem; line-height: 1.3;
+    }
+    .legal-wrap strong { color: var(--cream); font-weight: 500; }
+    .legal-wrap a { color: var(--blue-light); }
+
+    table.legal {
+      width: 100%; border-collapse: collapse;
+      margin: 1rem 0 1.6rem; font-size: 0.82rem;
+    }
+    table.legal th {
+      text-align: left; padding: 0.7rem 0.8rem;
+      font-size: 0.62rem; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--sky);
+      border-bottom: 1px solid rgba(91, 141, 217, 0.28);
+      font-weight: 500;
+    }
+    table.legal td {
+      padding: 0.75rem 0.8rem; vertical-align: top;
+      color: var(--muted); line-height: 1.7;
+      border-bottom: 1px solid rgba(91, 141, 217, 0.1);
+    }
+    table.legal td:first-child { color: var(--cream); white-space: nowrap; }
+    @media (max-width: 620px) {
+      table.legal, table.legal tbody, table.legal tr, table.legal td { display: block; width: 100%; }
+      table.legal thead { display: none; }
+      table.legal tr {
+        margin-bottom: 1rem; padding-bottom: 0.6rem;
+        border-bottom: 1px solid rgba(91,141,217,0.18);
+      }
+      table.legal td { border: none; padding: 0.2rem 0; }
+      table.legal td:first-child { font-size: 0.9rem; margin-bottom: 0.2rem; }
+    }
+
+    .contact-card {
+      background: rgba(27, 42, 74, 0.5);
+      border: 1px solid rgba(91, 141, 217, 0.2);
+      border-radius: 4px; padding: 1.6rem 1.8rem;
+      margin-top: 2rem;
+    }
+    .contact-card p { margin-bottom: 0.4rem; }
+    .contact-card p:last-child { margin-bottom: 0; }
+  </style>
+</head>
+<body>
+
+  <nav id="navbar" role="navigation" aria-label="Main navigation">
+    <a href="/index.html" class="nav-logo-wrap" aria-label="Generations Getaway LLC — Home">
+      <img class="nav-logo-img" src="/assets/logo.png" alt="Generations Getaway LLC Logo"/>
+      <span class="nav-logo-text">Generations Getaway</span>
+    </a>
+    <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links" id="navLinks" role="list">
+      <li><a href="/index.html">Home</a></li>
+      <li><a href="/events.html">Events</a></li>
+      <li><a href="/recommendations.html">Explore</a></li>
+      <li><a href="/welcome.html">Guest Portal</a></li>
+      <li><a href="/booking.html" class="nav-cta">Book Now</a></li>
+    </ul>
+  </nav>
+
+  <header class="legal-hero">
+    <p class="eyebrow">Generations Getaway LLC</p>
+    <h1>Privacy <em>Policy</em></h1>
+    <p class="dates">
+      Effective September 27, 2026<br/>
+      Last updated September 27, 2026
+    </p>
+  </header>
+
+  <main class="legal-wrap">
+
+    <div class="summary-card">
+      <h2>The short version</h2>
+      <ul>
+        <li>We collect what we need to take your booking and host your stay — nothing for advertising.</li>
+        <li>We never see or store your full card number. Stripe handles payments.</li>
+        <li>We do not sell your information, and we never have.</li>
+        <li>This site sets <strong>no cookies</strong> and uses no third-party trackers.</li>
+        <li>We do keep a simple count of page visits, in-house. It does not follow you to other sites.</li>
+        <li>Email <a href="mailto:kyle@generationsgetawayfl.com">kyle@generationsgetawayfl.com</a> and we will show you what we hold, correct it, or delete it.</li>
+      </ul>
+    </div>
+
+    <p>
+      This policy explains how <strong>Generations Getaway LLC</strong> ("we", "us")
+      handles personal information collected through
+      <strong>generationsgetawayfl.com</strong> and our guest portal. It describes
+      what the site actually does, not what a template says it might do.
+    </p>
+
+
+    <h2>1. What we collect</h2>
+
+    <h3>When you request a booking</h3>
+    <p>Our booking form asks for:</p>
+    <ul class="plain">
+      <li>First and last name</li>
+      <li>Email address</li>
+      <li>Phone number</li>
+      <li>Your requested arrival and departure dates</li>
+      <li>Number of guests in your party</li>
+      <li>How you heard about us, and the purpose of your trip — both optional</li>
+      <li>Any special requests you choose to write</li>
+      <li>A discount code, if you were given one</li>
+    </ul>
+
+    <h3>When you set up a guest account</h3>
+    <p>
+      After a deposit is received, you can create an account using your last name
+      and the reservation reference from your confirmation email. You then choose
+      a <strong>four-digit PIN</strong>. That PIN unlocks the front door during your
+      stay and signs you in to the guest portal. We store it so the lock and the
+      portal can check it. Please do not reuse a PIN you use for banking or your phone.
+    </p>
+
+    <h3>When you pay</h3>
+    <p>
+      Payments are processed by <strong>Stripe</strong>. Card numbers are entered on
+      Stripe's own pages and never reach our servers — we cannot see them, and we do
+      not store them. We receive only confirmation that a payment succeeded, the
+      amount, and the last four digits for reconciliation.
+    </p>
+
+    <h3>Automatically, when you visit any page</h3>
+    <p>
+      We keep our own simple record of site traffic, so we can see which pages are
+      useful and how people find us. We do not use Google Analytics or any other
+      third-party analytics service. Each time a page loads, our own server records:
+    </p>
+    <ul class="plain">
+      <li>Which page you looked at, and the time</li>
+      <li>The site or link that sent you here, if any</li>
+      <li>Your device type — desktop, tablet or mobile — and your browser's user-agent string</li>
+      <li>Your <strong>IP address</strong></li>
+      <li>Campaign tags in the web address, if you arrived from an advertisement or a link we shared</li>
+      <li>A random ID that groups the pages you view in one sitting</li>
+    </ul>
+    <p>
+      That random ID is held in your browser's <strong>session storage</strong> and is
+      <strong>erased when you close the tab</strong>. It is not a cookie, it is not
+      linked to your name unless you go on to make a booking, and we cannot recognise
+      you on a later visit. None of this is shared with advertisers, and none of it
+      follows you to other websites.
+    </p>
+    <p>
+      We also record your IP address and user-agent when you submit a booking request
+      or sign in to the guest portal. That use is narrower and separate: rate-limiting
+      repeated attempts, detecting abuse, and keeping a security record of sign-ins to
+      your reservation.
+    </p>
+
+    <h3>Messages you send us</h3>
+    <p>
+      Special requests, cancellation requests, and messages sent through the guest
+      portal's assistant are stored with your reservation so we can act on them and
+      keep a record of what was agreed.
+    </p>
+
+
+    <h2>2. Cookies and site storage</h2>
+    <p>
+      <strong>This site sets no cookies.</strong> There are no advertising cookies,
+      no analytics cookies, and no third-party trackers on our public pages.
+    </p>
+    <p>
+      We use <strong>session storage</strong> in two places. It is held by your
+      browser, scoped to the single tab you are using, and erased the moment you
+      close that tab. It never travels to other websites.
+    </p>
+    <ul class="plain">
+      <li><strong>Staying signed in</strong> — the guest portal and admin area keep your sign-in there. This is strictly necessary for the site to work.</li>
+      <li><strong>Visit counting</strong> — the random per-sitting ID described above, so repeated page views in one visit are not counted as separate people.</li>
+    </ul>
+    <p>
+      Our visit counting is first-party only: the data stays in our own database, is
+      not sold, not shared, and not combined with anything from other websites. No
+      profile of you persists after you close the tab.
+    </p>
+    <p>
+      If we later add Google Analytics, advertising measurement, or any other
+      third-party tracking, we will update this section before turning it on, and
+      visitors in the EU and UK will be asked for consent first.
+    </p>
+
+    <h3>Do Not Track and Global Privacy Control</h3>
+    <p>
+      Because we run no tracking across other websites, there is nothing for a Do Not
+      Track or Global Privacy Control signal to switch off. We honour these signals by
+      default, in the sense that the behaviour they are designed to prevent does not
+      happen here.
+    </p>
+
+
+    <h2>3. Why we use it</h2>
+    <table class="legal">
+      <thead>
+        <tr><th>Purpose</th><th>What it covers</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Taking your booking</td>
+          <td>Checking availability, quoting a price, confirming your reservation and collecting the deposit and balance.</td>
+        </tr>
+        <tr>
+          <td>Hosting your stay</td>
+          <td>Sending arrival instructions, issuing your door PIN, answering questions and handling changes or cancellations.</td>
+        </tr>
+        <tr>
+          <td>Keeping accounts</td>
+          <td>Recording payments, refunds and lodging taxes we are required to remit to Florida and Broward County.</td>
+        </tr>
+        <tr>
+          <td>Understanding our traffic</td>
+          <td>Counting page visits and noting where visitors came from, so we can tell which pages are useful and whether our advertising is working. First-party only.</td>
+        </tr>
+        <tr>
+          <td>Security</td>
+          <td>Rate-limiting, preventing fraudulent bookings and keeping a sign-in record for your reservation.</td>
+        </tr>
+        <tr>
+          <td>Legal obligations</td>
+          <td>Short-term rental registration, tax records, and responding to lawful requests.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      For guests in the EU and UK, our legal bases are <strong>performance of a
+      contract</strong> (taking and delivering your booking), <strong>legal
+      obligation</strong> (tax and registration records), and <strong>legitimate
+      interests</strong> (security, fraud prevention, and measuring our own site
+      traffic in a way that does not track you across the web).
+    </p>
+
+
+    <h2>4. Who we share information with</h2>
+    <p>
+      We do not sell personal information and we do not share it for advertising.
+      We use the following service providers, each of which processes data only to
+      provide their service to us:
+    </p>
+    <table class="legal">
+      <thead>
+        <tr><th>Provider</th><th>What it does</th><th>What it receives</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Vercel</td>
+          <td>Website hosting</td>
+          <td>Standard server logs, including IP address</td>
+        </tr>
+        <tr>
+          <td>Supabase</td>
+          <td>Database (United States)</td>
+          <td>Your reservation record and account details</td>
+        </tr>
+        <tr>
+          <td>Stripe</td>
+          <td>Payment processing</td>
+          <td>Name, email and payment details you enter with them</td>
+        </tr>
+        <tr>
+          <td>Resend</td>
+          <td>Sending our emails to you</td>
+          <td>Your name, email address and the message contents</td>
+        </tr>
+        <tr>
+          <td>Anthropic</td>
+          <td>Powers the portal assistant</td>
+          <td>The text of messages you send it, and your reservation context</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Our public Events page pulls listings from third-party event sources. Those
+      requests are made by our server and contain <strong>no information about
+      you</strong>.
+    </p>
+    <p>
+      We may also disclose information where we are legally required to, or to
+      establish or defend a legal claim.
+    </p>
+
+
+    <h2>5. How long we keep it</h2>
+    <ul class="plain">
+      <li><strong>Booking and payment records</strong> — at least seven years, because tax and lodging-tax rules require it.</li>
+      <li><strong>Your door PIN</strong> — deleted once your stay ends and the code is removed from the lock.</li>
+      <li><strong>Declined or withdrawn requests</strong> — up to twelve months, then deleted.</li>
+      <li><strong>Security logs</strong> — twelve months.</li>
+      <li><strong>Visit records</strong> — twelve months, then deleted.</li>
+    </ul>
+
+
+    <h2>6. Your rights</h2>
+    <p>
+      Wherever you live, you can ask us to show you what we hold about you, correct
+      anything wrong, or delete it. Email
+      <a href="mailto:kyle@generationsgetawayfl.com">kyle@generationsgetawayfl.com</a>
+      and we will respond within 30 days. We will not treat you differently for asking.
+    </p>
+
+    <h3>If you are in California</h3>
+    <p>
+      You have the right to know what categories of personal information we collect
+      and why, to request a copy, to request deletion, and to correct inaccuracies.
+      <strong>We do not sell or share personal information</strong> as those terms are
+      defined under California law, so there is nothing for you to opt out of.
+    </p>
+
+    <h3>If you are in the EU or UK</h3>
+    <p>
+      You additionally have the right to object to processing, to request that we
+      restrict it, and to receive your data in a portable format. You may lodge a
+      complaint with your national data protection authority. Your information is
+      stored in the United States; where we transfer it there, we rely on the
+      standard contractual clauses our providers maintain.
+    </p>
+
+
+    <h2>7. Security</h2>
+    <p>
+      The site is served over HTTPS. Administrative access requires two-factor
+      authentication. Database access is restricted, and our servers hold no card
+      numbers. No system is perfectly secure, but if a breach ever affected your
+      information we will tell you promptly and directly.
+    </p>
+    <p>
+      Your door PIN is the one piece of information here that controls physical
+      access to a building. Please keep it to your own party, and do not reuse a PIN
+      from your phone or your bank.
+    </p>
+
+
+    <h2>8. Children</h2>
+    <p>
+      This site is not directed at children, and we do not knowingly collect
+      information from anyone under 18. The booking guest must be at least 25 years
+      old. If you believe a child has given us information, contact us and we will
+      delete it.
+    </p>
+
+
+    <h2>9. Changes to this policy</h2>
+    <p>
+      If we change how we handle your information, we will update this page and
+      change the "last updated" date at the top. If the change is significant — a new
+      category of data, a new provider receiving it, or any use for advertising — we
+      will email guests with an active reservation before it takes effect.
+    </p>
+
+
+    <h2>10. Contact</h2>
+    <div class="contact-card">
+      <p><strong>Generations Getaway LLC</strong></p>
+      <p>Fort Lauderdale, Florida</p>
+      <p>Privacy enquiries: <a href="mailto:kyle@generationsgetawayfl.com">kyle@generationsgetawayfl.com</a></p>
+      <p>Bookings: <a href="mailto:bookings@generationsgetawayfl.com">bookings@generationsgetawayfl.com</a></p>
+    </div>
+
+  </main>
+
+  <footer role="contentinfo">
+    <div class="footer-left">
+      <img class="footer-logo-img" src="/assets/logo.png" alt="Generations Getaway LLC Logo"/>
+      <span class="footer-logo-text">Generations Getaway LLC</span>
+    </div>
+    <ul class="footer-links" role="list">
+      <li><a href="/events.html">Events</a></li>
+      <li><a href="/recommendations.html">Explore</a></li>
+      <li><a href="/booking.html">Book Now</a></li>
+      <li><a href="/welcome.html">Guest Portal</a></li>
+      <li><a href="/privacy.html">Privacy</a></li>
+    </ul>
+    <p class="footer-copy">&copy; 2026 Generations Getaway LLC &nbsp;&middot;&nbsp; All Rights Reserved</p>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script src="/js/consent.js"></script>
+</body>
+</html>

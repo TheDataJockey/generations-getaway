@@ -81,16 +81,26 @@
     "petsAllowed": false,
     "smokingAllowed": false,
     "numberOfRooms": 2,
+    "numberOfBedrooms": 2,
+    "numberOfBathroomsTotal": 1,
+    "occupancy": {
+      "@type": "QuantitativeValue",
+      "maxValue": 4,
+      "unitText": "guests"
+    },
     "checkinTime": "16:00",
-    "checkoutTime": "10:00",
+    "checkoutTime": "11:00",
     "amenityFeature": [
-      { "@type": "LocationFeatureSpecification", "name": "Private heated pool", "value": true },
-      { "@type": "LocationFeatureSpecification", "name": "Spa",                 "value": true },
-      { "@type": "LocationFeatureSpecification", "name": "Outdoor living area", "value": true },
-      { "@type": "LocationFeatureSpecification", "name": "Full kitchen",        "value": true },
-      { "@type": "LocationFeatureSpecification", "name": "Free WiFi",           "value": true },
-      { "@type": "LocationFeatureSpecification", "name": "Free parking",        "value": true },
-      { "@type": "LocationFeatureSpecification", "name": "Air conditioning",    "value": true }
+      { "@type": "LocationFeatureSpecification", "name": "Private heated pool",            "value": true },
+      { "@type": "LocationFeatureSpecification", "name": "Spa",                            "value": true },
+      { "@type": "LocationFeatureSpecification", "name": "Outdoor dining for 8",           "value": true },
+      { "@type": "LocationFeatureSpecification", "name": "Gas grill",                      "value": true },
+      { "@type": "LocationFeatureSpecification", "name": "Poolside loungers",              "value": true },
+      { "@type": "LocationFeatureSpecification", "name": "Full kitchen",                   "value": true },
+      { "@type": "LocationFeatureSpecification", "name": "High-speed fiber WiFi",          "value": true },
+      { "@type": "LocationFeatureSpecification", "name": "Smart TVs with streaming",       "value": true },
+      { "@type": "LocationFeatureSpecification", "name": "Self check-in with smart lock",  "value": true },
+      { "@type": "LocationFeatureSpecification", "name": "Driveway parking for 2 cars",    "value": true }
     ],
     "containedInPlace": {
       "@type": "City",
@@ -352,10 +362,12 @@
       <li><a href="/recommendations.html">Explore</a></li>
       <li><a href="/booking.html">Book Now</a></li>
       <li><a href="/welcome.html">Guest Portal</a></li>
+      <li><a href="/privacy.html">Privacy</a></li>
     </ul>
     <p class="footer-copy">&copy; 2026 Generations Getaway LLC &nbsp;&middot;&nbsp; All Rights Reserved</p>
   </footer>
 
   <script src="/js/main.js" defer></script>
+  <script src="/js/consent.js"></script>
 </body>
 </html>
