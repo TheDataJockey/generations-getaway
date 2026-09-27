@@ -35,7 +35,7 @@
       padding: 2rem;
       background:
         linear-gradient(160deg, rgba(13,27,46,0.97) 0%, rgba(27,42,74,0.95) 100%),
-        url('https://raw.githubusercontent.com/TheDataJockey/generations-getaway/main/assets/pool-night.jpg') center/cover no-repeat fixed;
+        url('/assets/pool-night.jpg') center/cover no-repeat fixed;
     }
     .login-wrap { width: 100%; max-width: 400px; }
     .login-card {
@@ -112,7 +112,7 @@
 <body>
   <div class="login-wrap">
     <div class="login-card">
-      <img src="https://raw.githubusercontent.com/TheDataJockey/generations-getaway/main/assets/logo.png" alt="Generations Getaway LLC" class="login-logo"/>
+      <img src="/assets/logo.png" alt="Generations Getaway LLC" class="login-logo"/>
       <h1 class="login-title">Admin <em>Portal</em></h1>
       <p class="login-sub">Secure Access Only</p>
       <div class="step-indicator" aria-hidden="true">
@@ -328,6 +328,20 @@
     if (sessionStorage.getItem('gg_admin_token')) {
       window.location.href = '/admin/dashboard.html';
     }
+  </script>
+  <script>
+  // Explain an automatic sign-out instead of dumping the admin at a
+  // blank login screen with no idea why.
+  (function () {
+    if (new URLSearchParams(location.search).get('reason') !== 'idle') return;
+    var box = document.querySelector('.login-card') || document.body;
+    var msg = document.createElement('p');
+    msg.textContent = 'You were signed out after a period of inactivity.';
+    msg.style.cssText = 'margin:0 0 1rem;padding:0.7rem 0.9rem;border-radius:4px;' +
+      'font-size:0.8rem;text-align:center;color:#FFD54F;' +
+      'background:rgba(255,213,79,0.10);border:1px solid rgba(255,213,79,0.3);';
+    box.insertBefore(msg, box.firstChild);
+  })();
   </script>
 </body>
 </html>
