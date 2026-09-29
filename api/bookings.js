@@ -253,32 +253,69 @@ export default async function handler(req, res) {
 
     const sched = quote?.payment_schedule || null;
 
-    const { data: booking, error: bookingError } = await supabase
+    // ── Attribution ──
+    // The booking form sends the browser session id that visitor_logs
+    // already records on every page view. Storing it here is what lets
+    // a reservation be traced back to the referrer or ad campaign that
+    // brought the visitor. Optional by design: missing, blank or
+    // over-long values are dropped rather than rejected.
+    const sessionId =
+      typeof req.body?.session_id === 'string' && req.body.session_id.trim()
+        ? req.body.session_id.trim().slice(0, 100)
+        : null;
+
+    const bookingRow = {
+      guest_id:         guest.id,
+      request_id:       requestId,
+      terms_accepted:   !!terms_accepted,
+      terms_accepted_at: terms_accepted_at || new Date().toISOString(),
+      discount_code:    cleanData.discount_code,
+      quoted_subtotal:  quote ? quote.subtotal : null,
+      quoted_discount:  quote ? quote.discount : null,
+      quoted_tax:       quote ? quote.tax      : null,
+      quoted_total:     quote ? quote.total    : null,
+      deposit_amount:   sched ? sched.deposit_amount : null,
+      balance_amount:   sched ? sched.balance_amount : null,
+      balance_due_date: sched && sched.split ? sched.balance_due_date : null,
+      check_in_date:    cleanData.check_in_date,
+      check_out_date:   cleanData.check_out_date,
+      num_guests:       cleanData.num_guests,
+      booking_source:   cleanData.booking_source,
+      purpose_of_stay:  cleanData.purpose_of_stay,
+      special_requests: cleanData.special_requests,
+      num_nights:       numNights,
+      status:           'inquiry',
+    };
+
+    if (sessionId) bookingRow.session_id = sessionId;
+
+    let { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .insert({
-        guest_id:         guest.id,
-        request_id:       requestId,
-        terms_accepted:   !!terms_accepted,
-        terms_accepted_at: terms_accepted_at || new Date().toISOString(),
-        discount_code:    cleanData.discount_code,
-        quoted_subtotal:  quote ? quote.subtotal : null,
-        quoted_discount:  quote ? quote.discount : null,
-        quoted_tax:       quote ? quote.tax      : null,
-        quoted_total:     quote ? quote.total    : null,
-        deposit_amount:   sched ? sched.deposit_amount : null,
-        balance_amount:   sched ? sched.balance_amount : null,
-        balance_due_date: sched && sched.split ? sched.balance_due_date : null,
-        check_in_date:    cleanData.check_in_date,
-        check_out_date:   cleanData.check_out_date,
-        num_guests:       cleanData.num_guests,
-        booking_source:   cleanData.booking_source,
-        purpose_of_stay:  cleanData.purpose_of_stay,
-        special_requests: cleanData.special_requests,
-        num_nights:       numNights,
-        status:           'inquiry',
-      })
+      .insert(bookingRow)
       .select('id')
       .single();
+
+    // If db/booking-attribution.sql has not been run yet, the
+    // session_id column does not exist and Postgres rejects the whole
+    // insert. A guest must never lose a booking over an analytics
+    // field, so drop it and try once more.
+    //   42703      — Postgres "undefined column"
+    //   PGRST204   — PostgREST "column not found in schema cache"
+    const missingColumn =
+      bookingError &&
+      (bookingError.code === '42703' ||
+       bookingError.code === 'PGRST204' ||
+       /session_id/i.test(bookingError.message || ''));
+
+    if (missingColumn && sessionId) {
+      console.warn('[bookings] session_id column missing — saving without attribution. Run db/booking-attribution.sql.');
+      delete bookingRow.session_id;
+      ({ data: booking, error: bookingError } = await supabase
+        .from('bookings')
+        .insert(bookingRow)
+        .select('id')
+        .single());
+    }
 
     if (bookingError) throw new Error(`Failed to create booking record: ${bookingError.message} (code: ${bookingError.code})`);
 
