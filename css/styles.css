@@ -286,6 +286,44 @@ footer {
   color: var(--muted);
 }
 
+/* ── Social links ──
+   Icons are inline SVG rather than an icon font or a third-party
+   script, so nothing extra loads and the Content-Security-Policy
+   stays as tight as it is. They inherit currentColor, so the hover
+   colour is set once here and the shapes follow. */
+.footer-social {
+  display: flex;
+  gap: 1.1rem;
+  align-items: center;
+}
+
+.footer-social a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(91, 141, 217, 0.28);
+  border-radius: 50%;
+  color: var(--muted);
+  transition: color var(--transition),
+              border-color var(--transition),
+              transform var(--transition);
+}
+
+.footer-social a:hover {
+  color: var(--sky);
+  border-color: var(--blue-light);
+  transform: translateY(-2px);
+}
+
+.footer-social svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  display: block;
+}
+
 /* ============================================
    BUTTONS
    ============================================ */
@@ -610,4 +648,8 @@ section {
   }
 
   .footer-links { flex-wrap: wrap; gap: 1rem; }
+
+  /* Footer stacks on small screens; keep the icons from sitting
+     flush against the links above them. */
+  .footer-social { margin-top: 0.25rem; }
 }
