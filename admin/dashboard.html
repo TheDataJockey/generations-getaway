@@ -349,19 +349,32 @@
     .admin-table.dense th { font-size: 0.56rem; letter-spacing: 0.14em; }
 
     /* The actions column is the deliberate exception — buttons wrap onto
-       a second line rather than pushing the table wider. */
+       a second line rather than pushing the table wider.
+       overflow must go back to visible here: the rule above clips every
+       other cell, and inheriting that chopped the buttons in half. */
     .admin-table.dense td.col-actions,
-    .admin-table.dense th.col-actions { white-space: normal; }
+    .admin-table.dense th.col-actions {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+    }
+
+    /* The buttons live in this wrapper, NOT on the td itself. Setting
+       display:flex on a td stops it being a table-cell, which takes it
+       out of the fixed column layout entirely. */
+    .admin-table.dense td.col-actions .row-actions {
+      display: flex; gap: 0.3rem; flex-wrap: wrap;
+    }
 
     /* Keeps the layout stable while sorting reorders rows. */
     .admin-table.dense { table-layout: fixed; }
     .admin-table.dense .col-guest    { width: 15%; }
     .admin-table.dense .col-date     { width: 11%; }
-    .admin-table.dense .col-num      { width: 6%;  }
+    .admin-table.dense .col-num      { width: 7%;  }
     .admin-table.dense .col-source   { width: 9%;  }
-    .admin-table.dense .col-status   { width: 11%; }
+    .admin-table.dense .col-status   { width: 12%; }
     .admin-table.dense .col-payment  { width: 13%; }
-    .admin-table.dense .col-actions  { width: 18%; }
+    .admin-table.dense .col-actions  { width: 15%; }
 
     /* ── Sortable headers ── */
     .admin-table th.sortable {
@@ -376,9 +389,19 @@
     .admin-table th.sortable[data-dir="asc"]::after  { content: '↑'; opacity: 1; color: var(--blue-light); }
     .admin-table th.sortable[data-dir="desc"]::after { content: '↓'; opacity: 1; color: var(--blue-light); }
 
-    /* Horizontal scroll on narrow screens rather than squeezing columns. */
+    /* Horizontal scroll on narrow screens rather than squeezing columns.
+       The minimum is what the nine columns genuinely need; below it the
+       panel scrolls sideways instead of crushing them. */
     .table-scroll { overflow-x: auto; }
-    .table-scroll .admin-table.dense { min-width: 920px; }
+    .table-scroll .admin-table.dense { min-width: 1040px; }
+
+    /* Buttons in a dense row sit tighter so View and $ Pay fit side by
+       side rather than stacking at every width. */
+    .admin-table.dense .action-btn {
+      padding: 0.28rem 0.55rem;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
 
     .admin-table tr:last-child td { border-bottom: none; }
     .admin-table tr:hover td { background: rgba(46,95,163,0.06); }
@@ -1920,7 +1943,7 @@
               <td class="col-source" style="text-transform:capitalize;">${h(b.booking_source || '—')}</td>
               <td class="col-status"><span class="status status-${b.status}">${h(b.status)}</span></td>
               <td class="col-payment">${pay.html}</td>
-              <td class="col-actions" style="display:flex;gap:0.3rem;flex-wrap:wrap;">
+              <td class="col-actions"><div class="row-actions">
                 <button class="action-btn action-btn-view"
                   onclick="openBookingModal('${b.id}')">View</button>
                 ${b.status === 'confirmed' && pay.key !== 'paid' ? `
@@ -1939,7 +1962,7 @@
                   <button class="action-btn action-btn-decline"
                     onclick="updateBookingStatus('${b.id}','cancelled')">✗</button>
                 ` : ''}
-              </td>
+              </div></td>
             </tr>`;
       }).join('');
 
