@@ -368,10 +368,13 @@ export default async function handler(req, res) {
 
     // ── Send emails — confirmation to guest + notification to Kyle ──
     try {
-      const { sendBookingConfirmation, sendKyleNotification } = await import('./_lib/email.js');
+      const { sendBookingConfirmation, sendKyleNotification, sendToParty } = await import('./_lib/email.js');
 
       const guestData   = { first_name, last_name, email, phone };
       const bookingData = {
+        // id is what the fan-out uses to find anyone else on this
+        // booking. Without it they are silently skipped.
+        id: booking.id,
         check_in_date, check_out_date, num_guests,
         booking_source, special_requests,
         discount_code: cleanData.discount_code,
@@ -379,7 +382,11 @@ export default async function handler(req, res) {
         request_id: requestId,
       };
       await Promise.all([
-        sendBookingConfirmation({ guest: guestData, booking: bookingData }),
+        // Reaches anyone added on the form. While that block is hidden
+        // there is never anybody else yet, so this behaves exactly as
+        // a single send.
+        sendToParty(sendBookingConfirmation, { guest: guestData, booking: bookingData }),
+        // Kyle's own notification never fans out.
         sendKyleNotification({ guest: guestData, booking: bookingData }),
       ]);
     } catch (emailErr) {

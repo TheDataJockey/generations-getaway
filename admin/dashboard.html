@@ -2975,7 +2975,16 @@
           resendBtn.addEventListener('click', async function () {
             const type = document.getElementById('resendType').value;
             const label = document.querySelector(`#resendType option[value="${type}"]`).textContent;
-            if (!confirm(`Resend the "${label}" email to this guest?`)) return;
+
+            // Say up front how many people this reaches. The party panel
+            // is already on screen, so count the ones still receiving
+            // email rather than asking the server again.
+            const active = document.querySelectorAll(
+              '#partyList [data-party-mute][data-on="1"]').length;
+            const who = active
+              ? `the guest and ${active} additional guest${active > 1 ? 's' : ''}`
+              : 'this guest';
+            if (!confirm(`Resend the "${label}" email to ${who}?`)) return;
             this.disabled = true;
             const orig = this.textContent;
             this.textContent = 'Sending…';

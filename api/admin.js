@@ -571,12 +571,23 @@ async function handleBookings(req, res, token) {
           if (g?.email) {
             const mail = await import('./_lib/email.js');
             const payload = { guest: g, booking: full };
-            const result = status === 'confirmed'
-              ? await mail.sendBookingApproved(payload)
-              : await mail.sendBookingDeclined(payload);
-            emailed = result?.success
-              ? `Emailed ${g.email}`
-              : `Email failed: ${result?.error || 'unknown'}`;
+
+            // Approval reaches everyone on the booking. A decline does
+            // not — it is the booker's business, and the others may not
+            // even know a request was made.
+            if (status === 'confirmed') {
+              const fan    = await mail.sendToParty(mail.sendBookingApproved, payload);
+              const result = fan?.primary;
+              const extras = (fan?.additional || []).filter(r => r.success).length;
+              emailed = result?.success
+                ? `Emailed ${g.email}` + (extras ? ` and ${extras} additional guest(s)` : '')
+                : `Email failed: ${result?.error || 'unknown'}`;
+            } else {
+              const result = await mail.sendBookingDeclined(payload);
+              emailed = result?.success
+                ? `Emailed ${g.email}`
+                : `Email failed: ${result?.error || 'unknown'}`;
+            }
           } else {
             emailed = 'No guest email on file — nothing sent.';
           }
@@ -1826,16 +1837,22 @@ async function handleEditBooking(req, res, token) {
     let emailed = null;
     if (notify_guest && before.guests?.email) {
       try {
-        const { sendBookingChanged } = await import('./_lib/email.js');
-        const sent = await sendBookingChanged({
+        const { sendBookingChanged, sendToParty } = await import('./_lib/email.js');
+        // Changed dates matter to everyone travelling, so this goes to
+        // the whole party. Money details inside the template are only
+        // rendered when a balance is owed by the booker.
+        const fan = await sendToParty(sendBookingChanged, {
           guest: before.guests,
           booking: { ...before, check_in_date: newIn, check_out_date: newOut,
                      num_guests: newGuests, quoted_total: quote.total },
           changes, note,
           balance_due: balanceNow, overpaid, amount_received: received,
         });
-        emailed = sent?.success ? `Emailed ${before.guests.email}`
-                                : `Email failed: ${sent?.error || 'unknown'}`;
+        const sent   = fan?.primary;
+        const extras = (fan?.additional || []).filter(r => r.success).length;
+        emailed = sent?.success
+          ? `Emailed ${before.guests.email}` + (extras ? ` and ${extras} additional guest(s)` : '')
+          : `Email failed: ${sent?.error || 'unknown'}`;
       } catch (mailErr) {
         console.error('[edit-booking] email failed:', mailErr.message);
         emailed = `Email failed: ${mailErr.message}`;
@@ -1879,28 +1896,50 @@ async function handleResendEmail(req, res, token) {
     if (!g?.email) return res.status(400).json({ error: 'No email on file for this guest.' });
 
     const mail = await import('./_lib/email.js');
-    let sent;
+
+    // Resending reaches the whole party, not just whoever booked —
+    // otherwise adding someone to a confirmed booking would leave them
+    // with no way to ever receive the emails they were added for.
+    let fan;
 
     if (type === 'approved') {
-      sent = await mail.sendBookingApproved({ guest: g, booking });
+      fan = await mail.sendToParty(mail.sendBookingApproved, { guest: g, booking });
     } else if (type === 'welcome') {
       if (!booking.yale_pin_code) {
         return res.status(400).json({
           error: 'No door code is set on this booking yet, so the welcome email would be incomplete.',
         });
       }
-      sent = await mail.sendWelcomeEmail({ guest: g, booking });
+      fan = await mail.sendToParty(mail.sendWelcomeEmail, { guest: g, booking });
     } else {
-      sent = await mail.sendBookingConfirmation({ guest: g, booking });
+      fan = await mail.sendToParty(mail.sendBookingConfirmation, { guest: g, booking });
     }
 
+    const sent   = fan?.primary;
+    const extras = fan?.additional || [];
+    const okExtras   = extras.filter(r => r.success).map(r => r.email);
+    const failExtras = extras.filter(r => !r.success).map(r => r.email);
+
     await logAudit(auth.admin, 'resend_email', 'bookings', booking_id,
-      `Resent ${type} email to ${g.email}`);
+      `Resent ${type} email to ${g.email}` +
+      (okExtras.length ? ` and ${okExtras.length} additional guest(s): ${okExtras.join(', ')}` : '') +
+      (failExtras.length ? ` — failed for ${failExtras.join(', ')}` : ''));
+
+    // Name every address so you can see at a glance who actually got it.
+    let message;
+    if (sent?.success) {
+      message = `Resent to ${g.email}`;
+      if (okExtras.length)   message += `\nAlso sent to: ${okExtras.join(', ')}`;
+      if (failExtras.length) message += `\nCould not send to: ${failExtras.join(', ')}`;
+    } else {
+      message = `Email failed: ${sent?.error || 'unknown'}`;
+    }
 
     return res.status(200).json({
-      success: !!sent?.success,
-      emailed: sent?.success ? `Resent to ${g.email}`
-                             : `Email failed: ${sent?.error || 'unknown'}`,
+      success:  !!sent?.success,
+      emailed:  message,
+      sent_to:  [g.email, ...okExtras],
+      failed_to: failExtras,
     });
   } catch (err) {
     console.error('[resend-email]', err);
