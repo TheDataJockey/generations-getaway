@@ -38,7 +38,24 @@ import {
   sendDayBeforeReminder,
   sendCheckoutReminder,
   sendReviewRequest,
+  sendToParty,
 } from './_lib/email.js';
+
+/**
+ * Send one of the scheduled emails to the primary guest and to any
+ * additional guests on the booking.
+ *
+ * Returns the primary guest's result unchanged, with the additional
+ * sends attached, so every `result.success` check below behaves
+ * exactly as it did when these went to one person. Whether a booking
+ * is marked as sent still depends only on the primary guest — an
+ * extra recipient bouncing must not cause the whole email to be
+ * retried tomorrow.
+ */
+async function emailParty(template, payload) {
+  const r = await sendToParty(template, payload);
+  return { ...r.primary, additional: r.additional || [] };
+}
 
 export default async function handler(req, res) {
   // ── Verify cron secret ──
@@ -211,7 +228,7 @@ export default async function handler(req, res) {
 
       // 1. Welcome email — 3 days before check-in
       if (booking.check_in_date === in3Days && !booking.email_welcome_sent) {
-        const result = await sendWelcomeEmail({ guest, booking });
+        const result = await emailParty(sendWelcomeEmail, { guest, booking });
         if (result.success) {
           await markSent(booking.id, 'email_welcome_sent');
           results.welcome.sent++;
@@ -223,7 +240,7 @@ export default async function handler(req, res) {
 
       // 2. Day-before reminder
       if (booking.check_in_date === tomorrow && !booking.email_day_before_sent) {
-        const result = await sendDayBeforeReminder({ guest, booking });
+        const result = await emailParty(sendDayBeforeReminder, { guest, booking });
         if (result.success) {
           await markSent(booking.id, 'email_day_before_sent');
           results.dayBefore.sent++;
@@ -235,7 +252,7 @@ export default async function handler(req, res) {
 
       // 3. Checkout reminder — morning of checkout
       if (booking.check_out_date === today && !booking.email_checkout_sent) {
-        const result = await sendCheckoutReminder({ guest, booking });
+        const result = await emailParty(sendCheckoutReminder, { guest, booking });
         if (result.success) {
           await markSent(booking.id, 'email_checkout_sent');
           results.checkout.sent++;
@@ -247,7 +264,7 @@ export default async function handler(req, res) {
 
       // 4. Review request — 1 day after checkout
       if (booking.check_out_date === yesterday && !booking.email_review_sent) {
-        const result = await sendReviewRequest({ guest, booking });
+        const result = await emailParty(sendReviewRequest, { guest, booking });
         if (result.success) {
           await markSent(booking.id, 'email_review_sent');
           results.review.sent++;

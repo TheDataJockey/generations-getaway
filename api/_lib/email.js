@@ -186,7 +186,7 @@ export async function sendBookingConfirmation({ guest, booking }) {
     <p>${PROPERTY_NAME} &nbsp;&middot;&nbsp; ${PROPERTY_ADDRESS}</p>
     <p><a href="${BASE_URL}">${BASE_URL}</a></p>
   </div>
-</div></body></html>`;
+${booking && booking.party_notice ? booking.party_notice : ''}</div></body></html>`;
 
   const text = `Thank you, ${guest.first_name}. We received your inquiry for ${formatDate(booking.check_in_date)} – ${formatDate(booking.check_out_date)}. We'll be in touch shortly to confirm your stay.`;
 
@@ -271,6 +271,14 @@ export async function sendWelcomeEmail({ guest, booking }) {
       <div class="pin-label">Your Door PIN Code</div>
       <div class="pin-code">${booking.yale_pin_code}</div>
       <p style="font-size:13px;color:#7A90AE;margin:8px 0 0;">Enter this code on the Yale keypad at the front door</p>
+    </div>` : booking.pin_withheld_to ? `
+    <div class="pin-box">
+      <div class="pin-label">Door PIN Code</div>
+      <p style="font-size:14px;color:#A8C4E0;margin:6px 0 0;line-height:1.7;">
+        The entry code for this stay was sent to
+        <strong>${booking.pin_withheld_to}</strong>, who booked the house.
+        Ask them for it before you arrive.
+      </p>
     </div>` : ''}
 
     ${booking.welcome_note ? `
@@ -296,7 +304,7 @@ export async function sendWelcomeEmail({ guest, booking }) {
     <p>${PROPERTY_NAME} &nbsp;&middot;&nbsp; ${PROPERTY_ADDRESS}</p>
     <p><a href="${BASE_URL}">${BASE_URL}</a></p>
   </div>
-</div></body></html>`;
+${booking && booking.party_notice ? booking.party_notice : ''}</div></body></html>`;
 
   const text = `Your stay at ${PROPERTY_NAME} begins in 3 days on ${formatDate(booking.check_in_date)}. Your door PIN is ${booking.yale_pin_code || 'provided at check-in'}. Access your guest portal at ${portalUrl}.`;
 
@@ -330,6 +338,13 @@ export async function sendDayBeforeReminder({ guest, booking }) {
       <div class="pin-label">Door PIN Code</div>
       <div class="pin-code">${booking.yale_pin_code}</div>
       <p style="font-size:13px;color:#7A90AE;margin:8px 0 0;">Yale keypad at the front door — no key needed</p>
+    </div>` : booking.pin_withheld_to ? `
+    <div class="pin-box">
+      <div class="pin-label">Door PIN Code</div>
+      <p style="font-size:14px;color:#A8C4E0;margin:6px 0 0;line-height:1.7;">
+        <strong>${booking.pin_withheld_to}</strong> has the entry code for this
+        stay — check with them before you set off.
+      </p>
     </div>` : ''}
 
     <p><span class="highlight">Getting here:</span></p>
@@ -352,7 +367,7 @@ export async function sendDayBeforeReminder({ guest, booking }) {
     <p>${PROPERTY_NAME} &nbsp;&middot;&nbsp; ${PROPERTY_ADDRESS}</p>
     <p><a href="${BASE_URL}">${BASE_URL}</a></p>
   </div>
-</div></body></html>`;
+${booking && booking.party_notice ? booking.party_notice : ''}</div></body></html>`;
 
   const text = `See you tomorrow, ${guest.first_name}! Check-in is after 4 PM at ${PROPERTY_ADDRESS}. Your door PIN is ${booking.yale_pin_code || 'in your guest portal'}. Directions: https://maps.google.com/?q=647+NE+16th+Terrace+Fort+Lauderdale+FL`;
 
@@ -402,7 +417,7 @@ export async function sendCheckoutReminder({ guest, booking }) {
     <p>${PROPERTY_NAME} &nbsp;&middot;&nbsp; ${PROPERTY_ADDRESS}</p>
     <p><a href="${BASE_URL}">${BASE_URL}</a></p>
   </div>
-</div></body></html>`;
+${booking && booking.party_notice ? booking.party_notice : ''}</div></body></html>`;
 
   const text = `Good morning ${guest.first_name}! Checkout is today by 11 AM. Please strip beds, load the dishwasher, take out trash, and lock up. Safe travels!`;
 
@@ -445,7 +460,7 @@ export async function sendReviewRequest({ guest, booking }) {
     <p>${PROPERTY_NAME} &nbsp;&middot;&nbsp; ${PROPERTY_ADDRESS}</p>
     <p><a href="${BASE_URL}">${BASE_URL}</a> &nbsp;&middot;&nbsp; <a href="mailto:${KYLE_EMAIL}">Contact Us</a></p>
   </div>
-</div></body></html>`;
+${booking && booking.party_notice ? booking.party_notice : ''}</div></body></html>`;
 
   const text = `Thank you for staying at ${PROPERTY_NAME}, ${guest.first_name}! We'd love it if you could leave us a Google review. Your feedback helps future guests discover our home.`;
 
@@ -500,7 +515,7 @@ export async function sendBookingApproved({ guest, booking }) {
     <p>Address: ${PROPERTY_ADDRESS}</p>
   </div>
   <div class="footer"><p>${PROPERTY_NAME}</p></div>
-</div></body></html>`;
+${booking && booking.party_notice ? booking.party_notice : ''}</div></body></html>`;
 
   const text = `Your stay at ${PROPERTY_NAME} is confirmed. `
     + `Check-in ${formatDate(booking.check_in_date)} after 4 PM, `
@@ -945,7 +960,7 @@ export async function sendBookingChanged({
     </p>
   </div>
   <div class="footer"><p>${PROPERTY_NAME}</p></div>
-</div></body></html>`;
+${booking && booking.party_notice ? booking.party_notice : ''}</div></body></html>`;
 
   const text = `Your reservation${reference ? ` ${reference}` : ''} has been updated. `
     + (changes || []).map(c => `${c.field}: ${c.from} -> ${c.to}`).join('. ') + '. '
@@ -955,4 +970,143 @@ export async function sendBookingChanged({
     + (note ? ` Note: ${note}` : '');
 
   return sendEmail({ to: guest.email, from: FROM_BOOKINGS, subject, html, text });
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  ADDITIONAL GUESTS
+// ════════════════════════════════════════════════════════════
+/**
+ * A reservation can carry other people besides whoever booked it —
+ * a partner, the friends travelling with them, a parent helping
+ * organise. They receive the same arrival information and reminders,
+ * but no portal login and, by default, no door code.
+ *
+ * WHY THE DOOR CODE IS HELD BACK:
+ *   The addresses on that list are typed in by someone else and
+ *   never verified. One mistyped character would send a stranger
+ *   the address, the dates the house is occupied, and the code to
+ *   open the front door. Flip
+ *   system_settings.share_door_code_with_additional_guests to true
+ *   if you decide otherwise.
+ *
+ * WHAT NEVER FANS OUT (just don't call this for them):
+ *   payment requests, account setup, PIN chosen, PIN reset, and
+ *   anything addressed to Kyle.
+ */
+
+/**
+ * Everyone on a booking who should be emailed, excluding the
+ * primary guest.
+ *
+ * Returns [] on ANY failure — a missing table, a database blip, a
+ * booking with nobody else on it. An extra recipient must never be
+ * the reason the primary guest's email does not go out.
+ *
+ * @param {string} bookingId
+ * @returns {Promise<Array<{first_name:string,last_name:string,email:string}>>}
+ */
+export async function additionalGuestsFor(bookingId) {
+  if (!bookingId) return [];
+  try {
+    const { supabase } = await import('./supabase.js');
+    const { data, error } = await supabase
+      .from('booking_guests')
+      .select('first_name, last_name, email')
+      .eq('booking_id', bookingId)
+      .eq('receives_email', true);
+
+    if (error) {
+      // Most likely db/additional-guests.sql has not been run yet.
+      console.warn('[email] additional guests unavailable:', error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.warn('[email] additional guests lookup threw:', err.message);
+    return [];
+  }
+}
+
+/** Whether the door code may go to additional guests. Defaults to no. */
+async function mayShareDoorCode() {
+  try {
+    const { supabase } = await import('./supabase.js');
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('share_door_code_with_additional_guests')
+      .eq('id', 1)
+      .single();
+    if (error) return false;
+    return !!data?.share_door_code_with_additional_guests;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send one of the templates above to the primary guest and then to
+ * every additional guest on the booking.
+ *
+ * The primary send happens first and is returned as-is, so callers
+ * that only check for success behave exactly as they did before.
+ *
+ * Additional guests get the same template with booking.yale_pin_code
+ * blanked (unless the setting allows it) — the templates already
+ * skip the PIN block when it is empty, and show a short line telling
+ * them who to ask instead.
+ *
+ * @param {Function} template  e.g. sendWelcomeEmail
+ * @param {{guest:object, booking:object}} payload
+ * @returns {Promise<{primary:object, additional:Array}>}
+ */
+export async function sendToParty(template, { guest, booking, ...rest }) {
+  const primary = await template({ guest, booking, ...rest });
+
+  const others = await additionalGuestsFor(booking?.id);
+  if (!others.length) return { primary, additional: [] };
+
+  const shareCode  = await mayShareDoorCode();
+  const primaryName = [guest?.first_name, guest?.last_name].filter(Boolean).join(' ')
+                      || 'the person who booked';
+
+  /*
+    Everyone on this list was added by someone else — they never handed us
+    their address themselves. So every email they receive says who put them
+    there and how to stop, rather than arriving unexplained from a business
+    they have no relationship with. This is also what makes the promise in
+    the privacy policy true.
+  */
+  const notice = `
+    <div style="margin-top:28px;padding-top:16px;border-top:1px solid rgba(46,95,163,0.25);
+                font-size:12px;line-height:1.7;color:#7A90AE;">
+      You're receiving this because <strong style="color:#A8C4E0;">${primaryName}</strong>
+      added you to their reservation at Generations Getaway, so you'd have the
+      arrival details and reminders for the stay. We'll only ever write to you
+      about this booking &mdash; you are not on any mailing list. To stop these,
+      reply to this email and we'll take you off straight away.
+    </div>`;
+
+  const results = [];
+  for (const person of others) {
+    try {
+      const theirBooking = shareCode
+        ? { ...booking, party_notice: notice }
+        : { ...booking, yale_pin_code: null, pin_withheld_to: primaryName,
+            party_notice: notice };
+
+      const res = await template({
+        guest:   { ...person, id: null },
+        booking: theirBooking,
+        ...rest,
+      });
+      results.push({ email: person.email, success: !!res?.success });
+    } catch (err) {
+      // One bad address must not stop the rest of the party.
+      console.warn(`[email] additional guest ${person.email} failed:`, err.message);
+      results.push({ email: person.email, success: false, error: err.message });
+    }
+  }
+
+  return { primary, additional: results };
 }

@@ -684,6 +684,31 @@
             placeholder="Early check-in, accessibility needs, special occasions, questions about the property..."></textarea>
         </div>
 
+        <!-- ══════════════════════════════════════════════════════
+             WHO ELSE IS COMING  —  NOT LIVE YET
+
+             Hidden until ENABLE_PARTY_ON_FORM is set to true in the
+             script below. The API already accepts these, so turning
+             it on is a one-word change here and nothing else.
+
+             Before switching it on, decide whether you want guests
+             adding other people's email addresses without you seeing
+             them first. Today you add them yourself in the dashboard,
+             which means no address enters the system unreviewed.
+             ══════════════════════════════════════════════════════ -->
+        <div class="form-group" id="partyBlock" hidden>
+          <label>Who Else Is Coming?</label>
+          <p style="font-size:0.75rem;color:var(--muted);line-height:1.7;margin:0.2rem 0 0.8rem;">
+            Optional. We'll send them the same arrival details and reminders.
+            The door code goes only to you.
+          </p>
+          <div id="partyRows"></div>
+          <button type="button" id="partyAddRow" class="btn btn-secondary"
+            style="padding:0.45rem 0.9rem;font-size:0.68rem;margin-top:0.5rem;">
+            Add another guest
+          </button>
+        </div>
+
         <!-- Terms & cancellation rights -->
         <div class="terms-block">
           <p class="terms-heading">Reservation Terms</p>
@@ -1365,6 +1390,62 @@
       return el ? el.value.trim() : '';
     }
 
+    /* ── Who else is coming — NOT LIVE ──────────────────────────
+       Set this to true to show the block and start collecting the
+       rest of the party on the form. Everything behind it already
+       works: the API accepts the field and writes it to the same
+       table the dashboard reads. */
+    var ENABLE_PARTY_ON_FORM = false;
+
+    var MAX_PARTY = 3;   // occupancy is 4, and one of those is the booker
+
+    function addPartyRow() {
+      var wrap = document.getElementById('partyRows');
+      if (!wrap || wrap.children.length >= MAX_PARTY) return;
+
+      var row = document.createElement('div');
+      row.className = 'party-row';
+      row.style.cssText = 'display:flex;gap:0.5rem;margin-bottom:0.5rem;flex-wrap:wrap;';
+      row.innerHTML =
+        '<input type="text"  class="form-control party-first" placeholder="First name" style="flex:1;min-width:110px;"/>' +
+        '<input type="text"  class="form-control party-last"  placeholder="Last name"  style="flex:1;min-width:110px;"/>' +
+        '<input type="email" class="form-control party-email" placeholder="Email"      style="flex:1.6;min-width:160px;"/>';
+      wrap.appendChild(row);
+
+      if (wrap.children.length >= MAX_PARTY) {
+        var btn = document.getElementById('partyAddRow');
+        if (btn) btn.hidden = true;
+      }
+    }
+
+    /* Returns [] when the block is hidden, so the booking payload is
+       unchanged from today until the flag is switched on. */
+    function collectParty() {
+      if (!ENABLE_PARTY_ON_FORM) return [];
+      var out = [];
+      document.querySelectorAll('#partyRows .party-row').forEach(function (r) {
+        var first = (r.querySelector('.party-first').value || '').trim();
+        var email = (r.querySelector('.party-email').value || '').trim();
+        if (!first || !email) return;
+        out.push({
+          first_name: first,
+          last_name:  (r.querySelector('.party-last').value || '').trim(),
+          email:      email,
+        });
+      });
+      return out;
+    }
+
+    if (ENABLE_PARTY_ON_FORM) {
+      var pb = document.getElementById('partyBlock');
+      if (pb) {
+        pb.hidden = false;
+        addPartyRow();
+        var addBtn = document.getElementById('partyAddRow');
+        if (addBtn) addBtn.addEventListener('click', addPartyRow);
+      }
+    }
+
     /* Read the visit id that main.js stores on every page view.
        Session storage can throw in private browsing or when a
        browser blocks site data, so this never assumes it works —
@@ -1446,6 +1527,9 @@
           purpose_of_stay:  val('purpose'),
           special_requests: val('specialRequests'),
           discount_code:    val('discountCode'),
+          // Empty array while the block above is hidden. The API
+          // accepts it either way.
+          additional_guests: collectParty(),
           terms_accepted:   true,
           terms_accepted_at: new Date().toISOString(),
           // Same id main.js records with every page view, so this

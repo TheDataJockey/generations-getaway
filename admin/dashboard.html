@@ -1428,6 +1428,149 @@
       if (cal && cal.classList.contains('active')) loadPageData('calendar');
     }
 
+    /* ── Additional guests on a booking ──────────────────────────
+       The extra people who get arrival emails and reminders. The
+       primary guest is not in this list and cannot be removed here. */
+
+    function partyMsg(text, ok) {
+      const el = document.getElementById('partyResult');
+      if (!el) return;
+      el.style.color = ok ? 'var(--good, #7FD1A4)' : 'var(--bad, #E8A0A0)';
+      el.textContent = text || '';
+    }
+
+    async function loadParty(bookingId) {
+      const list = document.getElementById('partyList');
+      if (!list) return;
+      try {
+        const res  = await fetch('/api/admin?resource=party&booking_id=' +
+                                 encodeURIComponent(bookingId), { headers: authHeaders() });
+        const data = await res.json().catch(() => ({}));
+
+        if (data.setup_required) {
+          list.innerHTML = '<span style="color:var(--muted);">' +
+            'Not set up yet — run db/additional-guests.sql in Supabase.</span>';
+          return;
+        }
+        if (!res.ok) {
+          list.innerHTML = '<span style="color:var(--bad, #E8A0A0);">' +
+            h(data.error || 'Could not load the guest list.') + '</span>';
+          return;
+        }
+
+        const people = data.guests || [];
+        if (!people.length) {
+          list.innerHTML = '<span style="color:var(--muted);">No one else on this booking yet.</span>';
+          return;
+        }
+
+        list.innerHTML = people.map(function (p) {
+          const nm = [p.first_name, p.last_name].filter(Boolean).join(' ');
+          const muted = p.receives_email ? '' : 'opacity:0.55;';
+          return '<div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;' +
+                 'border-bottom:1px solid rgba(46,95,163,0.15);' + muted + '">' +
+                   '<div style="flex:1;min-width:0;">' +
+                     '<div style="color:var(--cream);">' + h(nm) +
+                       (p.added_by === 'guest'
+                         ? '<span style="margin-left:0.5rem;font-size:0.6rem;letter-spacing:0.12em;' +
+                           'text-transform:uppercase;color:var(--sky);border:1px solid rgba(91,141,217,0.4);' +
+                           'border-radius:3px;padding:0.1rem 0.35rem;">added by guest</span>'
+                         : '') +
+                     '</div>' +
+                     '<div style="color:var(--sky);font-size:0.78rem;">' + h(p.email) + '</div>' +
+                   '</div>' +
+                   '<button type="button" class="btn btn-secondary" data-party-mute="' + h(p.id) +
+                     '" data-on="' + (p.receives_email ? '1' : '0') +
+                     '" style="padding:0.3rem 0.7rem;font-size:0.62rem;">' +
+                     (p.receives_email ? 'Pause' : 'Resume') + '</button>' +
+                   '<button type="button" class="btn btn-secondary" data-party-del="' + h(p.id) +
+                     '" style="padding:0.3rem 0.7rem;font-size:0.62rem;">Remove</button>' +
+                 '</div>';
+        }).join('');
+
+        list.querySelectorAll('[data-party-del]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            removeFromParty(b.getAttribute('data-party-del'), bookingId);
+          });
+        });
+        list.querySelectorAll('[data-party-mute]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            togglePartyEmail(b.getAttribute('data-party-mute'),
+                             b.getAttribute('data-on') !== '1', bookingId);
+          });
+        });
+      } catch (e) {
+        list.innerHTML = '<span style="color:var(--bad, #E8A0A0);">Could not reach the server.</span>';
+      }
+    }
+
+    function initParty(bookingId) {
+      loadParty(bookingId);
+      const btn = document.getElementById('partyAddBtn');
+      if (btn) btn.addEventListener('click', function () { addToParty(bookingId); });
+    }
+
+    async function addToParty(bookingId) {
+      const first = (document.getElementById('partyFirst').value || '').trim();
+      const last  = (document.getElementById('partyLast').value  || '').trim();
+      const email = (document.getElementById('partyEmail').value || '').trim();
+
+      if (!first) { partyMsg('First name is required.', false); return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) {
+        partyMsg('Enter a valid email address.', false); return;
+      }
+
+      const btn = document.getElementById('partyAddBtn');
+      btn.disabled = true; btn.textContent = 'Adding…';
+      partyMsg('', true);
+
+      try {
+        const res = await fetch('/api/admin?resource=party', {
+          method:  'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+          body: JSON.stringify({ booking_id: bookingId, first_name: first,
+                                 last_name: last, email: email }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { partyMsg(data.error || 'Could not add that person.', false); return; }
+
+        document.getElementById('partyFirst').value = '';
+        document.getElementById('partyLast').value  = '';
+        document.getElementById('partyEmail').value = '';
+        partyMsg(first + ' will receive arrival emails and reminders.', true);
+        loadParty(bookingId);
+      } catch (e) {
+        partyMsg('Could not reach the server.', false);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Add';
+      }
+    }
+
+    async function togglePartyEmail(id, turnOn, bookingId) {
+      try {
+        const res = await fetch('/api/admin?resource=party', {
+          method:  'PATCH',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+          body: JSON.stringify({ id: id, receives_email: turnOn }),
+        });
+        if (!res.ok) { partyMsg('Could not change that.', false); return; }
+        partyMsg(turnOn ? 'Emails resumed.' : 'Emails paused — they stay on the booking.', true);
+        loadParty(bookingId);
+      } catch (e) { partyMsg('Could not reach the server.', false); }
+    }
+
+    async function removeFromParty(id, bookingId) {
+      if (!confirm('Remove this person from the booking? They will stop receiving emails about it.')) return;
+      try {
+        const res = await fetch('/api/admin?resource=party&id=' + encodeURIComponent(id), {
+          method: 'DELETE', headers: authHeaders(),
+        });
+        if (!res.ok) { partyMsg('Could not remove that person.', false); return; }
+        partyMsg('Removed.', true);
+        loadParty(bookingId);
+      } catch (e) { partyMsg('Could not reach the server.', false); }
+    }
+
     async function loadDashboard() {
       try {
         const res  = await fetch('/api/admin?resource=dashboard', { headers: authHeaders() });
@@ -2550,11 +2693,52 @@
           ${data.special_requests ? `
           <div class="form-group" style="margin-top:1rem;"><label>Special Requests</label>
             <div style="color:rgba(164,196,224,0.8);padding:0.5rem 0;line-height:1.7;">${data.special_requests}</div></div>
-          ` : ''}`;
+          ` : ''}
+
+          <div class="form-group" style="margin-top:1.2rem;padding-top:1rem;
+               border-top:1px solid rgba(46,95,163,0.25);">
+            <label>Also On This Booking</label>
+            <p style="font-size:0.72rem;color:var(--muted);line-height:1.7;margin:0.2rem 0 0.7rem;">
+              Extra people who receive arrival information and reminders.
+              They get no portal login, and the door code goes only to
+              ${h(name)} unless you change that in Settings.
+            </p>
+            <div id="partyList" style="font-size:0.85rem;">
+              <span style="color:var(--muted);">Loading…</span>
+            </div>
+
+            <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;margin-top:0.8rem;">
+              <div style="flex:1;min-width:110px;">
+                <label style="font-size:0.6rem;">First Name</label>
+                <input type="text" id="partyFirst" placeholder="Jane"
+                  style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
+                         border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
+              </div>
+              <div style="flex:1;min-width:110px;">
+                <label style="font-size:0.6rem;">Last Name</label>
+                <input type="text" id="partyLast" placeholder="Optional"
+                  style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
+                         border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
+              </div>
+              <div style="flex:1.6;min-width:170px;">
+                <label style="font-size:0.6rem;">Email</label>
+                <input type="email" id="partyEmail" placeholder="jane@example.com"
+                  style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
+                         border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;"/>
+              </div>
+              <button type="button" class="btn btn-secondary" id="partyAddBtn"
+                style="padding:0.5rem 1rem;font-size:0.68rem;">Add</button>
+            </div>
+            <div id="partyResult" style="margin-top:0.5rem;font-size:0.8rem;"></div>
+          </div>`;
         // Approve/Decline only make sense while a request is still pending.
         // Once a booking is confirmed, re-approving would reissue the
         // confirmation email and re-run the overlap check for no reason,
         // and "Decline" on a paid stay is a cancellation, not a decline.
+        // Additional guests load on their own so a slow or not-yet-created
+        // table cannot hold up the booking detail itself.
+        initParty(data.id);
+
         const approveBtn = document.getElementById('approveBookingBtn');
         const declineBtn = document.getElementById('declineBookingBtn');
         const footer     = document.querySelector('#bookingModal .modal-footer');

@@ -163,6 +163,7 @@ async function route(req, res) {
     case 'pin-reset':        return handlePinReset(req, res, token);
     case 'edit-booking':     return handleEditBooking(req, res, token);
     case 'resend-email':     return handleResendEmail(req, res, token);
+    case 'party':            return handleParty(req, res, token);
     case 'pricing-all':
     case 'season':
     case 'settings':
@@ -1405,6 +1406,12 @@ async function handleSystemSettings(req, res, token) {
       const allowAccounts   = b.allow_guest_account_creation !== false;
       const requireDeposit   = b.require_deposit_for_account   !== false;
 
+      // Note the inverted default. The two above are opt-OUT (on unless
+      // explicitly false); this one is opt-IN. The entry code should never
+      // start going to unverified addresses because a field went missing
+      // from a request.
+      const shareDoorCode = b.share_door_code_with_additional_guests === true;
+
       // Charge description lists. Trim, drop blanks and duplicates, and
       // cap the length so a stray paste can't fill the dropdown.
       const cleanList = (arr, fallback) => {
@@ -1426,6 +1433,7 @@ async function handleSystemSettings(req, res, token) {
         idle_warning_seconds: warning,
         allow_guest_account_creation: allowAccounts,
         require_deposit_for_account:  requireDeposit,
+        share_door_code_with_additional_guests: shareDoorCode,
         deposit_reasons:      depositReasons,
         fee_reasons:          feeReasons,
         updated_at:           new Date().toISOString(),
@@ -1436,7 +1444,8 @@ async function handleSystemSettings(req, res, token) {
       await logAudit(auth.admin, 'update', 'system_settings', '1',
         `Idle ${idle}m, session ${hours}h, warning ${warning}s, ` +
         `guest accounts ${allowAccounts ? 'on' : 'OFF'}, ` +
-        `deposit required ${requireDeposit ? 'yes' : 'NO'}`);
+        `deposit required ${requireDeposit ? 'yes' : 'NO'}, ` +
+        `door code to additional guests ${shareDoorCode ? 'ON' : 'off'}`);
       return res.status(200).json({ success: true });
     }
 
@@ -1896,5 +1905,160 @@ async function handleResendEmail(req, res, token) {
   } catch (err) {
     console.error('[resend-email]', err);
     return res.status(500).json({ error: 'Could not resend the email.', detail: err.message });
+  }
+}
+
+// ════════════════════════════════════
+// ADDITIONAL GUESTS ON A BOOKING
+// ════════════════════════════════════
+/**
+ * The other people on a reservation. The primary guest stays on
+ * bookings.guest_id and is never touched here.
+ *
+ *   GET    ?resource=party&booking_id=...   list them
+ *   POST   ?resource=party                  add one
+ *   PATCH  ?resource=party                  toggle receives_email
+ *   DELETE ?resource=party&id=...           remove one
+ *
+ * These contacts receive arrival information and reminders. They get
+ * no portal login and no door code of their own — see the note in
+ * api/_lib/email.js for why the PIN is held back by default.
+ */
+async function handleParty(req, res, token) {
+  const auth = await validateAdminToken(token, 'family_admin');
+  if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+  // The table arrives with db/additional-guests.sql. Until that has
+  // been run, say so plainly rather than returning a raw Postgres
+  // error the dashboard would render as "undefined".
+  const notReady = (error) =>
+    error && (error.code === '42P01' || /booking_guests/i.test(error.message || ''));
+
+  try {
+    // ── List ──
+    if (req.method === 'GET') {
+      const bookingId = req.query.booking_id;
+      if (!bookingId) return res.status(400).json({ error: 'booking_id is required.' });
+
+      const { data, error } = await supabase
+        .from('booking_guests')
+        .select('id, first_name, last_name, email, phone, receives_email, added_by, created_at')
+        .eq('booking_id', bookingId)
+        .order('created_at', { ascending: true });
+
+      if (notReady(error)) {
+        return res.status(200).json({ guests: [], setup_required: true });
+      }
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json({ guests: data || [], setup_required: false });
+    }
+
+    // ── Add ──
+    if (req.method === 'POST') {
+      const b          = req.body || {};
+      const bookingId  = b.booking_id;
+      const firstName  = String(b.first_name || '').trim();
+      const lastName   = String(b.last_name  || '').trim() || null;
+      const email      = String(b.email      || '').trim().toLowerCase();
+      const phone      = String(b.phone      || '').trim() || null;
+
+      if (!bookingId)  return res.status(400).json({ error: 'booking_id is required.' });
+      if (!firstName)  return res.status(400).json({ error: 'First name is required.' });
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) {
+        return res.status(400).json({ error: 'Enter a valid email address.' });
+      }
+
+      // The booking must exist, and we need the primary guest's address
+      // so the same person is not added twice under two hats.
+      const { data: booking } = await supabase
+        .from('bookings')
+        .select('id, request_id, guest_id, guests ( email )')
+        .eq('id', bookingId)
+        .single();
+
+      if (!booking) return res.status(404).json({ error: 'Booking not found.' });
+
+      const primaryEmail = String(booking.guests?.email || '').toLowerCase();
+      if (primaryEmail && primaryEmail === email) {
+        return res.status(409).json({
+          error: 'That is already the primary guest on this booking.'
+        });
+      }
+
+      const { data, error } = await supabase
+        .from('booking_guests')
+        .insert({
+          booking_id: bookingId,
+          first_name: firstName,
+          last_name:  lastName,
+          email,
+          phone,
+          added_by:   'admin',
+        })
+        .select('id, first_name, last_name, email, phone, receives_email, added_by, created_at')
+        .single();
+
+      if (notReady(error)) {
+        return res.status(503).json({
+          error: 'Additional guests are not set up yet. Run db/additional-guests.sql in Supabase.'
+        });
+      }
+      // Unique index on (booking_id, lower(email)).
+      if (error && error.code === '23505') {
+        return res.status(409).json({ error: 'That person is already on this booking.' });
+      }
+      if (error) return res.status(500).json({ error: error.message });
+
+      await logAudit(auth.admin, 'create', 'booking_guests', data.id,
+        `Added ${firstName} ${lastName || ''} (${email}) to booking ${booking.request_id || bookingId}`.replace(/\s+/g, ' '));
+
+      return res.status(201).json(data);
+    }
+
+    // ── Toggle whether they receive email ──
+    if (req.method === 'PATCH') {
+      const { id, receives_email } = req.body || {};
+      if (!id) return res.status(400).json({ error: 'id is required.' });
+
+      const { data, error } = await supabase
+        .from('booking_guests')
+        .update({ receives_email: !!receives_email, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select('id, first_name, last_name, email, receives_email')
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+
+      await logAudit(auth.admin, 'update', 'booking_guests', id,
+        `${receives_email ? 'Resumed' : 'Paused'} emails for ${data.email}`);
+
+      return res.status(200).json(data);
+    }
+
+    // ── Remove ──
+    if (req.method === 'DELETE') {
+      const id = req.query.id || req.body?.id;
+      if (!id) return res.status(400).json({ error: 'id is required.' });
+
+      const { data: existing } = await supabase
+        .from('booking_guests')
+        .select('email')
+        .eq('id', id)
+        .single();
+
+      const { error } = await supabase.from('booking_guests').delete().eq('id', id);
+      if (error) return res.status(500).json({ error: error.message });
+
+      await logAudit(auth.admin, 'delete', 'booking_guests', id,
+        `Removed ${existing?.email || 'additional guest'} from a booking`);
+
+      return res.status(200).json({ success: true });
+    }
+
+    return res.status(405).json({ error: 'Method not allowed.' });
+
+  } catch (err) {
+    console.error('[admin/party]', err);
+    return res.status(500).json({ error: 'Could not update the guest list.' });
   }
 }

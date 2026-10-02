@@ -319,6 +319,44 @@ export default async function handler(req, res) {
 
     if (bookingError) throw new Error(`Failed to create booking record: ${bookingError.message} (code: ${bookingError.code})`);
 
+    // ── Additional guests supplied on the form ──
+    // Dormant until ENABLE_PARTY_ON_FORM is switched on in booking.html;
+    // nothing sends this field today. Written here so turning that flag
+    // on needs no change to the API.
+    //
+    // Deliberately forgiving: a bad entry is skipped, and the whole
+    // block is wrapped so it can never cost someone their booking.
+    try {
+      const party = Array.isArray(req.body?.additional_guests)
+        ? req.body.additional_guests.slice(0, 5)   // occupancy is 4; 5 is slack
+        : [];
+
+      const rows = party
+        .map(p => ({
+          booking_id: booking.id,
+          first_name: String(p?.first_name || '').trim(),
+          last_name:  String(p?.last_name  || '').trim() || null,
+          email:      String(p?.email      || '').trim().toLowerCase(),
+          added_by:   'guest',
+        }))
+        .filter(p =>
+          p.first_name &&
+          /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(p.email) &&
+          p.email !== String(email || '').trim().toLowerCase()   // not the booker
+        );
+
+      if (rows.length) {
+        const { error: partyErr } = await supabase
+          .from('booking_guests')
+          .insert(rows);
+        if (partyErr) {
+          console.warn('[bookings] additional guests not saved:', partyErr.message);
+        }
+      }
+    } catch (partyEx) {
+      console.warn('[bookings] additional guests threw:', partyEx.message);
+    }
+
     // Record the submission for rate limiting. Deliberately after the
     // insert succeeds — validation failures shouldn't count against
     // a guest who is simply correcting a typo.

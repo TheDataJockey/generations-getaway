@@ -164,6 +164,22 @@
         </p>
       </div>
 
+      <div class="field">
+        <label style="text-transform:none;letter-spacing:0;font-size:0.85rem;color:var(--cream);">
+          <input type="checkbox" id="shareDoorCode" style="width:auto;margin-right:0.5rem;"/>
+          Send the door code to additional guests on a booking
+        </label>
+        <p class="note">
+          Off by default, and worth leaving off. Additional guests are extra
+          people on a reservation who receive arrival emails and reminders.
+          Those addresses are typed in by someone else and never verified — one
+          mistyped character would send a stranger the address, the dates the
+          house is occupied, and the code to open the front door. While this is
+          off they get the same emails with the code replaced by a line telling
+          them to ask whoever booked.
+        </p>
+      </div>
+
       <button class="btn btn-primary" id="saveSecurityBtn">Save Security Settings</button>
     </section>
 
@@ -235,6 +251,9 @@
       document.getElementById('sessionHours').value   = d.session_hours;
       document.getElementById('allowAccounts').checked  = d.allow_guest_account_creation !== false;
       document.getElementById('requireDeposit').checked = d.require_deposit_for_account  !== false;
+      // Opt-IN, unlike the two above: anything other than an explicit
+      // true leaves the door code withheld.
+      document.getElementById('shareDoorCode').checked  = d.share_door_code_with_additional_guests === true;
       reasons.deposit = Array.isArray(d.deposit_reasons) ? d.deposit_reasons.slice() : [];
       reasons.fee     = Array.isArray(d.fee_reasons)     ? d.fee_reasons.slice()     : [];
       renderChips('deposit');
@@ -328,6 +347,7 @@
       session_hours:        document.getElementById('sessionHours').value,
       allow_guest_account_creation: document.getElementById('allowAccounts').checked,
       require_deposit_for_account:  document.getElementById('requireDeposit').checked,
+      share_door_code_with_additional_guests: document.getElementById('shareDoorCode').checked,
       deposit_reasons: reasons.deposit,
       fee_reasons:     reasons.fee,
     };
