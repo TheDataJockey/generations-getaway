@@ -334,6 +334,52 @@
       vertical-align: middle;
     }
 
+    /* ── Dense table: nothing wraps except the action buttons ──
+       Names and dates were breaking across two lines, which made rows
+       uneven and the whole list harder to scan. Tighter padding and a
+       slightly smaller face buy back the width instead. */
+    .admin-table.dense th,
+    .admin-table.dense td {
+      padding: 0.65rem 0.85rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .admin-table.dense td { font-size: 0.78rem; }
+    .admin-table.dense th { font-size: 0.56rem; letter-spacing: 0.14em; }
+
+    /* The actions column is the deliberate exception — buttons wrap onto
+       a second line rather than pushing the table wider. */
+    .admin-table.dense td.col-actions,
+    .admin-table.dense th.col-actions { white-space: normal; }
+
+    /* Keeps the layout stable while sorting reorders rows. */
+    .admin-table.dense { table-layout: fixed; }
+    .admin-table.dense .col-guest    { width: 15%; }
+    .admin-table.dense .col-date     { width: 11%; }
+    .admin-table.dense .col-num      { width: 6%;  }
+    .admin-table.dense .col-source   { width: 9%;  }
+    .admin-table.dense .col-status   { width: 11%; }
+    .admin-table.dense .col-payment  { width: 13%; }
+    .admin-table.dense .col-actions  { width: 18%; }
+
+    /* ── Sortable headers ── */
+    .admin-table th.sortable {
+      cursor: pointer; user-select: none;
+      transition: color 0.15s;
+    }
+    .admin-table th.sortable:hover { color: var(--sky); }
+    .admin-table th.sortable::after {
+      content: '↕'; margin-left: 0.35rem;
+      opacity: 0.25; font-size: 0.75rem;
+    }
+    .admin-table th.sortable[data-dir="asc"]::after  { content: '↑'; opacity: 1; color: var(--blue-light); }
+    .admin-table th.sortable[data-dir="desc"]::after { content: '↓'; opacity: 1; color: var(--blue-light); }
+
+    /* Horizontal scroll on narrow screens rather than squeezing columns. */
+    .table-scroll { overflow-x: auto; }
+    .table-scroll .admin-table.dense { min-width: 920px; }
+
     .admin-table tr:last-child td { border-bottom: none; }
     .admin-table tr:hover td { background: rgba(46,95,163,0.06); }
 
@@ -797,34 +843,49 @@
          PAGE: BOOKINGS
          ═══════════════════════════════ -->
     <div class="admin-page" id="page-bookings">
-      <div style="display:flex;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+      <div style="display:flex;gap:0.8rem;margin-bottom:1.5rem;flex-wrap:wrap;align-items:center;">
         <input type="text" class="form-control" id="bookingSearch"
-          placeholder="Search by guest name..." style="max-width:280px;"/>
-        <select class="form-control" id="bookingFilter" style="max-width:180px;">
+          placeholder="Search any column — name, date, source…" style="max-width:300px;"/>
+        <select class="form-control" id="bookingFilter" style="max-width:160px;">
           <option value="">All Statuses</option>
           <option value="inquiry">Inquiry</option>
           <option value="confirmed">Confirmed</option>
           <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>
         </select>
+        <select class="form-control" id="bookingPayFilter" style="max-width:160px;">
+          <option value="">All Payments</option>
+          <option value="paid">Paid</option>
+          <option value="partial">Partial</option>
+          <option value="sent">Link Sent</option>
+          <option value="unpaid">Unpaid</option>
+          <option value="refunded">Refunded</option>
+        </select>
+        <select class="form-control" id="bookingSourceFilter" style="max-width:150px;">
+          <option value="">All Sources</option>
+        </select>
+        <span id="bookingCount" style="font-size:0.72rem;color:var(--muted);"></span>
+        <button type="button" class="btn btn-secondary" id="bookingClearFilters"
+          style="padding:0.4rem 0.8rem;font-size:0.62rem;" hidden>Clear</button>
       </div>
       <div class="panel">
-        <div class="panel-body no-pad">
-          <table class="admin-table">
+        <div class="panel-body no-pad table-scroll">
+          <table class="admin-table dense" id="bookingsTable">
             <thead>
               <tr>
-                <th>Guest</th>
-                <th>Check-In</th>
-                <th>Check-Out</th>
-                <th>Nights</th>
-                <th>Guests</th>
-                <th>Source</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th class="col-guest   sortable" data-sort="guest"   data-type="text">Guest</th>
+                <th class="col-date    sortable" data-sort="in"      data-type="date">Check-In</th>
+                <th class="col-date    sortable" data-sort="out"     data-type="date">Check-Out</th>
+                <th class="col-num     sortable" data-sort="nights"  data-type="num">Nights</th>
+                <th class="col-num     sortable" data-sort="guests"  data-type="num">Guests</th>
+                <th class="col-source  sortable" data-sort="source"  data-type="text">Source</th>
+                <th class="col-status  sortable" data-sort="status"  data-type="text">Status</th>
+                <th class="col-payment sortable" data-sort="payment" data-type="num">Payment</th>
+                <th class="col-actions">Actions</th>
               </tr>
             </thead>
             <tbody id="allBookingsBody">
-              <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
+              <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1735,62 +1796,139 @@
       }
     }
 
-    async function loadBookings() {
-      try {
-        const status = document.getElementById('bookingFilter').value;
-        const search = document.getElementById('bookingSearch').value;
-        const res    = await fetch(
-          `/api/admin?resource=bookings&status=${status}&search=${encodeURIComponent(search)}`,
-          { headers: authHeaders() }
-        );
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
-        const tbody = document.getElementById('allBookingsBody');
-        if (data.bookings?.length) {
-          tbody.innerHTML = data.bookings.map(b => `
+    /* ── All Bookings table ──────────────────────────────────────
+       The rows are fetched once per status change and then sorted and
+       filtered in the browser, so clicking a header or typing in the
+       search box is instant rather than a round trip. */
+
+    let allBookings  = [];
+    let bookingSort  = { key: 'in', dir: 'desc' };   // newest arrivals first
+
+    /* One place that decides what the payment column says, so the badge
+       and the sort order can never disagree. rank orders the states from
+       least to most settled. */
+    function paymentState(b) {
+      const owed = Number(b.quoted_total ?? b.total_amount ?? 0) +
+                   Number(b.extra_charges || 0);
+      const got  = Number(b.amount_received || 0);
+      const m    = v => '$' + Number(v).toLocaleString('en-US',
+                     { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      if (b.payment_status === 'refunded')
+        return { key: 'refunded', rank: -1, text: 'Refunded',
+                 html: '<span class="status" style="background:rgba(239,154,154,0.15);color:#EF9A9A;">Refunded</span>' };
+
+      if (b.payment_status === 'paid' || (owed > 0 && got + 0.01 >= owed))
+        return { key: 'paid', rank: 4, text: 'Paid',
+                 html: '<span class="status" style="background:rgba(52,199,89,0.15);color:#81C784;">Paid</span>' };
+
+      if (got > 0)
+        return { key: 'partial', rank: 3, text: 'Partial ' + m(got),
+                 html: '<span class="status" style="background:rgba(255,213,79,0.15);color:#FFD54F;" ' +
+                       `title="${m(got)} of ${m(owed)} received">Partial &middot; ${m(got)}</span>` };
+
+      if (b.stripe_payment_link_url)
+        return { key: 'sent', rank: 2, text: 'Link Sent',
+                 html: '<span class="status" style="background:rgba(46,95,163,0.15);color:#5B8DD9;">Link Sent</span>' };
+
+      return { key: 'unpaid', rank: 1, text: 'Unpaid',
+               html: '<span class="status" style="background:rgba(142,142,147,0.15);color:#8e8e93;">Unpaid</span>' };
+    }
+
+    function bookingValue(b, key) {
+      switch (key) {
+        case 'guest':   return `${b.guest_first || ''} ${b.guest_last || ''}`.trim().toLowerCase();
+        case 'in':      return b.check_in_date  ? Date.parse(b.check_in_date)  : 0;
+        case 'out':     return b.check_out_date ? Date.parse(b.check_out_date) : 0;
+        case 'nights':  return Number(b.num_nights || 0);
+        case 'guests':  return Number(b.num_guests || 0);
+        case 'source':  return (b.booking_source || '').toLowerCase();
+        case 'status':  return (b.status || '').toLowerCase();
+        case 'payment': return paymentState(b).rank;
+        default:        return '';
+      }
+    }
+
+    /* Everything a row shows, flattened, so the search box matches what
+       is on screen rather than the raw field names underneath. */
+    function bookingHaystack(b) {
+      return [
+        b.guest_first, b.guest_last,
+        formatDate(b.check_in_date), formatDate(b.check_out_date),
+        b.num_nights, b.num_guests, b.booking_source, b.status,
+        paymentState(b).text, b.request_id,
+      ].filter(Boolean).join(' ').toLowerCase();
+    }
+
+    function visibleBookings() {
+      const q      = (document.getElementById('bookingSearch').value || '').trim().toLowerCase();
+      const pay    = document.getElementById('bookingPayFilter').value;
+      const source = document.getElementById('bookingSourceFilter').value;
+
+      let rows = allBookings.filter(b => {
+        if (q && !bookingHaystack(b).includes(q)) return false;
+        if (pay && paymentState(b).key !== pay) return false;
+        if (source && (b.booking_source || '') !== source) return false;
+        return true;
+      });
+
+      const { key, dir } = bookingSort;
+      const mult = dir === 'asc' ? 1 : -1;
+      rows.sort((x, y) => {
+        const a = bookingValue(x, key), b2 = bookingValue(y, key);
+        if (a < b2) return -1 * mult;
+        if (a > b2) return  1 * mult;
+        return 0;
+      });
+      return rows;
+    }
+
+    function renderBookings() {
+      const tbody = document.getElementById('allBookingsBody');
+      const rows  = visibleBookings();
+
+      document.querySelectorAll('#bookingsTable th.sortable').forEach(th => {
+        th.removeAttribute('data-dir');
+        if (th.dataset.sort === bookingSort.key) th.setAttribute('data-dir', bookingSort.dir);
+      });
+
+      const count   = document.getElementById('bookingCount');
+      const clear   = document.getElementById('bookingClearFilters');
+      const total   = allBookings.length;
+      const showing = rows.length;
+      if (count) count.textContent = showing === total
+        ? `${total} booking${total === 1 ? '' : 's'}`
+        : `${showing} of ${total}`;
+      if (clear) clear.hidden = (showing === total);
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem;">' +
+          (total ? 'Nothing matches those filters' : 'No bookings found') + '</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = rows.map(b => {
+        const pay = paymentState(b);
+        const nm  = `${h(b.guest_first || '')} ${h(b.guest_last || '')}`.trim();
+        return `
             <tr>
-              <td>
-                ${h(b.guest_first)} ${h(b.guest_last)}
-
-              </td>
-              <td>${formatDate(b.check_in_date)}</td>
-              <td>${formatDate(b.check_out_date)}</td>
-              <td>${b.num_nights || '—'}</td>
-              <td>${b.num_guests || '—'}</td>
-              <td style="text-transform:capitalize;">${b.booking_source || '—'}</td>
-              <td><span class="status status-${b.status}">${b.status}</span></td>
-              <td>
-                ${(() => {
-                  // Money received always beats link state. A deposit that
-                  // has cleared used to still read "Link Sent" because
-                  // 'partial' was not handled and it fell through.
-                  const owed = Number(b.quoted_total ?? b.total_amount ?? 0) +
-                               Number(b.extra_charges || 0);
-                  const got  = Number(b.amount_received || 0);
-                  const m    = v => '$' + Number(v).toLocaleString('en-US',
-                                 { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-                  if (b.payment_status === 'refunded')
-                    return '<span class="status" style="background:rgba(239,154,154,0.15);color:#EF9A9A;">Refunded</span>';
-                  if (b.payment_status === 'paid' || (owed > 0 && got + 0.01 >= owed))
-                    return '<span class="status" style="background:rgba(52,199,89,0.15);color:#81C784;">Paid</span>';
-                  if (got > 0)
-                    return '<span class="status" style="background:rgba(255,213,79,0.15);color:#FFD54F;" ' +
-                           `title="${m(got)} of ${m(owed)} received">Partial &middot; ${m(got)}</span>`;
-                  if (b.stripe_payment_link_url)
-                    return '<span class="status" style="background:rgba(46,95,163,0.15);color:#5B8DD9;">Link Sent</span>';
-                  return '<span class="status" style="background:rgba(142,142,147,0.15);color:#8e8e93;">Unpaid</span>';
-                })()}
-              </td>
-              <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+              <td class="col-guest" title="${nm}">${nm}</td>
+              <td class="col-date">${formatDate(b.check_in_date)}</td>
+              <td class="col-date">${formatDate(b.check_out_date)}</td>
+              <td class="col-num">${b.num_nights || '—'}</td>
+              <td class="col-num">${b.num_guests || '—'}</td>
+              <td class="col-source" style="text-transform:capitalize;">${h(b.booking_source || '—')}</td>
+              <td class="col-status"><span class="status status-${b.status}">${h(b.status)}</span></td>
+              <td class="col-payment">${pay.html}</td>
+              <td class="col-actions" style="display:flex;gap:0.3rem;flex-wrap:wrap;">
                 <button class="action-btn action-btn-view"
                   onclick="openBookingModal('${b.id}')">View</button>
-                ${b.status === 'confirmed' && b.payment_status !== 'paid' ? `
+                ${b.status === 'confirmed' && pay.key !== 'paid' ? `
                   <button class="action-btn" style="background:rgba(46,95,163,0.2);border-color:rgba(46,95,163,0.4);color:var(--sky);"
                     data-stripe-booking="${h(b.id)}"
                     title="Send Payment Link">&#36; Pay</button>
                 ` : ''}
-                ${b.payment_status === 'paid' ? `
+                ${pay.key === 'paid' ? `
                   <button class="action-btn" style="background:rgba(239,154,154,0.1);border-color:rgba(239,154,154,0.3);color:#EF9A9A;"
                     data-refund-booking="${h(b.id)}"
                     title="Process Refund">&#8617; Refund</button>
@@ -1802,27 +1940,76 @@
                     onclick="updateBookingStatus('${b.id}','cancelled')">✗</button>
                 ` : ''}
               </td>
-            </tr>`).join('');
-        } else {
-          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;">No bookings found</td></tr>';
-        }
-        // Bind the row action buttons. These used to be inline onclick
-        // handlers calling openStripeModal / openRefundModal, neither of
-        // which exists — both jobs are in the booking modal now.
-        tbody.querySelectorAll('[data-stripe-booking],[data-refund-booking]')
-          .forEach(function (btn) {
-            const id = btn.dataset.stripeBooking || btn.dataset.refundBooking;
-            btn.addEventListener('click', function () { openBookingModal(id); });
-          });
+            </tr>`;
+      }).join('');
+
+      // Rebind after every re-render — sorting replaces every row.
+      tbody.querySelectorAll('[data-stripe-booking],[data-refund-booking]')
+        .forEach(function (btn) {
+          const id = btn.dataset.stripeBooking || btn.dataset.refundBooking;
+          btn.addEventListener('click', function () { openBookingModal(id); });
+        });
+    }
+
+    /* The source list is built from the data rather than hard-coded, so a
+       new booking source appears in the filter without a code change. */
+    function fillSourceFilter() {
+      const sel = document.getElementById('bookingSourceFilter');
+      if (!sel) return;
+      const current = sel.value;
+      const sources = [...new Set(allBookings.map(b => b.booking_source).filter(Boolean))].sort();
+      sel.innerHTML = '<option value="">All Sources</option>' +
+        sources.map(s => `<option value="${h(s)}">${h(s.charAt(0).toUpperCase() + s.slice(1))}</option>`).join('');
+      if (sources.includes(current)) sel.value = current;
+    }
+
+    async function loadBookings() {
+      try {
+        const status = document.getElementById('bookingFilter').value;
+        // Only the status goes to the server. Text search is done here so
+        // it covers every column and responds as you type.
+        const res = await fetch(
+          `/api/admin?resource=bookings&status=${encodeURIComponent(status)}`,
+          { headers: authHeaders() }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
+
+        allBookings = data.bookings || [];
+        fillSourceFilter();
+        renderBookings();
       } catch (err) {
-        showLoadError('allBookingsBody', err, 8);
+        showLoadError('allBookingsBody', err, 9);
       }
     }
 
-    // Filter listeners
+    // ── Sorting ──
+    document.querySelectorAll('#bookingsTable th.sortable').forEach(function (th) {
+      th.addEventListener('click', function () {
+        const key = th.dataset.sort;
+        if (bookingSort.key === key) {
+          bookingSort.dir = bookingSort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          // Dates and numbers are most useful largest-first; names are not.
+          bookingSort.key = key;
+          bookingSort.dir = th.dataset.type === 'text' ? 'asc' : 'desc';
+        }
+        renderBookings();
+      });
+    });
+
+    // ── Filters ──
+    // Status refetches; everything else is already in memory.
     document.getElementById('bookingFilter').addEventListener('change', loadBookings);
-    document.getElementById('bookingSearch').addEventListener('input',
-      debounce(loadBookings, 400));
+    document.getElementById('bookingSearch').addEventListener('input', renderBookings);
+    document.getElementById('bookingPayFilter').addEventListener('change', renderBookings);
+    document.getElementById('bookingSourceFilter').addEventListener('change', renderBookings);
+    document.getElementById('bookingClearFilters').addEventListener('click', function () {
+      document.getElementById('bookingSearch').value = '';
+      document.getElementById('bookingPayFilter').value = '';
+      document.getElementById('bookingSourceFilter').value = '';
+      renderBookings();
+    });
 
     // ── CALENDAR ──
     let calYear  = new Date().getFullYear();
