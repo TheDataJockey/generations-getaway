@@ -196,8 +196,13 @@ async function handleDashboard(req, res, token) {
       supabase.from('guests').select('*', { count: 'exact', head: true }).eq('is_active', true),
       supabase.from('chat_logs').select('*', { count: 'exact', head: true })
         .eq('was_escalated', true).is('resolved_at', null),
+      // The payment fields are what the dashboard's Payment column needs.
+      // Without them that column had nothing to render and sat empty.
       supabase.from('bookings')
-        .select('id, status, check_in_date, check_out_date, num_guests, booking_source, guests(first_name, last_name)')
+        .select('id, status, check_in_date, check_out_date, num_guests, booking_source, ' +
+                'payment_status, quoted_total, total_amount, amount_received, ' +
+                'extra_charges, stripe_payment_link_url, created_at, ' +
+                'guests(first_name, last_name)')
         .order('created_at', { ascending: false }).limit(8),
       supabase.from('chat_logs')
         .select('id, question, created_at, guests(first_name, last_name)')
@@ -217,7 +222,15 @@ async function handleDashboard(req, res, token) {
         guest_first:          b.guests?.first_name || '—',
         guest_last:           b.guests?.last_name  || '',
         confirmation_number:  b.confirmation_number || '',
-
+        // Same field names the All Bookings table uses, so one shared
+        // paymentState() can render both and they cannot disagree.
+        payment_status:           b.payment_status,
+        quoted_total:             b.quoted_total,
+        total_amount:             b.total_amount,
+        amount_received:          b.amount_received,
+        extra_charges:            b.extra_charges,
+        stripe_payment_link_url:  b.stripe_payment_link_url,
+        created_at:               b.created_at,
       })),
       escalations: (escalations || []).map(c => ({
         id: c.id, question: c.question, created_at: c.created_at,

@@ -109,6 +109,79 @@
   td.actions{text-align:right;white-space:nowrap;}
   .table-scroll{overflow-x:auto;}
 
+  /* ── Rate calendar ──────────────────────────────────────────
+     Shows the rate that will actually be charged on every day —
+     seasonal rate, or an override where one exists — and lets you
+     change a day or a run of days by clicking them. */
+  .cal-bar{
+    display:flex;align-items:center;gap:.6rem;margin-bottom:.9rem;flex-wrap:wrap;
+  }
+  .cal-title{
+    font-family:var(--font-serif,Georgia,serif);font-size:1.15rem;
+    color:var(--cream);min-width:11rem;
+  }
+  .cal-nav{
+    width:30px;height:30px;border-radius:4px;cursor:pointer;
+    background:transparent;color:var(--sky);
+    border:1px solid rgba(91,141,217,.35);font-size:.9rem;line-height:1;
+  }
+  .cal-nav:hover{border-color:var(--blue-light);color:var(--cream);}
+
+  .cal-grid{
+    display:grid;grid-template-columns:repeat(7,1fr);gap:4px;
+    user-select:none;   /* dragging across days must not select text */
+  }
+  .cal-dow{
+    text-align:center;font-size:.55rem;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--muted);padding:.3rem 0;
+  }
+  .cal-day{
+    position:relative;min-height:62px;border-radius:4px;padding:.3rem .4rem;
+    background:rgba(27,42,74,.45);border:1px solid rgba(91,141,217,.14);
+    cursor:pointer;transition:border-color .12s,background .12s;
+  }
+  .cal-day:hover{border-color:var(--blue-light);}
+  .cal-day .d{font-size:.68rem;color:var(--muted);}
+  .cal-day .r{
+    position:absolute;left:.4rem;right:.4rem;bottom:.35rem;
+    font-size:.8rem;color:var(--cream);
+  }
+  /* A day carrying its own override reads differently from one just
+     inheriting the season, so you can see your edits at a glance. */
+  .cal-day.has-ov{
+    background:rgba(46,95,163,.22);border-color:rgba(91,141,217,.5);
+  }
+  .cal-day.has-ov .r{color:var(--blue-light);font-weight:500;}
+  .cal-day.blocked{background:rgba(232,160,160,.1);border-color:rgba(232,160,160,.3);}
+  .cal-day.blocked .r{color:#E8A0A0;font-size:.68rem;}
+  .cal-day.booked{
+    background:rgba(127,209,164,.08);border-color:rgba(127,209,164,.25);
+    cursor:not-allowed;
+  }
+  .cal-day.booked .r{color:#7FD1A4;font-size:.68rem;}
+  .cal-day.past{opacity:.35;cursor:not-allowed;}
+  .cal-day.empty{background:transparent;border:none;cursor:default;}
+  .cal-day.sel{
+    background:var(--blue,#2E5FA3);border-color:var(--blue-light);
+  }
+  .cal-day.sel .d,.cal-day.sel .r{color:#fff;}
+
+  .cal-editor{
+    margin-top:1rem;padding:.9rem 1rem;border-radius:4px;
+    background:rgba(46,95,163,.12);border:1px solid rgba(91,141,217,.3);
+    display:flex;gap:.6rem;align-items:flex-end;flex-wrap:wrap;
+  }
+  .cal-editor .who{font-size:.8rem;color:var(--sky);flex:1;min-width:190px;}
+  .cal-legend{
+    display:flex;gap:1rem;flex-wrap:wrap;margin-top:.8rem;
+    font-size:.68rem;color:var(--muted);
+  }
+  .cal-legend span{display:inline-flex;align-items:center;gap:.35rem;}
+  .cal-legend i{
+    width:10px;height:10px;border-radius:2px;display:inline-block;
+    border:1px solid rgba(91,141,217,.3);
+  }
+
   .pill{
     display:inline-block;padding:.15rem .5rem;border-radius:99px;
     font-size:.64rem;letter-spacing:.08em;text-transform:uppercase;
@@ -185,6 +258,47 @@
       </div>
       <br/>
       <button class="btn btn-primary" id="saveSettings">Save Settings</button>
+    </section>
+
+    <!-- ── Rate calendar ── -->
+    <section class="card">
+      <h2>Rate Calendar</h2>
+      <p class="hint">
+        What a guest is charged on each night. Click a day to select it,
+        or click and drag across several, then set the rate. Days you
+        have priced yourself are highlighted; the rest follow the
+        seasonal rate above.
+      </p>
+
+      <div class="cal-bar">
+        <button type="button" class="cal-nav" id="calPrev" aria-label="Previous month">&larr;</button>
+        <button type="button" class="cal-nav" id="calNext" aria-label="Next month">&rarr;</button>
+        <span class="cal-title" id="calTitle">&nbsp;</span>
+        <button type="button" class="btn btn-ghost" id="calToday"
+          style="padding:.35rem .8rem;font-size:.62rem;">Today</button>
+      </div>
+
+      <div class="cal-grid" id="calDow"></div>
+      <div class="cal-grid" id="calGrid" style="margin-top:4px;"></div>
+
+      <div class="cal-legend">
+        <span><i style="background:rgba(27,42,74,.45);"></i> Seasonal rate</span>
+        <span><i style="background:rgba(46,95,163,.22);border-color:rgba(91,141,217,.5);"></i> Priced by you</span>
+        <span><i style="background:rgba(232,160,160,.1);border-color:rgba(232,160,160,.3);"></i> Blocked</span>
+        <span><i style="background:rgba(127,209,164,.08);border-color:rgba(127,209,164,.25);"></i> Booked</span>
+      </div>
+
+      <div class="cal-editor" id="calEditor" hidden>
+        <div class="who" id="calWho"></div>
+        <div style="width:130px;">
+          <label for="calRate">Nightly Rate ($)</label>
+          <input type="number" id="calRate" min="0" step="1" placeholder="550"/>
+        </div>
+        <button type="button" class="btn btn-primary" id="calApply">Set Rate</button>
+        <button type="button" class="btn btn-ghost"   id="calBlock">Block</button>
+        <button type="button" class="btn btn-ghost"   id="calClear">Use Seasonal</button>
+        <button type="button" class="btn btn-ghost"   id="calCancel">Cancel</button>
+      </div>
     </section>
 
     <!-- ── Date overrides ── -->
@@ -472,6 +586,259 @@
     });
   }
 
+  /* ── Rate calendar ─────────────────────────────────────────
+     Reads the resolved per-night rates from /api/pricing — the same
+     feed the booking page uses — so what you see here is exactly
+     what a guest would be quoted. Writes go through the existing
+     override endpoint, so a day priced here is an ordinary date
+     override and shows up in the table below. */
+
+  var calMonth   = new Date();          // first of the month on screen
+  var calRates   = {};                  // { '2026-10-04': 550 }
+  var calBooked  = {};                  // { iso: true } unavailable dates
+  var calSel     = [];                  // selected ISO dates, sorted
+  var calDragging = false, calAnchor = null;
+
+  function isoOf(d) {
+    // Local date parts, not toISOString — that converts to UTC and
+    // can land on the previous day for anyone west of Greenwich.
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + day;
+  }
+  function todayIso() { return isoOf(new Date()); }
+
+  /* The override covering a date, highest priority first — mirrors
+     overrideFor() in api/pricing.js. */
+  function ovCovering(iso) {
+    var best = null;
+    (state.overrides || []).forEach(function (o) {
+      if (iso >= o.start_date && iso <= o.end_date) {
+        if (!best || (o.priority || 0) > (best.priority || 0)) best = o;
+      }
+    });
+    return best;
+  }
+
+  async function calLoad() {
+    try {
+      var res = await fetch('/api/pricing');          // public, no auth needed
+      var d   = await res.json().catch(function () { return {}; });
+      calRates  = d.rates || {};
+      calBooked = {};
+      (d.unavailable || []).forEach(function (iso) { calBooked[iso] = true; });
+    } catch (e) {
+      calRates = {}; calBooked = {};
+    }
+    calRender();
+  }
+
+  function calRender() {
+    var dow = document.getElementById('calDow');
+    if (dow && !dow.childNodes.length) {
+      dow.innerHTML = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+        .map(function (x) { return '<div class="cal-dow">' + x + '</div>'; }).join('');
+    }
+
+    var y = calMonth.getFullYear(), m = calMonth.getMonth();
+    document.getElementById('calTitle').textContent =
+      calMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    var first = new Date(y, m, 1);
+    var days  = new Date(y, m + 1, 0).getDate();
+    var pad   = first.getDay();
+    var today = todayIso();
+    var cells = [];
+
+    for (var i = 0; i < pad; i++) cells.push('<div class="cal-day empty"></div>');
+
+    for (var dnum = 1; dnum <= days; dnum++) {
+      var iso = isoOf(new Date(y, m, dnum));
+      var ov  = ovCovering(iso);
+      var cls = ['cal-day'];
+      var label;
+
+      if (iso < today)                       cls.push('past');
+      if (ov && ov.is_blocked)             { cls.push('blocked'); label = 'Blocked'; }
+      else if (calBooked[iso])             { cls.push('booked');  label = 'Booked'; }
+      else {
+        var r = calRates[iso];
+        label = r != null ? '$' + Number(r).toLocaleString('en-US') : '—';
+        if (ov) cls.push('has-ov');
+      }
+      if (calSel.indexOf(iso) !== -1) cls.push('sel');
+
+      var selectable = iso >= today && !calBooked[iso];
+      cells.push(
+        '<div class="' + cls.join(' ') + '"' +
+          (selectable ? ' data-iso="' + iso + '"' : '') +
+          (ov ? ' title="' + esc(ov.label) + '"' : '') + '>' +
+          '<div class="d">' + dnum + '</div>' +
+          '<div class="r">' + label + '</div>' +
+        '</div>');
+    }
+
+    document.getElementById('calGrid').innerHTML = cells.join('');
+    calBindDays();
+    calSyncEditor();
+  }
+
+  /* Click selects one day; press and drag selects a run. */
+  function calBindDays() {
+    document.querySelectorAll('#calGrid [data-iso]').forEach(function (el) {
+      var iso = el.dataset.iso;
+      el.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        calDragging = true; calAnchor = iso;
+        calSel = [iso]; calPaint();
+      });
+      el.addEventListener('mouseenter', function () {
+        if (!calDragging) return;
+        calSel = calRange(calAnchor, iso);
+        calPaint();
+      });
+    });
+  }
+  document.addEventListener('mouseup', function () {
+    if (calDragging) { calDragging = false; calSyncEditor(); }
+  });
+
+  /* Every selectable day between two dates, inclusive. Booked days are
+     skipped — they cannot be repriced from here. */
+  function calRange(a, b) {
+    var lo = a < b ? a : b, hi = a < b ? b : a;
+    var out = [], d = new Date(lo + 'T00:00:00'), end = new Date(hi + 'T00:00:00');
+    while (d <= end) {
+      var iso = isoOf(d);
+      if (!calBooked[iso]) out.push(iso);
+      d = new Date(d.getTime() + 86400000);
+    }
+    return out;
+  }
+
+  /* Repaint selection only — avoids rebuilding the grid mid-drag. */
+  function calPaint() {
+    document.querySelectorAll('#calGrid [data-iso]').forEach(function (el) {
+      el.classList.toggle('sel', calSel.indexOf(el.dataset.iso) !== -1);
+    });
+  }
+
+  function fmtShort(iso) {
+    return new Date(iso + 'T00:00:00')
+      .toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function calSyncEditor() {
+    var box = document.getElementById('calEditor');
+    if (!calSel.length) { box.hidden = true; return; }
+    box.hidden = false;
+
+    var n   = calSel.length;
+    var lo  = calSel[0], hi = calSel[n - 1];
+    document.getElementById('calWho').textContent = n === 1
+      ? fmtShort(lo)
+      : fmtShort(lo) + ' – ' + fmtShort(hi) + '  (' + n + ' nights)';
+
+    // Prefill with whatever the first selected night costs now.
+    var cur = calRates[lo];
+    document.getElementById('calRate').value = cur != null ? Math.round(cur) : '';
+  }
+
+  /* One contiguous selection becomes ONE override row rather than a
+     row per night — easier to find and remove later. */
+  async function calSave(opts) {
+    if (!calSel.length) return;
+    var lo = calSel[0], hi = calSel[calSel.length - 1];
+    var body = {
+      label:      opts.label,
+      start_date: lo,
+      end_date:   hi,
+      is_blocked: !!opts.blocked,
+      nightly_rate: opts.blocked ? null : opts.rate,
+      min_nights: null,
+      // Beats a broader holiday range covering the same nights.
+      priority:   10,
+    };
+    await api('?resource=override', { method: 'POST', body: JSON.stringify(body) });
+    calSel = [];
+    await load();        // refreshes state.overrides and the table below
+    await calLoad();     // refreshes the resolved rates
+  }
+
+  document.getElementById('calApply').addEventListener('click', async function () {
+    var rate = Number(document.getElementById('calRate').value);
+    if (!(rate >= 0) || !document.getElementById('calRate').value) {
+      notify('Enter a nightly rate first.', false); return;
+    }
+    this.disabled = true;
+    try {
+      await calSave({ rate: rate, label: 'Rate ' + fmtShort(calSel[0]) });
+      notify('Rate set.', true);
+    } catch (e) { notify(e.message, false); }
+    this.disabled = false;
+  });
+
+  document.getElementById('calBlock').addEventListener('click', async function () {
+    this.disabled = true;
+    try {
+      await calSave({ blocked: true, label: 'Blocked ' + fmtShort(calSel[0]) });
+      notify('Dates blocked.', true);
+    } catch (e) { notify(e.message, false); }
+    this.disabled = false;
+  });
+
+  /* Removes the overrides covering the selection so those nights fall
+     back to the seasonal rate. An override reaching outside the
+     selection is named in full before anything is deleted — otherwise
+     clearing three days could silently reprice a fortnight. */
+  document.getElementById('calClear').addEventListener('click', async function () {
+    var hit = (state.overrides || []).filter(function (o) {
+      return calSel.some(function (iso) {
+        return iso >= o.start_date && iso <= o.end_date;
+      });
+    });
+    if (!hit.length) { notify('Those nights already use the seasonal rate.', true); return; }
+
+    var wider = hit.filter(function (o) {
+      return o.start_date < calSel[0] || o.end_date > calSel[calSel.length - 1];
+    });
+    var msg = 'Remove ' + hit.length + ' override' + (hit.length > 1 ? 's' : '') + '?';
+    if (wider.length) {
+      msg += '\n\nThis also covers nights you did not select:\n' +
+        wider.map(function (o) {
+          return '  • ' + o.label + ' (' + fmtShort(o.start_date) + ' – ' + fmtShort(o.end_date) + ')';
+        }).join('\n') +
+        '\n\nThose nights will return to the seasonal rate too.';
+    }
+    if (!confirm(msg)) return;
+
+    this.disabled = true;
+    try {
+      for (var o of hit) {
+        await api('?resource=override&id=' + encodeURIComponent(o.id), { method: 'DELETE' });
+      }
+      calSel = [];
+      await load(); await calLoad();
+      notify('Back to the seasonal rate.', true);
+    } catch (e) { notify(e.message, false); }
+    this.disabled = false;
+  });
+
+  document.getElementById('calCancel').addEventListener('click', function () {
+    calSel = []; calPaint(); calSyncEditor();
+  });
+
+  document.getElementById('calPrev').addEventListener('click', function () {
+    calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1);
+    calSel = []; calRender();
+  });
+  document.getElementById('calNext').addEventListener('click', function () {
+    calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1);
+    calSel = []; calRender();
+  });
+  document.getElementById('calToday').addEventListener('click', function () {
+    calMonth = new Date(); calSel = []; calRender();
+  });
   /* ── Load ── */
   async function load() {
     try {
@@ -708,7 +1075,9 @@
     window.location.href = '/admin/login.html';
   });
 
-  load();
+  // Overrides have to be in memory before the calendar can tell a day
+  // you priced from one just following the season.
+  load().then(calLoad);
 })();
 </script>
 <script src="/js/admin-idle.js" defer></script>

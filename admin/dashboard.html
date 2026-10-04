@@ -389,6 +389,15 @@
     .admin-table th.sortable[data-dir="asc"]::after  { content: '↑'; opacity: 1; color: var(--blue-light); }
     .admin-table th.sortable[data-dir="desc"]::after { content: '↓'; opacity: 1; color: var(--blue-light); }
 
+    /* The dashboard's recent list has six columns, not nine, so it needs
+       its own widths — otherwise it inherits the nine-column set and
+       leaves a third of the row unallocated. */
+    #recentBookingsTable.dense .col-guest   { width: 22%; }
+    #recentBookingsTable.dense .col-date    { width: 15%; }
+    #recentBookingsTable.dense .col-status  { width: 14%; }
+    #recentBookingsTable.dense .col-payment { width: 16%; }
+    #recentBookingsTable.dense .col-actions { width: 18%; }
+
     /* Horizontal scroll on narrow screens rather than squeezing columns.
        The minimum is what the nine columns genuinely need; below it the
        panel scrolls sideways instead of crushing them. */
@@ -831,19 +840,19 @@
             <button class="action-btn action-btn-view" onclick="showPage('bookings')">View All</button>
           </div>
           <div class="panel-body no-pad">
-            <table class="admin-table" id="recentBookingsTable">
+            <table class="admin-table dense" id="recentBookingsTable">
               <thead>
                 <tr>
-                  <th>Guest</th>
-                  <th>Check-In</th>
-                  <th>Check-Out</th>
-                  <th>Status</th>
-                  <th>Payment</th>
-                  <th>Actions</th>
+                  <th class="col-guest   sortable" data-rsort="guest"   data-type="text">Guest</th>
+                  <th class="col-date    sortable" data-rsort="in"      data-type="date">Check-In</th>
+                  <th class="col-date    sortable" data-rsort="out"     data-type="date">Check-Out</th>
+                  <th class="col-status  sortable" data-rsort="status"  data-type="text">Status</th>
+                  <th class="col-payment sortable" data-rsort="payment" data-type="num">Payment</th>
+                  <th class="col-actions">Actions</th>
                 </tr>
               </thead>
               <tbody id="recentBookingsBody">
-                <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
+                <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
               </tbody>
             </table>
           </div>
@@ -1655,6 +1664,85 @@
       } catch (e) { partyMsg('Could not reach the server.', false); }
     }
 
+    /* ── Dashboard: recent bookings ──────────────────────────────
+       Sorted by check-in date on arrival, and re-sortable by clicking
+       any header. Shares paymentState() with the All Bookings table so
+       the Payment column can never say two different things. */
+
+    let recentBookings = [];
+    let recentSort     = { key: 'in', dir: 'asc' };   // next arrival first
+
+    function recentValue(b, key) {
+      switch (key) {
+        case 'guest':   return `${b.guest_first || ''} ${b.guest_last || ''}`.trim().toLowerCase();
+        case 'in':      return b.check_in_date  ? Date.parse(b.check_in_date)  : 0;
+        case 'out':     return b.check_out_date ? Date.parse(b.check_out_date) : 0;
+        case 'status':  return (b.status || '').toLowerCase();
+        case 'payment': return paymentState(b).rank;
+        default:        return '';
+      }
+    }
+
+    function renderRecent() {
+      const tbody = document.getElementById('recentBookingsBody');
+      if (!tbody) return;
+
+      document.querySelectorAll('#recentBookingsTable th.sortable').forEach(th => {
+        th.removeAttribute('data-dir');
+        if (th.dataset.rsort === recentSort.key) th.setAttribute('data-dir', recentSort.dir);
+      });
+
+      if (!recentBookings.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem;">No bookings yet</td></tr>';
+        return;
+      }
+
+      const mult = recentSort.dir === 'asc' ? 1 : -1;
+      const rows = recentBookings.slice().sort((x, y) => {
+        const a = recentValue(x, recentSort.key), b = recentValue(y, recentSort.key);
+        if (a < b) return -1 * mult;
+        if (a > b) return  1 * mult;
+        return 0;
+      });
+
+      tbody.innerHTML = rows.map(b => {
+        const pay = paymentState(b);
+        const nm  = `${h(b.guest_first || '')} ${h(b.guest_last || '')}`.trim();
+        return `
+            <tr>
+              <td class="col-guest" title="${nm}">${nm}</td>
+              <td class="col-date">${formatDate(b.check_in_date)}</td>
+              <td class="col-date">${formatDate(b.check_out_date)}</td>
+              <td class="col-status"><span class="status status-${b.status}">${h(b.status)}</span></td>
+              <td class="col-payment">${pay.html}</td>
+              <td class="col-actions"><div class="row-actions">
+                <button class="action-btn action-btn-view"
+                  onclick="openBookingModal('${b.id}')">View</button>
+                ${b.status === 'inquiry' ? `
+                  <button class="action-btn action-btn-approve"
+                    onclick="updateBookingStatus('${b.id}','confirmed')">Approve</button>
+                  <button class="action-btn action-btn-decline"
+                    onclick="updateBookingStatus('${b.id}','cancelled')">Decline</button>
+                ` : ''}
+              </div></td>
+            </tr>`;
+      }).join('');
+    }
+
+    document.querySelectorAll('#recentBookingsTable th.sortable').forEach(function (th) {
+      th.addEventListener('click', function () {
+        const key = th.dataset.rsort;
+        if (recentSort.key === key) {
+          recentSort.dir = recentSort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          recentSort.key = key;
+          // Dates ascending puts the next arrival on top; text reads A-Z;
+          // payment descending surfaces what is still owed.
+          recentSort.dir = th.dataset.type === 'num' ? 'desc' : 'asc';
+        }
+        renderRecent();
+      });
+    });
     async function loadDashboard() {
       try {
         const res  = await fetch('/api/admin?resource=dashboard', { headers: authHeaders() });
@@ -1671,29 +1759,10 @@
         document.getElementById('inquiryBadge').textContent  = data.inquiries  || 0;
         document.getElementById('chatBadge').textContent     = data.unanswered || 0;
 
-        // Recent bookings table
-        const tbody = document.getElementById('recentBookingsBody');
-        if (data.recent_bookings?.length) {
-          tbody.innerHTML = data.recent_bookings.map(b => `
-            <tr>
-              <td>${h(b.guest_first)} ${h(b.guest_last)}</td>
-              <td>${formatDate(b.check_in_date)}</td>
-              <td>${formatDate(b.check_out_date)}</td>
-              <td><span class="status status-${b.status}">${b.status}</span></td>
-              <td>
-                <button class="action-btn action-btn-view"
-                  onclick="openBookingModal('${b.id}')">View</button>
-                ${b.status === 'inquiry' ? `
-                  <button class="action-btn action-btn-approve"
-                    onclick="updateBookingStatus('${b.id}','confirmed')">Approve</button>
-                  <button class="action-btn action-btn-decline"
-                    onclick="updateBookingStatus('${b.id}','cancelled')">Decline</button>
-                ` : ''}
-              </td>
-            </tr>`).join('');
-        } else {
-          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem;">No bookings yet</td></tr>';
-        }
+        // Recent bookings table — kept in memory so the headers can
+        // re-sort it without another round trip.
+        recentBookings = data.recent_bookings || [];
+        renderRecent();
 
         // Chat escalations
         const chatEl = document.getElementById('chatEscalations');
