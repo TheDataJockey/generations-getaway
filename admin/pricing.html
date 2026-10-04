@@ -264,10 +264,14 @@
     <section class="card">
       <h2>Rate Calendar</h2>
       <p class="hint">
-        What a guest is charged on each night. Click a day to select it,
-        or click and drag across several, then set the rate. Days you
-        have priced yourself are highlighted; the rest follow the
-        seasonal rate above.
+        What a guest is charged on each night. Days you have priced
+        yourself are highlighted; the rest follow the seasonal rate above.
+        <br/>
+        <strong>Click</strong> a day to select it &middot;
+        <strong>Shift+click</strong> another to take everything between, including
+        across months &middot;
+        <strong>Drag</strong> to sweep a run &middot;
+        <strong>Cmd/Ctrl+click</strong> to add or drop individual days.
       </p>
 
       <div class="cal-bar">
@@ -608,6 +612,19 @@
   }
   function todayIso() { return isoOf(new Date()); }
 
+  /* The day after a date.
+
+     Deliberately NOT date.getTime() + 86400000. Adding a fixed 24 hours
+     breaks twice a year: on the night the clocks go back, midnight plus
+     24 hours is 11pm the SAME day, so a run of dates silently splits or
+     repeats. Nov 1 2026 is one of those nights. setDate() moves by a
+     calendar day and lets the browser deal with the clock change. */
+  function nextDay(d) {
+    var n = new Date(d.getTime());
+    n.setDate(n.getDate() + 1);
+    return n;
+  }
+
   /* The override covering a date, highest priority first — mirrors
      overrideFor() in api/pricing.js. */
   function ovCovering(iso) {
@@ -687,11 +704,35 @@
   function calBindDays() {
     document.querySelectorAll('#calGrid [data-iso]').forEach(function (el) {
       var iso = el.dataset.iso;
+
       el.addEventListener('mousedown', function (e) {
         e.preventDefault();
+
+        // Shift+click extends from the last day you clicked, the way a
+        // file list or a spreadsheet behaves. Works across months: the
+        // anchor survives changing the month, so you can click Dec 28
+        // and shift+click Jan 2.
+        if (e.shiftKey && calAnchor) {
+          calSel = calRange(calAnchor, iso);
+          calPaint(); calSyncEditor();
+          return;
+        }
+
+        // Cmd/Ctrl+click adds or removes a single day without losing
+        // what is already selected, for picking scattered dates.
+        if (e.metaKey || e.ctrlKey) {
+          var at = calSel.indexOf(iso);
+          if (at === -1) calSel.push(iso); else calSel.splice(at, 1);
+          calSel.sort();
+          calAnchor = iso;
+          calPaint(); calSyncEditor();
+          return;
+        }
+
         calDragging = true; calAnchor = iso;
         calSel = [iso]; calPaint();
       });
+
       el.addEventListener('mouseenter', function () {
         if (!calDragging) return;
         calSel = calRange(calAnchor, iso);
@@ -711,7 +752,7 @@
     while (d <= end) {
       var iso = isoOf(d);
       if (!calBooked[iso]) out.push(iso);
-      d = new Date(d.getTime() + 86400000);
+      d = nextDay(d);
     }
     return out;
   }
@@ -733,36 +774,75 @@
     if (!calSel.length) { box.hidden = true; return; }
     box.hidden = false;
 
-    var n   = calSel.length;
-    var lo  = calSel[0], hi = calSel[n - 1];
-    document.getElementById('calWho').textContent = n === 1
-      ? fmtShort(lo)
-      : fmtShort(lo) + ' – ' + fmtShort(hi) + '  (' + n + ' nights)';
+    var n    = calSel.length;
+    var runs = calRuns(calSel);
+
+    // Name the actual ranges rather than just first-to-last, so a
+    // selection broken by booked nights reads honestly.
+    var text;
+    if (n === 1) {
+      text = fmtShort(calSel[0]);
+    } else if (runs.length === 1) {
+      text = fmtShort(runs[0].start) + ' – ' + fmtShort(runs[0].end) + '  (' + n + ' nights)';
+    } else {
+      text = runs.map(function (r) {
+        return r.start === r.end ? fmtShort(r.start)
+                                 : fmtShort(r.start) + '–' + fmtShort(r.end);
+      }).join(', ') + '  (' + n + ' nights, ' + runs.length + ' ranges)';
+    }
+    document.getElementById('calWho').textContent = text;
 
     // Prefill with whatever the first selected night costs now.
     var cur = calRates[lo];
     document.getElementById('calRate').value = cur != null ? Math.round(cur) : '';
   }
 
-  /* One contiguous selection becomes ONE override row rather than a
-     row per night — easier to find and remove later. */
+  /* Split the selection into runs of consecutive days.
+
+     This matters more than it looks. A selection can have gaps — booked
+     nights are skipped when you drag across them, and Cmd+click lets you
+     pick scattered dates deliberately. Saving first-to-last as one range
+     would silently price the nights in between, which is not what the
+     highlighting showed you. One override per run keeps the saved dates
+     and the selected dates identical. */
+  function calRuns(sel) {
+    if (!sel.length) return [];
+    var runs = [], start = sel[0], prev = sel[0];
+    for (var i = 1; i < sel.length; i++) {
+      var expected = isoOf(nextDay(new Date(prev + 'T00:00:00')));
+      if (sel[i] !== expected) { runs.push({ start: start, end: prev }); start = sel[i]; }
+      prev = sel[i];
+    }
+    runs.push({ start: start, end: prev });
+    return runs;
+  }
+
+  /* Each run becomes ONE override row rather than a row per night —
+     easier to find and remove later. */
   async function calSave(opts) {
     if (!calSel.length) return;
-    var lo = calSel[0], hi = calSel[calSel.length - 1];
-    var body = {
-      label:      opts.label,
-      start_date: lo,
-      end_date:   hi,
-      is_blocked: !!opts.blocked,
-      nightly_rate: opts.blocked ? null : opts.rate,
-      min_nights: null,
-      // Beats a broader holiday range covering the same nights.
-      priority:   10,
-    };
-    await api('?resource=override', { method: 'POST', body: JSON.stringify(body) });
+    var runs = calRuns(calSel);
+
+    for (var r of runs) {
+      await api('?resource=override', {
+        method: 'POST',
+        body: JSON.stringify({
+          label:        opts.label + (runs.length > 1 ? ' (' + fmtShort(r.start) + ')' : ''),
+          start_date:   r.start,
+          end_date:     r.end,
+          is_blocked:   !!opts.blocked,
+          nightly_rate: opts.blocked ? null : opts.rate,
+          min_nights:   null,
+          // Beats a broader holiday range covering the same nights.
+          priority:     10,
+        }),
+      });
+    }
+
     calSel = [];
     await load();        // refreshes state.overrides and the table below
     await calLoad();     // refreshes the resolved rates
+    return runs.length;
   }
 
   document.getElementById('calApply').addEventListener('click', async function () {
@@ -772,8 +852,8 @@
     }
     this.disabled = true;
     try {
-      await calSave({ rate: rate, label: 'Rate ' + fmtShort(calSel[0]) });
-      notify('Rate set.', true);
+      var n = await calSave({ rate: rate, label: 'Rate ' + fmtShort(calSel[0]) });
+      notify(n > 1 ? 'Rate set across ' + n + ' date ranges.' : 'Rate set.', true);
     } catch (e) { notify(e.message, false); }
     this.disabled = false;
   });
@@ -781,8 +861,8 @@
   document.getElementById('calBlock').addEventListener('click', async function () {
     this.disabled = true;
     try {
-      await calSave({ blocked: true, label: 'Blocked ' + fmtShort(calSel[0]) });
-      notify('Dates blocked.', true);
+      var n = await calSave({ blocked: true, label: 'Blocked ' + fmtShort(calSel[0]) });
+      notify(n > 1 ? 'Blocked across ' + n + ' date ranges.' : 'Dates blocked.', true);
     } catch (e) { notify(e.message, false); }
     this.disabled = false;
   });
@@ -825,7 +905,9 @@
   });
 
   document.getElementById('calCancel').addEventListener('click', function () {
-    calSel = []; calPaint(); calSyncEditor();
+    // Drop the anchor too, so the next shift+click does not extend from
+    // a day you selected before cancelling.
+    calSel = []; calAnchor = null; calPaint(); calSyncEditor();
   });
 
   document.getElementById('calPrev').addEventListener('click', function () {
