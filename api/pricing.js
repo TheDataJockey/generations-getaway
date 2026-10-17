@@ -206,12 +206,35 @@ export function rateCalendar(cfg, fromIso, toIso) {
   return out;
 }
 
-// Highest-priority override covering this date, if any.
+/**
+ * The override that wins for this date.
+ *
+ * Higher priority wins. On a TIE, the most recently created wins — so
+ * re-pricing dates that already carry an override does what you expect
+ * instead of being silently ignored.
+ *
+ * This used to be `>` alone, which meant a tie was decided by whichever
+ * row the database happened to return first. The query has no ORDER BY,
+ * so that was usually the OLDEST row: setting a new rate over dates
+ * already priced at the same priority did nothing, with no error to
+ * explain why.
+ */
 function overrideFor(iso, overrides) {
   let best = null;
   for (const o of overrides) {
-    if (iso >= o.start_date && iso <= o.end_date) {
-      if (!best || (o.priority || 0) > (best.priority || 0)) best = o;
+    if (iso < o.start_date || iso > o.end_date) continue;
+    if (!best) { best = o; continue; }
+
+    const pNew = o.priority    || 0;
+    const pOld = best.priority || 0;
+
+    if (pNew > pOld) {
+      best = o;
+    } else if (pNew === pOld) {
+      // Plain string compare is safe — both are ISO-8601 timestamps.
+      const tNew = o.created_at    || '';
+      const tOld = best.created_at || '';
+      if (tNew > tOld) best = o;
     }
   }
   return best;

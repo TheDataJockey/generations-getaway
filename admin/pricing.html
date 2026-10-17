@@ -627,14 +627,32 @@
 
   /* The override covering a date, highest priority first — mirrors
      overrideFor() in api/pricing.js. */
+  /* Must match overrideFor() in api/pricing.js exactly, or the rate this
+     page shows will differ from the one a guest is quoted. Higher
+     priority wins; on a tie the most recently created wins. */
   function ovCovering(iso) {
     var best = null;
     (state.overrides || []).forEach(function (o) {
-      if (iso >= o.start_date && iso <= o.end_date) {
-        if (!best || (o.priority || 0) > (best.priority || 0)) best = o;
-      }
+      if (iso < o.start_date || iso > o.end_date) return;
+      if (!best) { best = o; return; }
+
+      var pNew = o.priority    || 0;
+      var pOld = best.priority || 0;
+
+      if (pNew > pOld) best = o;
+      else if (pNew === pOld && (o.created_at || '') > (best.created_at || '')) best = o;
     });
     return best;
+  }
+
+  /* Every override touching the selection, so we can price above them
+     and tell you what you are stacking on. */
+  function ovTouchingSelection() {
+    return (state.overrides || []).filter(function (o) {
+      return calSel.some(function (iso) {
+        return iso >= o.start_date && iso <= o.end_date;
+      });
+    });
   }
 
   async function calLoad() {
@@ -790,6 +808,18 @@
                                  : fmtShort(r.start) + '–' + fmtShort(r.end);
       }).join(', ') + '  (' + n + ' nights, ' + runs.length + ' ranges)';
     }
+    /* Say when these nights are already priced. Setting a rate here adds
+       another override on top rather than editing the existing one, so
+       the table below grows a row each time. "Use Seasonal" first, then
+       set the rate, keeps it tidy. */
+    var covering = ovTouchingSelection();
+    if (covering.length) {
+      var names = covering.slice(0, 3).map(function (o) { return o.label; }).join(', ');
+      text += '  —  already priced by: ' + names +
+              (covering.length > 3 ? ' +' + (covering.length - 3) + ' more' : '') +
+              '. Setting a rate will override it.';
+    }
+
     document.getElementById('calWho').textContent = text;
 
     // Prefill with whatever the first selected night costs now.
@@ -823,6 +853,19 @@
     if (!calSel.length) return;
     var runs = calRuns(calSel);
 
+    /* Price ABOVE whatever already covers these nights.
+
+       This was a flat 10, which meant re-pricing dates that already had
+       a calendar override produced a tie — and a tie was resolved in
+       favour of the older row, so the change silently did nothing.
+       Going one above the highest makes the winner explicit in the
+       table rather than something you have to infer. */
+    var covering = ovTouchingSelection();
+    var topPriority = covering.reduce(function (m, o) {
+      return Math.max(m, Number(o.priority) || 0);
+    }, 9);
+    var newPriority = topPriority + 1;
+
     for (var r of runs) {
       await api('?resource=override', {
         method: 'POST',
@@ -833,8 +876,7 @@
           is_blocked:   !!opts.blocked,
           nightly_rate: opts.blocked ? null : opts.rate,
           min_nights:   null,
-          // Beats a broader holiday range covering the same nights.
-          priority:     10,
+          priority:     newPriority,
         }),
       });
     }
