@@ -38,6 +38,7 @@
 import crypto from 'crypto';
 import { supabase } from './_lib/supabase.js';
 import { setCors } from './_lib/cors.js';
+import { applyEmailSafety } from './_lib/email.js';
 
 // ── Supabase admin client (service role — server only) ──
 
@@ -135,14 +136,19 @@ async function handleReservationRequest(req, res, supabase) {
 
   // Send email via Resend
   const RESEND_API_KEY = process.env.RESEND_API_KEY;
-  if (RESEND_API_KEY) {
+  const _safe = applyEmailSafety({
+    to: 'kyle@generationsgetawayfl.com',
+    subject: `🔔 Guest Request: ${subject} — ${guest_name}`,
+  });
+  if (!_safe) console.warn('[email] Non-production and EMAIL_OVERRIDE_TO not set — email suppressed');
+  if (RESEND_API_KEY && _safe) {
     await fetch('https://api.resend.com/emails', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_API_KEY}` },
       body: JSON.stringify({
         from:    'Generations Getaway LLC <bookings@generationsgetawayfl.com>',
-        to:      'kyle@generationsgetawayfl.com',
-        subject: `🔔 Guest Request: ${subject} — ${guest_name}`,
+        to:      _safe.to,
+        subject: _safe.subject,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#1B2A4A;color:#A8C4E0;padding:32px;border-radius:8px;">
             <h2 style="color:#F4F7FB;font-weight:300;margin-bottom:4px;">Guest Reservation Request</h2>

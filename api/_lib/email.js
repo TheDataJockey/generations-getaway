@@ -97,7 +97,25 @@ function money(n) {
   });
 }
 
+// ── Non-production email safety ──
+// Outside production (previews, dev) every email is redirected to
+// EMAIL_OVERRIDE_TO, with the original recipients noted in the subject.
+// Fail safe: outside production with no override set, nothing is sent.
+export function applyEmailSafety({ to, subject }) {
+  if (process.env.VERCEL_ENV === 'production') return { to, subject };
+  const override = (process.env.EMAIL_OVERRIDE_TO || '').trim();
+  if (!override) return null;
+  const original = Array.isArray(to) ? to.join(', ') : String(to || '');
+  return { to: override, subject: `[PREVIEW → was: ${original}] ${subject}` };
+}
+
 export async function sendEmail({ to, from, subject, html, text, reply_to }) {
+  const safe = applyEmailSafety({ to, subject });
+  if (!safe) {
+    console.warn('[email] Non-production and EMAIL_OVERRIDE_TO not set — email suppressed');
+    return { success: false, error: 'Email suppressed outside production' };
+  }
+  ({ to, subject } = safe);
   if (!RESEND_API_KEY) {
     console.error('[email] RESEND_API_KEY not set');
     return { success: false, error: 'API key not configured' };
