@@ -274,6 +274,12 @@ export default async function handler(req, res) {
       quoted_discount:  quote ? quote.discount : null,
       quoted_tax:       quote ? quote.tax      : null,
       quoted_total:     quote ? quote.total    : null,
+      // What was charged and who it is owed to, as of this booking.
+      // The 13% is not one tax: 7% goes to the Florida Dept. of Revenue
+      // and 6% direct to Broward County, on separate returns. Storing
+      // the split means a later rate change cannot retroactively alter
+      // what an already-filed period reported.
+      tax_breakdown:    quote ? quote.tax_components : null,
       deposit_amount:   sched ? sched.deposit_amount : null,
       balance_amount:   sched ? sched.balance_amount : null,
       balance_due_date: sched && sched.split ? sched.balance_due_date : null,

@@ -252,10 +252,28 @@
           <input type="number" id="minNights" min="1" max="30"/>
         </div>
         <div>
-          <label for="taxRate">Tax Rate (%)</label>
-          <input type="number" id="taxRate" min="0" max="100" step="0.01"/>
+          <label>Lodging Tax</label>
+          <!-- Read-only on purpose. This box used to be editable and
+               saved to a field nothing charged: you could set it to
+               12% and guests would still pay 13%. The tax is the sum
+               of the components listed below, so that is what is
+               shown here. -->
+          <div id="taxSummary"
+               style="padding:.55rem .7rem;background:var(--navy-light);
+                      border:1px solid rgba(46,95,163,.25);border-radius:4px;
+                      color:var(--cream);font-size:.95rem;">&nbsp;</div>
         </div>
       </div>
+      <div id="taxBreakdown"
+           style="margin-top:.7rem;font-size:.78rem;color:var(--muted);
+                  line-height:1.9;"></div>
+      <p class="hint" style="margin-top:.5rem;">
+        Broward administers its own tourist development tax, so this is
+        two separate returns &mdash; the state portion on your DR-15, the
+        county portion direct to Broward. To change a rate, update
+        <code>tax_components</code> in <code>pricing_settings</code>;
+        everything else follows from it.
+      </p>
       <br/>
       <button class="btn btn-primary" id="saveSettings">Save Settings</button>
     </section>
@@ -963,6 +981,31 @@
   document.getElementById('calToday').addEventListener('click', function () {
     calMonth = new Date(); calSel = []; calRender();
   });
+
+  /* Shows the tax as what it actually is: a list of components and
+     their sum. There is deliberately no editable total — a second
+     place stating the rate is how the old field came to display one
+     number while guests were charged another. */
+  function renderTax(components) {
+    var list = Array.isArray(components) && components.length
+      ? components
+      : [
+          { label: 'FL transient rental tax',     rate: 0.06, remit_to: 'Florida Dept. of Revenue' },
+          { label: 'Broward discretionary surtax', rate: 0.01, remit_to: 'Florida Dept. of Revenue' },
+          { label: 'Broward Tourist Development Tax', rate: 0.06, remit_to: 'Broward County' },
+        ];
+
+    var total = list.reduce(function (s, c) { return s + (Number(c.rate) || 0); }, 0);
+    document.getElementById('taxSummary').textContent =
+      (Math.round(total * 1e6) / 1e6 * 100).toFixed(2) + '%';
+
+    document.getElementById('taxBreakdown').innerHTML = list.map(function (c) {
+      return '<div>' + (Number(c.rate) * 100).toFixed(2) + '% &nbsp;&middot;&nbsp; ' +
+             esc(c.label) + ' &nbsp;&rarr;&nbsp; <span style="color:var(--sky);">' +
+             esc(c.remit_to) + '</span></div>';
+    }).join('');
+  }
+
   /* ── Load ── */
   async function load() {
     try {
@@ -970,8 +1013,7 @@
       if (!d) return;
       state = d;
       document.getElementById('minNights').value = d.settings.min_nights;
-      document.getElementById('taxRate').value =
-        (Number(d.settings.tax_rate) * 100).toFixed(2);
+      renderTax(d.settings.tax_components);
       renderSeasons(); renderOverrides(); renderCodes();
       document.getElementById('loading').hidden = true;
       document.getElementById('content').hidden = false;
@@ -1008,8 +1050,7 @@
       await api('?resource=settings', {
         method: 'PUT',
         body: JSON.stringify({
-          min_nights: document.getElementById('minNights').value,
-          tax_rate: Number(document.getElementById('taxRate').value) / 100
+          min_nights: document.getElementById('minNights').value
         })
       });
       notify('Settings saved.', true); await load();
