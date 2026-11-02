@@ -73,6 +73,12 @@ async function validateAdminToken(token, requiredRole = null) {
   return { admin };
 }
 
+// Money to two decimals. Guards against the float noise that turns
+// 1050.0000000000002 into a stored total.
+function round2(n) {
+  return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+}
+
 // ── Audit log helper ──
 async function logAudit(admin, action, tableName, recordId = null, notes = null) {
   // A silent failure here means admin actions never reach the Activity
@@ -323,6 +329,104 @@ async function handleGuests(req, res, token) {
       const nights = body.check_in_date && body.check_out_date
         ? Math.round((new Date(body.check_out_date) - new Date(body.check_in_date)) / 86400000) : null;
 
+      /* ── Price the stay ───────────────────────────────────────
+         A booking added here used to be stored with no quoted_total
+         at all, so the dashboard showed no price and every payment
+         button computed an amount owed of zero.
+
+         Two ways to get a figure, in order:
+           1. A nightly rate typed into the form — a negotiated or
+              after-the-fact rate, which should beat the calendar.
+           2. The pricing engine, the same one that quotes a guest
+              on the booking form.
+
+         The engine refuses past check-in dates, which is exactly
+         when a booking gets entered by hand, so a failure there is
+         expected rather than exceptional — fall back to the typed
+         rate, and if there isn't one, leave it unpriced and say so
+         rather than inventing a number. */
+      let pricing   = {};
+      let priceNote = null;
+
+      if (nights && nights > 0) {
+        const manualRate = Number(body.nightly_rate);
+        let taxRate    = 0.13;   // only used if the config can't be read
+        let components = null;
+
+        try {
+          const { loadConfig, computeQuote } = await import('./pricing.js');
+          const cfg  = await loadConfig();
+          taxRate    = Number(cfg.taxRate) || taxRate;
+          components = cfg.taxComponents || null;
+
+          if (!(manualRate > 0)) {
+            const q = computeQuote(cfg, {
+              check_in:  body.check_in_date,
+              check_out: body.check_out_date,
+            });
+            if (!q.error) {
+              const sched = q.payment_schedule || null;
+              pricing = {
+                quoted_subtotal:  q.subtotal,
+                quoted_discount:  q.discount,
+                quoted_tax:       q.tax,
+                quoted_total:     q.total,
+                total_amount:     q.total,
+                tax_breakdown:    q.tax_components || null,
+                deposit_amount:   sched ? sched.deposit_amount : null,
+                balance_amount:   sched ? sched.balance_amount : null,
+                balance_due_date: sched && sched.split ? sched.balance_due_date : null,
+              };
+            } else {
+              priceNote = q.error;
+            }
+          }
+        } catch (pErr) {
+          console.warn('[admin/guests] pricing engine unavailable:', pErr.message);
+          priceNote = 'Could not reach the pricing engine.';
+        }
+
+        // Typed rate wins, and also covers the engine declining.
+        if (!pricing.quoted_total && manualRate > 0) {
+          const subtotal = round2(manualRate * nights);
+
+          // Split the tax the way the engine would, so this booking
+          // lands on both returns rather than only in the combined
+          // figure. 7% is owed to the state, 6% direct to Broward.
+          const split = (components || []).map(c => ({
+            key: c.key, label: c.label, rate: c.rate,
+            remit_to: c.remit_to, amount: round2(subtotal * c.rate),
+          }));
+
+          // The total is the SUM OF THE SPLIT, never subtotal x a
+          // separate rate. Deriving it twice is how a stored
+          // quoted_tax ends up disagreeing with the components it
+          // is supposed to be made of.
+          const tax   = split.length
+            ? round2(split.reduce((sum, c) => sum + c.amount, 0))
+            : round2(subtotal * taxRate);
+          const total = round2(subtotal + tax);
+
+          pricing = {
+            quoted_subtotal:  subtotal,
+            quoted_discount:  0,
+            quoted_tax:       tax,
+            quoted_total:     total,
+            total_amount:     total,
+            tax_breakdown:    split.length ? split : null,
+            deposit_amount:   null,
+            balance_amount:   null,
+            balance_due_date: null,
+          };
+          priceNote = null;
+        }
+      }
+
+      if (!pricing.quoted_total) {
+        priceNote = priceNote ||
+          'No nightly rate was entered and the stay could not be priced automatically.';
+      }
+
       const { data: booking, error: bErr } = await supabase
         .from('bookings')
         .insert({
@@ -331,12 +435,20 @@ async function handleGuests(req, res, token) {
           booking_source: body.booking_source, nightly_rate: body.nightly_rate,
           num_nights: nights, yale_pin_code: body.pin_code,
           welcome_note: body.welcome_note, status: 'confirmed',
+          ...pricing,
         })
         .select('id').single();
       if (bErr) throw bErr;
 
       await logAudit(auth.admin, 'created', 'guests', guest.id, `Created: ${body.first_name} ${body.last_name}`);
-      return res.status(200).json({ guest_id: guest.id, booking_id: booking.id });
+      return res.status(200).json({
+        guest_id:     guest.id,
+        booking_id:   booking.id,
+        // Lets the form say so immediately, rather than the missing
+        // price only surfacing later in the bookings list.
+        quoted_total: pricing.quoted_total ?? null,
+        price_note:   priceNote,
+      });
     }
 
     if (req.method === 'PUT') {
@@ -973,7 +1085,7 @@ try {
         seasons:   seasons.data   || [],
         overrides: overrides.data || [],
         codes:     codes.data     || [],
-        settings:  settings.data  || { min_nights: 3, tax_rate: 0.13 },
+        settings:  settings.data  || { min_nights: 3 },
       });
     }
 
@@ -1003,21 +1115,21 @@ try {
 
     /* ---------- GLOBAL SETTINGS ---------- */
     if (resource === 'settings' && req.method === 'PUT') {
-      const { min_nights, tax_rate } = req.body || {};
+      const { min_nights } = req.body || {};
       const mn = parseInt(min_nights, 10);
-      const tr = Number(tax_rate);
       if (!Number.isInteger(mn) || mn < 1 || mn > 30) {
         return res.status(400).json({ error: 'Minimum nights must be 1-30.' });
       }
-      if (!Number.isFinite(tr) || tr < 0 || tr > 1) {
-        return res.status(400).json({ error: 'Tax rate must be a decimal between 0 and 1.' });
-      }
+      /* tax_rate is deliberately NOT accepted here any more.
+         It was a stored number that nothing charged — the tax is the
+         sum of pricing_settings.tax_components — so saving it changed
+         a display value while guests kept paying the real total. To
+         change a rate, edit tax_components. */
       const { error } = await supabase.from('pricing_settings')
-        .update({ min_nights: mn, tax_rate: tr, updated_at: new Date().toISOString() })
+        .update({ min_nights: mn, updated_at: new Date().toISOString() })
         .eq('id', 1);
       if (error) throw error;
-      await logAudit(admin, 'update', 'pricing_settings', '1',
-        `Min nights ${mn}, tax ${(tr * 100).toFixed(2)}%`);
+      await logAudit(admin, 'update', 'pricing_settings', '1', `Min nights ${mn}`);
       return res.status(200).json({ success: true });
     }
 
@@ -1826,6 +1938,8 @@ async function handleEditBooking(req, res, token) {
       quoted_discount:  quote.discount,
       quoted_tax:       quote.tax,
       quoted_total:     quote.total,
+      // Re-priced, so the split is re-recorded with it.
+      tax_breakdown:    quote.tax_components || null,
       deposit_amount:   sched ? sched.deposit_amount : null,
       balance_amount:   sched ? sched.balance_amount : null,
       balance_due_date: sched && sched.split ? sched.balance_due_date : null,

@@ -70,6 +70,48 @@ const FALLBACK = {
 };
 
 /* ============================================================
+   TAX
+   ============================================================
+   Three components, two authorities:
+
+     6%  FL transient rental tax      -> Florida Dept. of Revenue
+     1%  Broward discretionary surtax -> Florida Dept. of Revenue
+     6%  Broward Tourist Development  -> Broward County, directly
+
+   Broward self-administers its tourist development tax, so that
+   6% is a separate return from the 7% on the DR-15.
+
+   To change a rate, edit the row in pricing_settings.tax_components
+   (no deploy needed), or the FALLBACK list above if that row is
+   not set. Never introduce a second place that states the total:
+   the total is always the sum of these.
+   ============================================================ */
+
+/** Accepts stored components, returns null if they are unusable. */
+function normaliseTaxComponents(raw) {
+  if (!Array.isArray(raw) || !raw.length) return null;
+  const out = [];
+  for (const c of raw) {
+    const rate = Number(c?.rate);
+    if (!c?.key || !Number.isFinite(rate) || rate < 0 || rate > 1) return null;
+    out.push({
+      key:      String(c.key),
+      label:    String(c.label || c.key),
+      rate,
+      remit_to: String(c.remit_to || 'Unspecified'),
+    });
+  }
+  return out;
+}
+
+/** The headline tax rate is the sum of the components, never a stored number. */
+function sumTaxRates(components) {
+  const total = (components || []).reduce((s, c) => s + (Number(c.rate) || 0), 0);
+  // Float noise: 0.06 + 0.01 + 0.06 is 0.12999999999999998.
+  return Math.round(total * 1e6) / 1e6;
+}
+
+/* ============================================================
    LOAD CONFIG FROM DATABASE
    ============================================================ */
 export async function loadConfig() {
@@ -123,14 +165,30 @@ export async function loadConfig() {
       };
     }
 
+    /* ── Tax: one source of truth ──────────────────────────────
+       The components ARE the tax. The rate is their sum, never a
+       separately stored number.
+
+       This used to read pricing_settings.tax_rate for cfg.taxRate
+       while charging the sum of a hard-coded component list. The
+       two could disagree, and the Tax Rate field on the pricing
+       admin page edited the one that was never charged — so
+       correcting the rate there changed a displayed number and
+       nothing a guest paid.
+
+       Components come from the database when they are there, so a
+       rate change needs no deploy, and fall back to the list above
+       when they are not. */
+    const taxComponents = normaliseTaxComponents(settings.data?.tax_components)
+                          || FALLBACK.taxComponents;
+
     return {
       rates,
       seasonByMonth,
       overrides: overrides.data || [],
       minNights: settings.data?.min_nights ?? FALLBACK.minNights,
-      taxRate:   settings.data?.tax_rate != null
-                   ? Number(settings.data.tax_rate) : FALLBACK.taxRate,
-      taxComponents: FALLBACK.taxComponents,
+      taxComponents,
+      taxRate:   sumTaxRates(taxComponents),
       codes:     Object.keys(codeMap).length ? codeMap : FALLBACK.codes,
       bookings:  bookedRows,
     };
