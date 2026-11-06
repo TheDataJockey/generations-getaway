@@ -542,6 +542,7 @@
     .cal-day.day-turnover  { background: rgba(255,160,0,0.1); }
     .cal-day.day-occupied  { background: rgba(27,54,90,0.35); }
     .cal-day.day-inquiry   { background: rgba(255,213,79,0.08); }
+    .cal-day.day-blocked   { background: rgba(239,154,154,0.10); }
     /* Day type indicator dot row */
     .cal-day-tags { display: flex; gap: 3px; margin-bottom: 2px; flex-wrap: wrap; }
     .cal-day-tag {
@@ -552,6 +553,7 @@
     .cal-day-tag.tag-out      { background: rgba(198,40,40,0.25); color: #EF9A9A; }
     .cal-day-tag.tag-turnover { background: rgba(255,160,0,0.25); color: #FFB74D; }
     .cal-day-tag.tag-inquiry  { background: rgba(255,213,79,0.2); color: #FFD54F; }
+    .cal-day-tag.tag-blocked  { background: rgba(239,154,154,0.2); color: #EF9A9A; }
     /* Booking bars */
     .cal-bars { position: absolute; left: 0; right: 0; bottom: 6px; display: flex; flex-direction: column; gap: 2px; padding: 0 2px; }
     .cal-bar {
@@ -2421,6 +2423,11 @@
     let calYear  = new Date().getFullYear();
     let calMonth = new Date().getMonth();
     let calBookings = [];
+    // Dates blocked in the Rate Calendar occupy the calendar just as firmly
+    // as a booking does, but they live in pricing_overrides, which this view
+    // never read — so a blocked week showed as free here while the Rate
+    // Calendar showed it blocked.
+    let calBlocked  = [];
 
     // Palette of bar colors that fit the navy/blue theme
     const BAR_COLORS = [
@@ -2459,6 +2466,17 @@
         // vanished from the calendar.
         const SHOW = ['confirmed', 'inquiry', 'pending', 'paid', 'checked_in', 'completed'];
         calBookings = (data.bookings || []).filter(b => SHOW.includes(b.status));
+
+        // Blocked ranges, from the same place the Rate Calendar writes them.
+        // A failure here must not take the bookings down with it.
+        try {
+          const pRes = await fetch("/api/admin?resource=pricing-all", { headers: authHeaders() });
+          const pDat = await pRes.json().catch(() => ({}));
+          calBlocked = (pDat.overrides || []).filter(o => o.is_blocked);
+        } catch (pErr) {
+          console.error("[calendar] blocked dates unavailable:", pErr);
+          calBlocked = [];
+        }
 
         const note = document.getElementById('calNote');
         if (note) {
@@ -2514,6 +2532,8 @@
         const isCheckOut = checkOuts.length > 0 && !isTurnover;
         const isOccupied = occupied.length > 0;
         const isInquiry  = inquiries.length > 0 && checkIns.length === 0 && checkOuts.length === 0 && !isOccupied;
+        // end_date is inclusive on an override, unlike a booking check-out.
+        const isBlocked  = calBlocked.some(o => dateStr >= o.start_date && dateStr <= o.end_date);
 
         const cell = document.createElement('div');
         let cls = 'cal-day';
@@ -2523,6 +2543,7 @@
         else if (isCheckOut) cls += ' day-checkout';
         else if (isOccupied) cls += ' day-occupied';
         else if (isInquiry)  cls += ' day-inquiry';
+        else if (isBlocked)  cls += ' day-blocked';
         cell.className = cls;
 
         // Day number
@@ -2532,6 +2553,13 @@
         cell.appendChild(numEl);
 
         // Day type tags
+        if (isBlocked && !isCheckIn && !isCheckOut && !isTurnover && !isOccupied) {
+          const blockRow = document.createElement("div");
+          blockRow.className = "cal-day-tags";
+          blockRow.innerHTML = '<span class="cal-day-tag tag-blocked">Blocked</span>';
+          cell.appendChild(blockRow);
+        }
+
         const allEvents = [...checkIns, ...checkOuts, ...occupied];
         if (checkIns.length || checkOuts.length || isTurnover) {
           const tagRow = document.createElement('div');
