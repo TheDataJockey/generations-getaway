@@ -1835,6 +1835,18 @@ async function priceNewBooking({ check_in_date, check_out_date, nightly_rate, di
   const haveQuote = quote && !quote.error;
   const rack      = haveQuote ? Number(quote.subtotal) : null;
 
+  /*
+     A date clash is NOT overridable by typing a rate. computeQuote sets
+     unavailable:true when the stay overlaps an existing booking or a date
+     blocked in the Rate Calendar, and that has to stop the booking dead.
+     Other quote failures — a past check-in, most often — are different:
+     those still allow a manually priced stay, which is the whole point of
+     the rate box.
+  */
+  if (quote?.unavailable) {
+    return { error: quote.error, unavailable: true };
+  }
+
   const typed    = Number(nightly_rate);
   const hasTyped = Number.isFinite(typed) && typed >= 0 && String(nightly_rate).trim() !== '';
 
