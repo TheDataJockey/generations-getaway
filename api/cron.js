@@ -107,7 +107,7 @@ export default async function handler(req, res) {
         balance_amount, balance_due_date, balance_sent_at,
         deposit_paid_at, payment_status,
         confirmation_id, door_code_removal_sent_at,
-        guests(id, first_name, last_name, email, phone, pin_code)
+        guests(id, first_name, last_name, email, phone, pin_code, door_pin)
       `)
       .in('status', ['confirmed', 'paid', 'checked_in', 'completed'])
       .not('guests', 'is', null);
@@ -203,7 +203,16 @@ export default async function handler(req, res) {
       //     by hand. Without this nothing prompts the removal and old
       //     guest codes accumulate on the lock indefinitely.
       if (booking.check_out_date === yesterday && !booking.door_code_removal_sent_at) {
-        const code = booking.guests?.pin_code || booking.yale_pin_code;
+        /*
+           The DOOR code, not the portal login PIN. This used to read
+           guests.pin_code first — the PIN a guest chooses to sign in to
+           the portal — so once anyone completed account setup this
+           reminder named the wrong number and the real code stayed on
+           the lock. door_pin is the keypad code; yale_pin_code is its
+           old home on the booking, kept as a fallback until the
+           migration has run everywhere.
+        */
+        const code = booking.guests?.door_pin || booking.yale_pin_code;
         if (code) {
           try {
             const { sendDoorCodeRemoval } = await import('./_lib/email.js');

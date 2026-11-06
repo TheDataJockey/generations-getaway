@@ -255,7 +255,7 @@ export default async function handler(req, res) {
       .from('guests')
       .select(`
         id, first_name, last_name, email,
-        pin_code, pin_expires_at,
+        pin_code, pin_expires_at, door_pin,
         failed_pin_attempts, locked_until,
         is_active, is_blacklisted
       `)
@@ -409,7 +409,10 @@ export default async function handler(req, res) {
         email:          matchedGuest.email,
         check_in_date:  booking?.check_in_date  || null,
         check_out_date: booking?.check_out_date || null,
-        yale_pin_code:  booking?.yale_pin_code  || null,
+        // The door code moved to the guest. The key stays yale_pin_code
+        // because welcome.html reads that name — renaming it here would
+        // blank the PIN on the portal until the page shipped too.
+        yale_pin_code:  matchedGuest.door_pin || booking?.yale_pin_code || null,
         num_nights:     booking?.num_nights     || null,
         num_guests:     booking?.num_guests     || null,
         welcome_note:   booking?.welcome_note   || null,
