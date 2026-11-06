@@ -168,6 +168,7 @@ async function route(req, res) {
     case 'activity':         return handleActivity(req, res, token);
     case 'pin-reset':        return handlePinReset(req, res, token);
     case 'edit-booking':     return handleEditBooking(req, res, token);
+    case 'new-booking':      return handleNewBooking(req, res, token);
     case 'resend-email':     return handleResendEmail(req, res, token);
     case 'party':            return handleParty(req, res, token);
     case 'pricing-all':
@@ -208,7 +209,7 @@ async function handleDashboard(req, res, token) {
         .select('id, status, check_in_date, check_out_date, num_guests, booking_source, ' +
                 'payment_status, quoted_total, total_amount, amount_received, ' +
                 'extra_charges, stripe_payment_link_url, created_at, ' +
-                'guests(first_name, last_name)')
+                'guests(first_name, last_name, door_pin)')
         .order('created_at', { ascending: false }).limit(8),
       supabase.from('chat_logs')
         .select('id, question, created_at, guests(first_name, last_name)')
@@ -289,7 +290,7 @@ async function handleGuests(req, res, token) {
 
       let query = supabase
         .from('guests')
-        .select('id, first_name, last_name, email, phone, total_stays, is_active, is_blacklisted, vip_status, bookings(check_out_date)')
+        .select('id, first_name, last_name, email, phone, door_pin, total_stays, is_active, is_blacklisted, vip_status, bookings(check_out_date)')
         .order('last_name', { ascending: true });
       if (search) query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`);
       if (filter === 'vip')         query = query.eq('vip_status', true);
@@ -317,6 +318,12 @@ async function handleGuests(req, res, token) {
           email: body.email, phone: body.phone,
           emergency_name: body.emergency_name, emergency_phone: body.emergency_phone,
           pin_code: body.pin_code,
+          // These 4 digits seed two different things. pin_code is the
+          // guest's portal LOGIN, which they may change later; door_pin is
+          // the code programmed on the Yale keypad, which is ours. They
+          // used to be one value, which is how the door-removal reminder
+          // ended up naming a portal PIN. Separate from here on.
+          door_pin: body.pin_code,
           pin_created_at: new Date().toISOString(),
           pin_expires_at: body.check_out_date ? new Date(body.check_out_date + 'T23:59:59').toISOString() : null,
           guest_notes: body.guest_notes, maintenance_notes: body.maintenance_notes,
@@ -487,7 +494,7 @@ async function handleBookings(req, res, token) {
       if (id) {
         const { data, error } = await supabase
           .from('bookings')
-          .select('*, guests(first_name, last_name, email, phone)')
+          .select('*, guests(first_name, last_name, email, phone, door_pin)')
           .eq('id', id)
           .single();
         if (error) throw error;
@@ -499,6 +506,9 @@ async function handleBookings(req, res, token) {
           ...data,
           guest_first: data.guests?.first_name || '—',
           guest_last:  data.guests?.last_name  || '',
+          // The door code lives on the guest now; the booking column is
+          // only a fallback until the migration has settled everywhere.
+          door_pin:    data.guests?.door_pin || data.yale_pin_code || null,
           guest_email: data.guests?.email      || '',
           guest_phone: data.guests?.phone      || '',
         };
@@ -507,7 +517,7 @@ async function handleBookings(req, res, token) {
       }
       let query = supabase
         .from('bookings')
-        .select('id, status, check_in_date, check_out_date, num_nights, num_guests, booking_source, total_amount, quoted_total, amount_received, balance_due, extra_charges, payment_method, payment_status, stripe_payment_link_url, request_id, created_at, guests(first_name, last_name, email, phone)')
+        .select('id, status, check_in_date, check_out_date, num_nights, num_guests, booking_source, total_amount, quoted_total, amount_received, balance_due, extra_charges, payment_method, payment_status, stripe_payment_link_url, request_id, created_at, guests(first_name, last_name, email, phone, door_pin)')
         .order('check_in_date', { ascending: false });
       if (status) query = query.eq('status', status);
       if (year && month) {
@@ -562,6 +572,7 @@ async function handleBookings(req, res, token) {
         created_at:    b.created_at ?? null,
         guest_first: b.guests?.first_name || '—', guest_last: b.guests?.last_name || '',
         guest_email: b.guests?.email || '', guest_phone: b.guests?.phone || '',
+        door_pin:    b.guests?.door_pin || null,
       }));
       if (search) {
         const q = search.toLowerCase();
@@ -665,6 +676,19 @@ async function handleBookings(req, res, token) {
       if (pin_code !== undefined)      updates.pin_code      = pin_code;
       if (yale_pin_code !== undefined) updates.yale_pin_code = yale_pin_code;
 
+      /*
+         The door code belongs to the GUEST, so one person carries one code
+         across every stay they take. The booking column is still written
+         above as a fallback while the migration settles, but the guest's
+         door_pin is what everything reads first.
+      */
+      if (yale_pin_code !== undefined && bk?.guest_id) {
+        const { error: dpErr } = await supabase.from('guests')
+          .update({ door_pin: yale_pin_code })
+          .eq('id', bk.guest_id);
+        if (dpErr) console.error('[bookings] door_pin update failed:', dpErr.message);
+      }
+
       if (Object.keys(updates).length === 0)
         return res.status(400).json({ error: 'Nothing to update.' });
 
@@ -688,7 +712,7 @@ async function handleBookings(req, res, token) {
         try {
           const { data: full } = await supabase
             .from('bookings')
-            .select('*, guests(first_name, last_name, email, phone)')
+            .select('*, guests(first_name, last_name, email, phone, door_pin)')
             .eq('id', id)
             .single();
 
@@ -1755,6 +1779,222 @@ async function handlePinReset(req, res, token) {
 // stay, re-checks availability, records what changed, and emails the
 // guest a before/after summary.
 // ════════════════════════════════════
+
+/* ════════════════════════════════════════════════════════════
+   NEW BOOKING  —  resource=new-booking
+   ════════════════════════════════════════════════════════════
+   One endpoint, two modes, so the figures the form shows and the
+   figures that get stored come from the SAME code. A separate
+   client-side calculation would drift the first time a tax rate or
+   a season changed, and nobody would notice until a return was wrong.
+
+     POST { mode:'preview', ... }  -> the breakdown, nothing written
+     POST { mode:'create',  ... }  -> creates the guest (if new) and
+                                      the booking, returns both
+
+   PRICING:
+     The nightly rate typed here wins over the calendar. It is stored
+     the way every existing booking is stored — quoted_subtotal holds
+     the STANDARD rate for those dates, quoted_discount holds the
+     difference, and the guest is charged the remainder. That keeps
+     the rack-versus-paid comparison intact for tax reporting.
+
+     The guest never sees that split: nightly_rate on the booking is
+     the rate they actually pay, their emails show only the net
+     figures, and the standard-rate breakdown appears solely in the
+     owner notification.
+   ════════════════════════════════════════════════════════════ */
+
+function nightsBetween(checkIn, checkOut) {
+  const a = new Date(checkIn  + 'T12:00:00');
+  const b = new Date(checkOut + 'T12:00:00');
+  if (isNaN(a) || isNaN(b)) return 0;
+  return Math.round((b - a) / 86400000);
+}
+
+async function priceNewBooking({ check_in_date, check_out_date, nightly_rate, discount_code }) {
+  const { loadConfig, computeQuote } = await import('./pricing.js');
+  const cfg = await loadConfig();
+
+  const nights = nightsBetween(check_in_date, check_out_date);
+  if (!nights || nights < 1) return { error: 'Check-out must be after check-in.' };
+
+  // The calendar's own answer for these dates. It refuses past dates,
+  // which a manually recorded stay may well be, so its failure is not
+  // fatal — a typed rate can still price the stay on its own.
+  const quote     = computeQuote(cfg, { check_in_date, check_out_date, check_in: check_in_date, check_out: check_out_date, discount_code });
+  const haveQuote = quote && !quote.error;
+  const rack      = haveQuote ? Number(quote.subtotal) : null;
+
+  const typed    = Number(nightly_rate);
+  const hasTyped = Number.isFinite(typed) && typed >= 0 && String(nightly_rate).trim() !== '';
+
+  let subtotal, discount, net;
+
+  if (hasTyped) {
+    net = round2(typed * nights);
+    // Never invent a negative discount: a rate ABOVE the calendar is
+    // simply the price, not a surcharge dressed up as a reduction.
+    subtotal = rack != null && rack > net ? rack : net;
+    discount = round2(subtotal - net);
+  } else if (haveQuote) {
+    subtotal = round2(quote.subtotal);
+    discount = round2(quote.discount || 0);
+    net      = round2(subtotal - discount);
+  } else {
+    return { error: quote?.error || 'Enter a nightly rate — these dates cannot be priced automatically.' };
+  }
+
+  const components = (cfg.taxComponents || []).map(c => ({
+    key: c.key, label: c.label, rate: c.rate, remit_to: c.remit_to,
+    amount: round2(net * c.rate),
+  }));
+  const tax   = round2(components.reduce((sum, c) => sum + c.amount, 0));
+  const total = round2(net + tax);
+
+  return {
+    nights,
+    calendar_subtotal: rack,
+    calendar_nightly:  rack != null ? round2(rack / nights) : null,
+    nightly_rate:      round2(net / nights),
+    subtotal, discount, net, tax, total,
+    tax_components: components,
+    discount_label: haveQuote ? (quote.discount_label || null) : null,
+    below_minimum:  haveQuote ? !!quote.below_minimum : false,
+    min_nights:     haveQuote ? quote.min_nights : null,
+    priced_from:    hasTyped ? 'typed' : 'calendar',
+  };
+}
+
+async function handleNewBooking(req, res, token) {
+  const auth = await validateAdminToken(token, 'family_admin');
+  if (auth.error) return res.status(auth.status).json({ error: auth.error });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
+
+  const b = req.body || {};
+  const mode = b.mode === 'create' ? 'create' : 'preview';
+
+  if (!b.check_in_date || !b.check_out_date) {
+    return res.status(400).json({ error: 'Check-in and check-out dates are required.' });
+  }
+
+  const priced = await priceNewBooking({
+    check_in_date: b.check_in_date,
+    check_out_date: b.check_out_date,
+    nightly_rate:  b.nightly_rate,
+    discount_code: b.discount_code,
+  });
+  if (priced.error) return res.status(400).json({ error: priced.error });
+
+  if (mode === 'preview') return res.status(200).json({ pricing: priced });
+
+  // ── Create ────────────────────────────────────────────────
+  try {
+    let guestId = b.guest_id || null;
+    let guestRow = null;
+
+    if (guestId) {
+      const { data, error } = await supabase
+        .from('guests').select('*').eq('id', guestId).single();
+      if (error || !data) return res.status(404).json({ error: 'That guest no longer exists.' });
+      guestRow = data;
+      // A door code typed here belongs to the guest, so it replaces
+      // theirs everywhere rather than only on this stay.
+      if (b.door_pin && b.door_pin !== data.door_pin) {
+        await supabase.from('guests').update({ door_pin: b.door_pin }).eq('id', guestId);
+        guestRow.door_pin = b.door_pin;
+      }
+    } else {
+      if (!b.first_name || !b.last_name || !b.email) {
+        return res.status(400).json({ error: 'A new guest needs a first name, last name and email.' });
+      }
+      const { data, error } = await supabase
+        .from('guests')
+        .upsert({
+          first_name: b.first_name, last_name: b.last_name,
+          email: b.email, phone: b.phone || null,
+          emergency_name: b.emergency_name || null,
+          emergency_phone: b.emergency_phone || null,
+          pin_code: b.door_pin || null,
+          door_pin: b.door_pin || null,
+          pin_created_at: new Date().toISOString(),
+          is_active: true,
+        }, { onConflict: 'email' })
+        .select('*').single();
+      if (error) throw error;
+      guestRow = data;
+      guestId  = data.id;
+    }
+
+    const deposit = b.deposit === 'half'
+      ? { deposit_amount: round2(priced.total * 0.5),
+          balance_amount: round2(priced.total - round2(priced.total * 0.5)) }
+      : { deposit_amount: 0, balance_amount: priced.total };
+
+    const { data: booking, error: bErr } = await supabase
+      .from('bookings')
+      .insert({
+        guest_id:        guestId,
+        check_in_date:   b.check_in_date,
+        check_out_date:  b.check_out_date,
+        num_nights:      priced.nights,
+        num_guests:      b.num_guests || 1,
+        booking_source:  b.booking_source || 'direct',
+        status:          'confirmed',
+        // The rate the GUEST pays. The standard rate lives in
+        // quoted_subtotal and is never shown to them.
+        nightly_rate:    priced.nightly_rate,
+        quoted_subtotal: priced.subtotal,
+        quoted_discount: priced.discount,
+        discount_code:   b.discount_code || null,
+        quoted_tax:      priced.tax,
+        quoted_total:    priced.total,
+        total_amount:    priced.total,
+        tax_breakdown:   priced.tax_components,
+        balance_due:     priced.total,
+        payment_status:  'pending',
+        welcome_note:    b.welcome_note || null,
+        yale_pin_code:   guestRow?.door_pin || null,
+        ...deposit,
+      })
+      .select('id').single();
+    if (bErr) throw bErr;
+
+    // Human-readable numbers, same sequence the public form uses.
+    try {
+      const { data: reqId } = await supabase.rpc('next_public_id', { p_prefix: 'REQ' });
+      const { data: resId } = await supabase.rpc('next_public_id', { p_prefix: 'RES' });
+      if (reqId || resId) {
+        await supabase.from('bookings')
+          .update({ request_id: reqId || null, confirmation_id: resId || null,
+                    confirmed_at: new Date().toISOString() })
+          .eq('id', booking.id);
+      }
+    } catch (idErr) {
+      console.error('[new-booking] id generation failed:', idErr.message);
+    }
+
+    await supabase.from('audit_logs').insert({
+      admin_email: auth.admin.email,
+      action: 'booking_created_manually',
+      table_name: 'bookings',
+      record_id: booking.id,
+      notes: `${guestRow.first_name} ${guestRow.last_name}, ${b.check_in_date} to ${b.check_out_date}, ` +
+             `${priced.nights} nights at ${priced.nightly_rate}/night, total ${priced.total}`,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      booking_id: booking.id,
+      guest_id: guestId,
+      pricing: priced,
+    });
+  } catch (err) {
+    console.error('[new-booking]', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
 async function handleEditBooking(req, res, token) {
   const auth = await validateAdminToken(token, 'family_admin');
   if (auth.error) return res.status(auth.status).json({ error: auth.error });
@@ -2032,7 +2272,7 @@ async function handleResendEmail(req, res, token) {
     if (type === 'approved') {
       fan = await mail.sendToParty(mail.sendBookingApproved, { guest: g, booking });
     } else if (type === 'welcome') {
-      if (!booking.yale_pin_code) {
+      if (!(g?.door_pin || booking.yale_pin_code)) {
         return res.status(400).json({
           error: 'No door code is set on this booking yet, so the welcome email would be incomplete.',
         });
