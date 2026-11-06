@@ -3065,6 +3065,11 @@
           guest_last:  raw.guest_last  || g.last_name  || '',
           guest_email: raw.guest_email || g.email      || '',
           guest_phone: raw.guest_phone || g.phone      || '',
+          // The response carries door_pin at the TOP level, while `b` is the
+          // nested raw booking row that has no such column. Spreading b alone
+          // dropped it, so the Door Code box rendered empty while the value
+          // sat in the payload. Read it the same way as the fields above.
+          door_pin:    raw.door_pin || b.door_pin || g.door_pin || null,
         };
         const dash  = v => (v === null || v === undefined || v === '') ? '—' : v;
         const money = v => (v === null || v === undefined || v === '')
