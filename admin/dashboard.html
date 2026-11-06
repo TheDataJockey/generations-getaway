@@ -92,12 +92,18 @@
       font-family: var(--font-sans); font-size: 0.82rem;
       outline: none; transition: border-color var(--transition);
       width: 100%; border-radius: var(--radius);
+      /* A <select> is as wide as its widest option unless told otherwise.
+         Without these, one long guest name stretched the whole panel
+         past the edge of the window. */
+      max-width: 100%; min-width: 0;
     }
     .form-control:focus { border-color: var(--blue-light); }
     .form-control::placeholder { color: var(--muted); }
     select.form-control option { background: var(--navy); }
     textarea.form-control { resize: vertical; min-height: 80px; }
-    .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+    /* min-width:0 — a flex item will not shrink below its content width
+       without it, which is what let a long <option> blow the layout out. */
+    .form-group { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
     .form-group label { font-size: 0.62rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--blue-light); }
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
 
@@ -1031,7 +1037,7 @@
               style="font-size:0.68rem;">New Guest</button>
           </div>
 
-          <div id="abReturningWrap" style="margin-bottom:1.5rem;">
+          <div id="abReturningWrap" style="margin-bottom:1.5rem;max-width:460px;">
             <div class="form-group">
               <label for="abGuestId">Choose a guest</label>
               <select id="abGuestId" class="form-control">
