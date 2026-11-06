@@ -681,12 +681,30 @@ async function handleBookings(req, res, token) {
          across every stay they take. The booking column is still written
          above as a fallback while the migration settles, but the guest's
          door_pin is what everything reads first.
+<<<<<<< Updated upstream
       */
       if (yale_pin_code !== undefined && bk?.guest_id) {
         const { error: dpErr } = await supabase.from('guests')
           .update({ door_pin: yale_pin_code })
           .eq('id', bk.guest_id);
         if (dpErr) console.error('[bookings] door_pin update failed:', dpErr.message);
+=======
+
+         This looks the booking up again rather than reusing `bk`: that one
+         is declared inside the status-change branch above, so it does not
+         exist on a request that only changes the PIN — which is every
+         request this block actually cares about.
+      */
+      if (yale_pin_code !== undefined) {
+        const { data: pinBooking } = await supabase
+          .from('bookings').select('guest_id').eq('id', id).single();
+        if (pinBooking?.guest_id) {
+          const { error: dpErr } = await supabase.from('guests')
+            .update({ door_pin: yale_pin_code })
+            .eq('id', pinBooking.guest_id);
+          if (dpErr) console.error('[bookings] door_pin update failed:', dpErr.message);
+        }
+>>>>>>> Stashed changes
       }
 
       if (Object.keys(updates).length === 0)
