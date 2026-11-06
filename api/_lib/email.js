@@ -62,20 +62,27 @@ const emailStyles = `
     .greeting { font-family:Georgia,serif; font-size:26px; font-weight:300; color:#F4F7FB; margin-bottom:16px; line-height:1.3; }
     .greeting em { font-style:italic; color:#A8C4E0; }
     p { font-size:15px; color:rgba(164,196,224,0.85); line-height:1.8; margin:0 0 16px; }
-    .info-card { background:rgba(13,27,46,0.6); border:1px solid rgba(91,141,217,0.2); border-radius:6px; padding:24px; margin:24px 0; }
-    .info-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(91,141,217,0.1); font-size:14px; }
-    .info-row:last-child { border-bottom:none; }
-    .info-label { color:#7A90AE; letter-spacing:0.08em; text-transform:uppercase; font-size:11px; padding-top:2px; }
-    .info-value { color:#F4F7FB; font-weight:500; text-align:right; }
+    /* The info card is a TABLE, not flexbox. Gmail strips display:flex, and
+       the label and value then collapsed into each other on screen
+       ("Check-InTomorrow, Saturday..."). Tables render everywhere. */
+    .info-card { background:rgba(13,27,46,0.6); border:1px solid rgba(91,141,217,0.2); border-radius:6px; margin:24px 0; }
+    table.info { width:100%; border-collapse:collapse; }
+    table.info td { padding:12px 24px; font-size:14px; vertical-align:top; border-bottom:1px solid rgba(91,141,217,0.12); }
+    table.info tr:last-child td { border-bottom:none; }
+    td.label { color:#7A90AE; letter-spacing:0.08em; text-transform:uppercase; font-size:11px; white-space:nowrap; width:1%; padding-top:15px; }
+    td.value { color:#F4F7FB; font-weight:500; text-align:right; line-height:1.6; }
     .pin-box { background:rgba(46,95,163,0.2); border:1px solid rgba(91,141,217,0.3); border-radius:6px; padding:20px; text-align:center; margin:24px 0; }
     .pin-label { font-size:11px; letter-spacing:0.25em; text-transform:uppercase; color:#7A90AE; margin-bottom:8px; }
     .pin-code { font-family:Georgia,serif; font-size:42px; font-weight:300; color:#A8C4E0; letter-spacing:0.3em; }
     .btn { display:inline-block; background:#2E5FA3; color:#ffffff !important; text-decoration:none; padding:14px 32px; border-radius:4px; font-size:13px; letter-spacing:0.15em; text-transform:uppercase; margin:8px 0; }
     .btn-outline { display:inline-block; border:1px solid rgba(91,141,217,0.4); color:#A8C4E0 !important; text-decoration:none; padding:12px 28px; border-radius:4px; font-size:13px; letter-spacing:0.12em; text-transform:uppercase; margin:8px 0; }
-    .checklist { list-style:none; padding:0; margin:16px 0; }
-    .checklist li { padding:8px 0; border-bottom:1px solid rgba(91,141,217,0.1); font-size:14px; color:rgba(164,196,224,0.85); display:flex; align-items:center; gap:10px; }
-    .checklist li:last-child { border-bottom:none; }
-    .check { color:#34c759; font-size:16px; }
+    /* Checklists are tables for the same reason. Gmail dropped
+       list-style:none along with the flex, so bullets appeared beside
+       the markers. */
+    table.checklist { width:100%; border-collapse:collapse; margin:16px 0; }
+    table.checklist td { padding:10px 0; border-bottom:1px solid rgba(91,141,217,0.1); font-size:14px; color:rgba(164,196,224,0.85); vertical-align:top; line-height:1.7; }
+    table.checklist tr:last-child td { border-bottom:none; }
+    td.check { color:#34c759; font-size:16px; width:26px; padding-right:6px; }
     .divider { border:none; border-top:1px solid rgba(91,141,217,0.15); margin:28px 0; }
     .footer { background:#0D1B2E; padding:24px 40px; text-align:center; border-top:1px solid rgba(91,141,217,0.15); }
     .footer p { font-size:12px; color:#7A90AE; margin:4px 0; }
@@ -84,12 +91,32 @@ const emailStyles = `
     .highlight { color:#A8C4E0; font-weight:500; }
     @media (max-width:600px) {
       .body, .header, .footer { padding:24px 20px; }
+      table.info td { padding:11px 18px; }
+      td.label { width:auto; display:block; padding-bottom:2px; padding-top:12px; }
+      td.value { display:block; text-align:left; padding-top:0; padding-bottom:12px; border-bottom:none; }
       .pin-code { font-size:32px; }
       .greeting { font-size:22px; }
     }
   </style>`;
 
 // ── Send via Resend ──
+/*
+  The door code for THIS recipient.
+
+  It lives on the guest now, not the booking: one person, one code on
+  the keypad, whatever stay they are on. bookings.yale_pin_code is the
+  old home and is still read as a fallback, so the deploy and the
+  database migration can happen in either order without an email going
+  out with no PIN in it.
+
+  Additional guests on a booking have no door_pin of their own, so they
+  are masked automatically; sendToParty passes the primary guest's code
+  down to them only when the share setting allows it.
+*/
+function doorPin(guest, booking) {
+  return guest?.door_pin || booking?.yale_pin_code || null;
+}
+
 // Format a number as USD for email display.
 function money(n) {
   return '$' + Number(n || 0).toLocaleString('en-US', {
@@ -152,32 +179,22 @@ export async function sendBookingConfirmation({ guest, booking }) {
     <p>We've received your booking inquiry and will be in touch shortly to confirm your stay at ${PROPERTY_NAME}.</p>
 
     <div class="info-card">
-      <div class="info-row">
-        <span class="info-label">Check-In</span>
-        <span class="info-value">${formatDate(booking.check_in_date)}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Check-Out</span>
-        <span class="info-value">${formatDate(booking.check_out_date)}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Guests</span>
-        <span class="info-value">${booking.num_guests || 1}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Property</span>
-        <span class="info-value">${PROPERTY_ADDRESS}</span>
-      </div>
+      <table class="info">
+        <tr><td class="label">Check-In</td><td class="value">${formatDate(booking.check_in_date)}</td></tr>
+        <tr><td class="label">Check-Out</td><td class="value">${formatDate(booking.check_out_date)}</td></tr>
+        <tr><td class="label">Guests</td><td class="value">${booking.num_guests || 1}</td></tr>
+        <tr><td class="label">Property</td><td class="value">${PROPERTY_ADDRESS}</td></tr>
+      </table>
     </div>
 
     <p>Here's what happens next:</p>
-    <ul class="checklist">
-      <li><span class="check">✓</span> We'll review your dates and confirm availability</li>
-      <li><span class="check">✓</span> You'll receive a confirmation email once approved</li>
-      <li><span class="check">✓</span> A secure payment request follows for a 50% deposit</li>
-      <li><span class="check">✓</span> The remaining balance is due 14 days before arrival</li>
-      <li><span class="check">✓</span> 3 days before check-in, we'll send your guest portal access with door PIN and WiFi details</li>
-    </ul>
+    <table class="checklist">
+      <tr><td class="check">✓</td><td>We'll review your dates and confirm availability</td></tr>
+      <tr><td class="check">✓</td><td>You'll receive a confirmation email once approved</td></tr>
+      <tr><td class="check">✓</td><td>A secure payment request follows for a 50% deposit</td></tr>
+      <tr><td class="check">✓</td><td>The remaining balance is due 14 days before arrival</td></tr>
+      <tr><td class="check">✓</td><td>3 days before check-in, we'll send your guest portal access with door PIN and WiFi details</td></tr>
+    </table>
 
     <hr class="divider"/>
     <p style="font-size:13px;">Questions? Reply to this email or reach us at <a href="mailto:${KYLE_EMAIL}" style="color:#5B8DD9;">${KYLE_EMAIL}</a></p>
@@ -208,24 +225,26 @@ export async function sendKyleNotification({ guest, booking }) {
   <div class="body">
     <div class="greeting"><em>New inquiry</em> received.</div>
     <div class="info-card">
-      <div class="info-row"><span class="info-label">Guest</span><span class="info-value">${guest.first_name} ${guest.last_name}</span></div>
-      <div class="info-row"><span class="info-label">Email</span><span class="info-value">${guest.email}</span></div>
-      <div class="info-row"><span class="info-label">Phone</span><span class="info-value">${guest.phone || '—'}</span></div>
-      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)}</span></div>
-      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)}</span></div>
-      <div class="info-row"><span class="info-label">Guests</span><span class="info-value">${booking.num_guests || 1}</span></div>
-      <div class="info-row"><span class="info-label">Source</span><span class="info-value" style="text-transform:capitalize;">${booking.booking_source || 'Direct'}</span></div>
+      <table class="info">
+        <tr><td class="label">Guest</td><td class="value">${guest.first_name} ${guest.last_name}</td></tr>
+        <tr><td class="label">Email</td><td class="value">${guest.email}</td></tr>
+        <tr><td class="label">Phone</td><td class="value">${guest.phone || '—'}</td></tr>
+        <tr><td class="label">Check-In</td><td class="value">${formatDate(booking.check_in_date)}</td></tr>
+        <tr><td class="label">Check-Out</td><td class="value">${formatDate(booking.check_out_date)}</td></tr>
+        <tr><td class="label">Guests</td><td class="value">${booking.num_guests || 1}</td></tr>
+        <tr><td class="label">Source</td><td class="value" style="text-transform:capitalize;">${booking.booking_source || 'Direct'}</td></tr>
 
-      ${booking.discount_code ? `<div class="info-row"><span class="info-label">Discount Code</span><span class="info-value"><strong>${booking.discount_code}</strong></span></div>` : ''}
-      ${booking.quote ? `
-      <div class="info-row"><span class="info-label">Nights</span><span class="info-value">${booking.quote.nights}</span></div>
-      <div class="info-row"><span class="info-label">Standard Rate</span><span class="info-value">${money(booking.quote.subtotal)}</span></div>
-      ${booking.quote.discount > 0 ? `<div class="info-row"><span class="info-label">Discount</span><span class="info-value">-${money(booking.quote.discount)}${booking.quote.discount_label ? ` (${booking.quote.discount_label})` : ''}</span></div>` : ''}
-      <div class="info-row"><span class="info-label">Tax</span><span class="info-value">${money(booking.quote.tax)}</span></div>
-      <div class="info-row"><span class="info-label">Estimated Total</span><span class="info-value"><strong>${booking.quote.total === 0 ? 'COMPLIMENTARY' : money(booking.quote.total)}</strong></span></div>
-      ${booking.quote.below_minimum ? `<div class="info-row"><span class="info-label">Note</span><span class="info-value">Below the ${booking.quote.min_nights}-night minimum &mdash; needs your approval</span></div>` : ''}
-      ` : ''}
-      ${booking.special_requests ? `<div class="info-row"><span class="info-label">Notes</span><span class="info-value" style="max-width:320px;">${booking.special_requests}</span></div>` : ''}
+        ${booking.discount_code ? `<tr><td class="label">Discount Code</td><td class="value"><strong>${booking.discount_code}</strong></td></tr>` : ''}
+        ${booking.quote ? `
+        <tr><td class="label">Nights</td><td class="value">${booking.quote.nights}</td></tr>
+        <tr><td class="label">Standard Rate</td><td class="value">${money(booking.quote.subtotal)}</td></tr>
+        ${booking.quote.discount > 0 ? `<tr><td class="label">Discount</td><td class="value">-${money(booking.quote.discount)}${booking.quote.discount_label ? ` (${booking.quote.discount_label})` : ''}</td></tr>` : ''}
+        <tr><td class="label">Tax</td><td class="value">${money(booking.quote.tax)}</td></tr>
+        <tr><td class="label">Estimated Total</td><td class="value"><strong>${booking.quote.total === 0 ? 'COMPLIMENTARY' : money(booking.quote.total)}</strong></td></tr>
+        ${booking.quote.below_minimum ? `<tr><td class="label">Note</td><td class="value">Below the ${booking.quote.min_nights}-night minimum &mdash; needs your approval</td></tr>` : ''}
+        ` : ''}
+        ${booking.special_requests ? `<tr><td class="label">Notes</td><td class="value" style="max-width:320px;">${booking.special_requests}</td></tr>` : ''}
+      </table>
     </div>
     <div style="text-align:center;margin-top:24px;">
       <a href="${BASE_URL}/admin/dashboard.html" class="btn">Review in Dashboard</a>
@@ -260,16 +279,18 @@ export async function sendWelcomeEmail({ guest, booking }) {
     <p>Your stay at ${PROPERTY_NAME} begins in just 3 days. Everything is being prepared for your arrival — here's everything you need to know.</p>
 
     <div class="info-card">
-      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)} after 4:00 PM</span></div>
-      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)} by 11:00 AM</span></div>
-      <div class="info-row"><span class="info-label">Address</span><span class="info-value">${PROPERTY_ADDRESS}</span></div>
-      <div class="info-row"><span class="info-label">Parking</span><span class="info-value">Driveway only — no street parking</span></div>
+      <table class="info">
+        <tr><td class="label">Check-In</td><td class="value">${formatDate(booking.check_in_date)} after 4:00 PM</td></tr>
+        <tr><td class="label">Check-Out</td><td class="value">${formatDate(booking.check_out_date)} by 11:00 AM</td></tr>
+        <tr><td class="label">Address</td><td class="value">${PROPERTY_ADDRESS}</td></tr>
+        <tr><td class="label">Parking</td><td class="value">Driveway only — no street parking</td></tr>
+      </table>
     </div>
 
-    ${booking.yale_pin_code ? `
+    ${doorPin(guest, booking) ? `
     <div class="pin-box">
       <div class="pin-label">Your Door PIN Code</div>
-      <div class="pin-code">${booking.yale_pin_code}</div>
+      <div class="pin-code">${doorPin(guest, booking)}</div>
       <p style="font-size:13px;color:#7A90AE;margin:8px 0 0;">Enter this code on the Yale keypad at the front door</p>
     </div>` : booking.pin_withheld_to ? `
     <div class="pin-box">
@@ -306,7 +327,7 @@ export async function sendWelcomeEmail({ guest, booking }) {
   </div>
 ${booking && booking.party_notice ? booking.party_notice : ''}</div></body></html>`;
 
-  const text = `Your stay at ${PROPERTY_NAME} begins in 3 days on ${formatDate(booking.check_in_date)}. Your door PIN is ${booking.yale_pin_code || 'provided at check-in'}. Access your guest portal at ${portalUrl}.`;
+  const text = `Your stay at ${PROPERTY_NAME} begins in 3 days on ${formatDate(booking.check_in_date)}. Your door PIN is ${doorPin(guest, booking) || 'provided at check-in'}. Access your guest portal at ${portalUrl}.`;
 
   return sendEmail({ to: guest.email, from: FROM_WELCOME, subject, html, text });
 }
@@ -325,18 +346,22 @@ export async function sendDayBeforeReminder({ guest, booking }) {
   </div>
   <div class="body">
     <div class="greeting">See you <em>tomorrow</em>, ${guest.first_name}!</div>
-    <p>Your Fort Lauderdale getaway begins tomorrow. Here's a quick reminder of everything you need for a smooth arrival.</p>
+    <p>Everything you need for an easy arrival is below. Check-in opens at
+       4:00 PM &mdash; come any time after that, no need to tell us when.</p>
 
     <div class="info-card">
-      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">Tomorrow, ${formatDate(booking.check_in_date)} after 4:00 PM</span></div>
-      <div class="info-row"><span class="info-label">Address</span><span class="info-value">${PROPERTY_ADDRESS}</span></div>
-      <div class="info-row"><span class="info-label">Parking</span><span class="info-value">Driveway only — no street parking</span></div>
+      <table class="info">
+        <tr><td class="label">Check-In</td><td class="value">Tomorrow, ${formatDate(booking.check_in_date)}<br/>after 4:00 PM</td></tr>
+        <tr><td class="label">Check-Out</td><td class="value">${formatDate(booking.check_out_date)}<br/>by 11:00 AM</td></tr>
+        <tr><td class="label">Address</td><td class="value">${PROPERTY_ADDRESS}</td></tr>
+        <tr><td class="label">Parking</td><td class="value">Driveway only &mdash; no street parking</td></tr>
+      </table>
     </div>
 
-    ${booking.yale_pin_code ? `
+    ${doorPin(guest, booking) ? `
     <div class="pin-box">
       <div class="pin-label">Door PIN Code</div>
-      <div class="pin-code">${booking.yale_pin_code}</div>
+      <div class="pin-code">${doorPin(guest, booking)}</div>
       <p style="font-size:13px;color:#7A90AE;margin:8px 0 0;">Yale keypad at the front door — no key needed</p>
     </div>` : booking.pin_withheld_to ? `
     <div class="pin-box">
@@ -347,12 +372,12 @@ export async function sendDayBeforeReminder({ guest, booking }) {
       </p>
     </div>` : ''}
 
-    <p><span class="highlight">Getting here:</span></p>
-    <ul class="checklist">
-      <li><span class="check">→</span> From I-95: Take exit 31B for Sunrise Blvd East, then head north on NE 6th Ave</li>
-      <li><span class="check">→</span> From Fort Lauderdale Airport: 20 min drive north on US-1</li>
-      <li><span class="check">→</span> Rideshare: Uber/Lyft both service the area reliably</li>
-    </ul>
+    <p><span class="highlight">Getting here</span></p>
+    <table class="checklist">
+      <tr><td class="check" style="color:#5B8DD9;">&rarr;</td><td><strong style="color:#F4F7FB;">From I-95</strong> &mdash; exit 31B for Sunrise Blvd East, then north on NE 6th Ave</td></tr>
+      <tr><td class="check" style="color:#5B8DD9;">&rarr;</td><td><strong style="color:#F4F7FB;">From Fort Lauderdale Airport</strong> &mdash; about 20 minutes north on US-1</td></tr>
+      <tr><td class="check" style="color:#5B8DD9;">&rarr;</td><td><strong style="color:#F4F7FB;">Rideshare</strong> &mdash; Uber and Lyft both serve the area reliably</td></tr>
+    </table>
 
     <div style="text-align:center;margin:24px 0;">
       <a href="https://maps.google.com/?q=647+NE+16th+Terrace+Fort+Lauderdale+FL+33304" class="btn-outline">Get Directions</a>
@@ -361,7 +386,8 @@ export async function sendDayBeforeReminder({ guest, booking }) {
     </div>
 
     <hr class="divider"/>
-    <p style="font-size:13px;">Need to reach us before arrival? Reply to this email — we typically respond within the hour.</p>
+    <p style="font-size:13px;">Anything you need before you set off? Just reply to
+       this email &mdash; we usually answer within the hour.</p>
   </div>
   <div class="footer">
     <p>${PROPERTY_NAME} &nbsp;&middot;&nbsp; ${PROPERTY_ADDRESS}</p>
@@ -369,7 +395,7 @@ export async function sendDayBeforeReminder({ guest, booking }) {
   </div>
 ${booking && booking.party_notice ? booking.party_notice : ''}</div></body></html>`;
 
-  const text = `See you tomorrow, ${guest.first_name}! Check-in is after 4 PM at ${PROPERTY_ADDRESS}. Your door PIN is ${booking.yale_pin_code || 'in your guest portal'}. Directions: https://maps.google.com/?q=647+NE+16th+Terrace+Fort+Lauderdale+FL`;
+  const text = `See you tomorrow, ${guest.first_name}! Check-in is after 4:00 PM at ${PROPERTY_ADDRESS}, and check-out is ${formatDate(booking.check_out_date)} by 11:00 AM. Your door PIN is ${doorPin(guest, booking) || 'in your guest portal'}. Directions: https://maps.google.com/?q=647+NE+16th+Terrace+Fort+Lauderdale+FL`;
 
   return sendEmail({ to: guest.email, from: FROM_WELCOME, subject, html, text });
 }
@@ -392,19 +418,21 @@ export async function sendCheckoutReminder({ guest, booking }) {
 
     <p>Before you go, please take care of the following:</p>
 
-    <ul class="checklist">
-      <li><span class="check">☐</span> Strip beds and leave linens in a pile on the floor</li>
-      <li><span class="check">☐</span> Load and start the dishwasher</li>
-      <li><span class="check">☐</span> Take out any trash to the bins outside</li>
-      <li><span class="check">☐</span> Turn off all lights, fans, and AC</li>
-      <li><span class="check">☐</span> Lock all doors and windows</li>
-      <li><span class="check">☐</span> Leave the keys/fobs on the kitchen counter (if applicable)</li>
-      <li><span class="check">☐</span> Make sure the pool gate is latched</li>
-    </ul>
+    <table class="checklist">
+      <tr><td class="check">☐</td><td>Strip beds and leave linens in a pile on the floor</td></tr>
+      <tr><td class="check">☐</td><td>Load and start the dishwasher</td></tr>
+      <tr><td class="check">☐</td><td>Take out any trash to the bins outside</td></tr>
+      <tr><td class="check">☐</td><td>Turn off all lights, fans, and AC</td></tr>
+      <tr><td class="check">☐</td><td>Lock all doors and windows</td></tr>
+      <tr><td class="check">☐</td><td>Leave the keys/fobs on the kitchen counter (if applicable)</td></tr>
+      <tr><td class="check">☐</td><td>Make sure the pool gate is latched</td></tr>
+    </table>
 
     <div class="info-card">
-      <div class="info-row"><span class="info-label">Checkout Time</span><span class="info-value">By 11:00 AM today</span></div>
-      <div class="info-row"><span class="info-label">Late Checkout</span><span class="info-value">Contact us if you need extra time</span></div>
+      <table class="info">
+        <tr><td class="label">Checkout Time</td><td class="value">By 11:00 AM today</td></tr>
+        <tr><td class="label">Late Checkout</td><td class="value">Contact us if you need extra time</td></tr>
+      </table>
     </div>
 
     <p>It's been a pleasure having you. Safe travels, ${guest.first_name}!</p>
@@ -498,13 +526,15 @@ export async function sendBookingApproved({ guest, booking }) {
     <div class="greeting">Great news, <em>${guest.first_name}</em>.</div>
     <p>We've confirmed your dates. Here are the details:</p>
     <div class="info-card">
-      ${booking.request_id ? `<div class="info-row"><span class="info-label">Request</span><span class="info-value">${booking.request_id}</span></div>` : ''}
-      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)} after 4:00 PM</span></div>
-      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)} by 11:00 AM</span></div>
-      <div class="info-row"><span class="info-label">Guests</span><span class="info-value">${booking.num_guests || 1}</span></div>
-      ${booking.quoted_total != null ? `<div class="info-row"><span class="info-label">Total</span><span class="info-value">${Number(booking.quoted_total) === 0 ? 'Complimentary' : money(booking.quoted_total)}</span></div>` : ''}
-      ${deposit ? `<div class="info-row"><span class="info-label">Deposit Due Now</span><span class="info-value">${deposit}</span></div>` : ''}
-      ${balance ? `<div class="info-row"><span class="info-label">Balance</span><span class="info-value">${balance}${booking.balance_due_date ? ` due ${formatDate(booking.balance_due_date)}` : ''}</span></div>` : ''}
+      <table class="info">
+        ${booking.request_id ? `<tr><td class="label">Request</td><td class="value">${booking.request_id}</td></tr>` : ''}
+        <tr><td class="label">Check-In</td><td class="value">${formatDate(booking.check_in_date)} after 4:00 PM</td></tr>
+        <tr><td class="label">Check-Out</td><td class="value">${formatDate(booking.check_out_date)} by 11:00 AM</td></tr>
+        <tr><td class="label">Guests</td><td class="value">${booking.num_guests || 1}</td></tr>
+        ${booking.quoted_total != null ? `<tr><td class="label">Total</td><td class="value">${Number(booking.quoted_total) === 0 ? 'Complimentary' : money(booking.quoted_total)}</td></tr>` : ''}
+        ${deposit ? `<tr><td class="label">Deposit Due Now</td><td class="value">${deposit}</td></tr>` : ''}
+        ${balance ? `<tr><td class="label">Balance</td><td class="value">${balance}${booking.balance_due_date ? ` due ${formatDate(booking.balance_due_date)}` : ''}</td></tr>` : ''}
+      </table>
     </div>
     ${Number(booking.quoted_total) === 0 ? `
     <p>No payment is required for this stay. We'll send your door code and
@@ -589,10 +619,12 @@ export async function sendPaymentRequest({ guest, booking, payment_type, amount,
     <div class="greeting">Hello <em>${guest.first_name}</em>,</div>
     <p>${intro}</p>
     <div class="info-card">
-      ${booking.request_id ? `<div class="info-row"><span class="info-label">Request</span><span class="info-value">${booking.request_id}</span></div>` : ''}
-      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)}</span></div>
-      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)}</span></div>
-      <div class="info-row"><span class="info-label">${label} Due</span><span class="info-value"><strong>${money(amount)}</strong></span></div>
+      <table class="info">
+        ${booking.request_id ? `<tr><td class="label">Request</td><td class="value">${booking.request_id}</td></tr>` : ''}
+        <tr><td class="label">Check-In</td><td class="value">${formatDate(booking.check_in_date)}</td></tr>
+        <tr><td class="label">Check-Out</td><td class="value">${formatDate(booking.check_out_date)}</td></tr>
+        <tr><td class="label">${label} Due</td><td class="value"><strong>${money(amount)}</strong></td></tr>
+      </table>
     </div>
     <div style="text-align:center;margin:26px 0;">
       <a href="${payment_url}" class="btn">Pay ${money(amount)} Securely</a>
@@ -634,9 +666,11 @@ export async function sendAccountSetup({ guest, booking, activation_url }) {
        your door code.</p>
 
     <div class="info-card">
-      <div class="info-row"><span class="info-label">Reference</span><span class="info-value"><strong>${reference}</strong></span></div>
-      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)} after 4:00 PM</span></div>
-      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)} by 11:00 AM</span></div>
+      <table class="info">
+        <tr><td class="label">Reference</td><td class="value"><strong>${reference}</strong></td></tr>
+        <tr><td class="label">Check-In</td><td class="value">${formatDate(booking.check_in_date)} after 4:00 PM</td></tr>
+        <tr><td class="label">Check-Out</td><td class="value">${formatDate(booking.check_out_date)} by 11:00 AM</td></tr>
+      </table>
     </div>
 
     <p>You'll be asked for your <strong>last name</strong> and the
@@ -693,9 +727,11 @@ export async function sendReturningGuestConfirmation({ guest, booking }) {
     <p>We've received your deposit and your stay is secured.</p>
 
     <div class="info-card">
-      <div class="info-row"><span class="info-label">Confirmation</span><span class="info-value"><strong>${reference}</strong></span></div>
-      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)} after 4:00 PM</span></div>
-      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)} by 11:00 AM</span></div>
+      <table class="info">
+        <tr><td class="label">Confirmation</td><td class="value"><strong>${reference}</strong></td></tr>
+        <tr><td class="label">Check-In</td><td class="value">${formatDate(booking.check_in_date)} after 4:00 PM</td></tr>
+        <tr><td class="label">Check-Out</td><td class="value">${formatDate(booking.check_out_date)} by 11:00 AM</td></tr>
+      </table>
     </div>
 
     <p><strong>You already have an account with us</strong>, so there's nothing
@@ -741,11 +777,13 @@ export async function sendPinNotification({ guest, booking, pin }) {
     <p>${guest.first_name} ${guest.last_name || ''} has set their PIN. Program this
        into the Yale lock before their arrival.</p>
     <div class="info-card">
-      <div class="info-row"><span class="info-label">Door Code</span><span class="info-value" style="font-size:22px;letter-spacing:4px;"><strong>${pin}</strong></span></div>
-      <div class="info-row"><span class="info-label">Guest</span><span class="info-value">${guest.first_name} ${guest.last_name || ''}</span></div>
-      ${reference ? `<div class="info-row"><span class="info-label">Reference</span><span class="info-value">${reference}</span></div>` : ''}
-      ${booking?.check_in_date ? `<div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)}</span></div>` : ''}
-      ${booking?.check_out_date ? `<div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)}</span></div>` : ''}
+      <table class="info">
+        <tr><td class="label">Door Code</td><td class="value" style="font-size:22px;letter-spacing:4px;"><strong>${pin}</strong></td></tr>
+        <tr><td class="label">Guest</td><td class="value">${guest.first_name} ${guest.last_name || ''}</td></tr>
+        ${reference ? `<tr><td class="label">Reference</td><td class="value">${reference}</td></tr>` : ''}
+        ${booking?.check_in_date ? `<tr><td class="label">Check-In</td><td class="value">${formatDate(booking.check_in_date)}</td></tr>` : ''}
+        ${booking?.check_out_date ? `<tr><td class="label">Check-Out</td><td class="value">${formatDate(booking.check_out_date)}</td></tr>` : ''}
+      </table>
     </div>
     <p style="font-size:13px;color:#7A90AE;">
       Remember to remove the code after checkout.
@@ -779,10 +817,12 @@ export async function sendDoorCodeRemoval({ guest, booking, code }) {
     <p>${guest.first_name} ${guest.last_name || ''} checked out yesterday.
        Remove their code from the Yale lock.</p>
     <div class="info-card">
-      <div class="info-row"><span class="info-label">Code To Remove</span><span class="info-value" style="font-size:22px;letter-spacing:4px;"><strong>${code}</strong></span></div>
-      <div class="info-row"><span class="info-label">Guest</span><span class="info-value">${guest.first_name} ${guest.last_name || ''}</span></div>
-      ${reference ? `<div class="info-row"><span class="info-label">Reference</span><span class="info-value">${reference}</span></div>` : ''}
-      <div class="info-row"><span class="info-label">Checked Out</span><span class="info-value">${formatDate(booking.check_out_date)}</span></div>
+      <table class="info">
+        <tr><td class="label">Code To Remove</td><td class="value" style="font-size:22px;letter-spacing:4px;"><strong>${code}</strong></td></tr>
+        <tr><td class="label">Guest</td><td class="value">${guest.first_name} ${guest.last_name || ''}</td></tr>
+        ${reference ? `<tr><td class="label">Reference</td><td class="value">${reference}</td></tr>` : ''}
+        <tr><td class="label">Checked Out</td><td class="value">${formatDate(booking.check_out_date)}</td></tr>
+      </table>
     </div>
     <p style="font-size:13px;color:#7A90AE;">
       Old codes left on the lock stay valid until removed.
@@ -815,7 +855,9 @@ export async function sendPinReset({ guest, booking, activation_url }) {
     <p>Use the link below to choose a new 4-digit PIN. Your previous PIN
        stops working as soon as you set the new one.</p>
     ${reference ? `<div class="info-card">
-      <div class="info-row"><span class="info-label">Confirmation</span><span class="info-value"><strong>${reference}</strong></span></div>
+      <table class="info">
+        <tr><td class="label">Confirmation</td><td class="value"><strong>${reference}</strong></td></tr>
+      </table>
     </div>` : ''}
     <div style="text-align:center;margin:24px 0;">
       <a href="${activation_url}" class="btn">Choose a New PIN</a>
@@ -860,13 +902,15 @@ export async function sendCancellationRequest({ guest, booking, reason, refund }
        cancel their reservation. Nothing has been changed &mdash; review and
        action it in the dashboard.</p>
     <div class="info-card">
-      ${reference ? `<div class="info-row"><span class="info-label">Reference</span><span class="info-value"><strong>${reference}</strong></span></div>` : ''}
-      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)}</span></div>
-      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)}</span></div>
-      <div class="info-row"><span class="info-label">Guest Email</span><span class="info-value">${guest.email}</span></div>
-      ${guest.phone ? `<div class="info-row"><span class="info-label">Phone</span><span class="info-value">${guest.phone}</span></div>` : ''}
-      ${booking.amount_received != null ? `<div class="info-row"><span class="info-label">Paid To Date</span><span class="info-value">${money(booking.amount_received)}</span></div>` : ''}
-      ${refund ? `<div class="info-row"><span class="info-label">Policy Refund</span><span class="info-value"><strong>${refund.pct}%</strong> — ${refund.label} (${refund.days} days out)</span></div>` : ''}
+      <table class="info">
+        ${reference ? `<tr><td class="label">Reference</td><td class="value"><strong>${reference}</strong></td></tr>` : ''}
+        <tr><td class="label">Check-In</td><td class="value">${formatDate(booking.check_in_date)}</td></tr>
+        <tr><td class="label">Check-Out</td><td class="value">${formatDate(booking.check_out_date)}</td></tr>
+        <tr><td class="label">Guest Email</td><td class="value">${guest.email}</td></tr>
+        ${guest.phone ? `<tr><td class="label">Phone</td><td class="value">${guest.phone}</td></tr>` : ''}
+        ${booking.amount_received != null ? `<tr><td class="label">Paid To Date</td><td class="value">${money(booking.amount_received)}</td></tr>` : ''}
+        ${refund ? `<tr><td class="label">Policy Refund</td><td class="value"><strong>${refund.pct}%</strong> — ${refund.label} (${refund.days} days out)</td></tr>` : ''}
+      </table>
     </div>
     ${reason ? `<p><strong>Their reason:</strong><br/>${reason}</p>` : ''}
     <p style="font-size:13px;color:#7A90AE;">
@@ -947,10 +991,12 @@ export async function sendBookingChanged({
               color:#A8C4E0;margin:16px 0;">${note}</p>` : ''}
 
     <div class="info-card">
-      <div class="info-row"><span class="info-label">Check-In</span><span class="info-value">${formatDate(booking.check_in_date)} after 4:00 PM</span></div>
-      <div class="info-row"><span class="info-label">Check-Out</span><span class="info-value">${formatDate(booking.check_out_date)} by 11:00 AM</span></div>
-      <div class="info-row"><span class="info-label">Guests</span><span class="info-value">${booking.num_guests}</span></div>
-      <div class="info-row"><span class="info-label">Total</span><span class="info-value"><strong>${money(booking.quoted_total)}</strong></span></div>
+      <table class="info">
+        <tr><td class="label">Check-In</td><td class="value">${formatDate(booking.check_in_date)} after 4:00 PM</td></tr>
+        <tr><td class="label">Check-Out</td><td class="value">${formatDate(booking.check_out_date)} by 11:00 AM</td></tr>
+        <tr><td class="label">Guests</td><td class="value">${booking.num_guests}</td></tr>
+        <tr><td class="label">Total</td><td class="value"><strong>${money(booking.quoted_total)}</strong></td></tr>
+      </table>
     </div>
 
     ${moneyLine}
@@ -1051,7 +1097,7 @@ async function mayShareDoorCode() {
  * The primary send happens first and is returned as-is, so callers
  * that only check for success behave exactly as they did before.
  *
- * Additional guests get the same template with booking.yale_pin_code
+ * Additional guests get the same template with the door code
  * blanked (unless the setting allows it) — the templates already
  * skip the PIN block when it is empty, and show a short line telling
  * them who to ask instead.
@@ -1090,13 +1136,25 @@ export async function sendToParty(template, { guest, booking, ...rest }) {
   const results = [];
   for (const person of others) {
     try {
+      /*
+         The door code now lives on the guest. An additional guest is a
+         booking_guests row and has no door_pin of their own, so they are
+         masked by default — which is the behaviour we want. When the
+         setting allows sharing, the primary guest's code is handed down
+         explicitly. booking.yale_pin_code is still blanked alongside it
+         so the old fallback cannot leak the code either.
+      */
       const theirBooking = shareCode
         ? { ...booking, party_notice: notice }
         : { ...booking, yale_pin_code: null, pin_withheld_to: primaryName,
             party_notice: notice };
 
+      const theirGuest = shareCode
+        ? { ...person, id: null, door_pin: doorPin(guest, booking) }
+        : { ...person, id: null, door_pin: null };
+
       const res = await template({
-        guest:   { ...person, id: null },
+        guest:   theirGuest,
         booking: theirBooking,
         ...rest,
       });

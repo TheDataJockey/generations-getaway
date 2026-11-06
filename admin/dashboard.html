@@ -717,6 +717,9 @@
       <button class="nav-item" data-page="activity">
         <span class="nav-icon">⚡</span> Activity
       </button>
+      <button class="nav-item" data-page="add-booking">
+        <span class="nav-icon">➕</span> Add Booking
+      </button>
       <button class="nav-item" data-page="calendar">
         <span class="nav-icon">🗓</span> Calendar
       </button>
@@ -724,9 +727,6 @@
       <div class="nav-section-label">Guests</div>
       <button class="nav-item" data-page="guests">
         <span class="nav-icon">👤</span> Guest List
-      </button>
-      <button class="nav-item" data-page="add-guest">
-        <span class="nav-icon">➕</span> Add Guest
       </button>
 
       <div class="nav-section-label">Content</div>
@@ -753,9 +753,6 @@
       </a>
       <button class="nav-item" data-page="admin-users">
         <span class="nav-icon">🔐</span> Admin Users
-      </button>
-      <button class="nav-item" data-page="access-codes">
-        <span class="nav-icon">🔑</span> Access Codes
       </button>
       <button class="nav-item" data-page="requests">
         <span class="nav-icon">&#9998;</span> Requests
@@ -797,8 +794,8 @@
         <span class="topbar-time" id="currentTime"></span>
         <button class="btn btn-primary" id="topbarAction"
           style="font-size:0.65rem;padding:0.5rem 1rem;white-space:nowrap;"
-          onclick="showPage('add-guest')">
-          + Add Guest
+          onclick="showPage('add-booking')">
+          + Add Booking
         </button>
       </div>
     </div>
@@ -910,6 +907,7 @@
                 <th class="col-date    sortable" data-sort="out"     data-type="date">Check-Out</th>
                 <th class="col-num     sortable" data-sort="nights"  data-type="num">Nights</th>
                 <th class="col-num     sortable" data-sort="guests"  data-type="num">Guests</th>
+                <th class="col-num">Door Code</th>
                 <th class="col-source  sortable" data-sort="source"  data-type="text">Source</th>
                 <th class="col-status  sortable" data-sort="status"  data-type="text">Status</th>
                 <th class="col-payment sortable" data-sort="payment" data-type="num">Payment</th>
@@ -917,7 +915,7 @@
               </tr>
             </thead>
             <tbody id="allBookingsBody">
-              <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
+              <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1007,6 +1005,141 @@
     <!-- ═══════════════════════════════
          PAGE: ADD / EDIT GUEST
          ═══════════════════════════════ -->
+    <!-- ═══════════════════════════════
+         PAGE: ADD BOOKING
+         One screen for a whole reservation: pick a guest who has
+         stayed before or enter a new one, set the dates, type the
+         nightly rate, and see the stay priced before saving.
+
+         The figures come from the server (resource=new-booking,
+         mode=preview) rather than being worked out here, so what
+         this screen shows and what gets stored can never disagree.
+         ═══════════════════════════════ -->
+    <div class="admin-page" id="page-add-booking">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">New Booking</span>
+        </div>
+        <div class="panel-body">
+
+          <!-- ── Guest ── -->
+          <p class="nav-section-label" style="margin-bottom:0.8rem;">Guest</p>
+          <div style="display:flex;gap:0.6rem;margin-bottom:1rem;flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary" id="abModeReturning"
+              style="font-size:0.68rem;">Returning Guest</button>
+            <button type="button" class="btn btn-ghost" id="abModeNew"
+              style="font-size:0.68rem;">New Guest</button>
+          </div>
+
+          <div id="abReturningWrap" style="margin-bottom:1.5rem;">
+            <div class="form-group">
+              <label for="abGuestId">Choose a guest</label>
+              <select id="abGuestId" class="form-control">
+                <option value="">Loading…</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="abNewWrap" style="margin-bottom:1.5rem;display:none;">
+            <div class="form-row" style="margin-bottom:1.2rem;">
+              <div class="form-group">
+                <label for="abFirstName">First Name *</label>
+                <input type="text" id="abFirstName" class="form-control"/>
+              </div>
+              <div class="form-group">
+                <label for="abLastName">Last Name *</label>
+                <input type="text" id="abLastName" class="form-control"/>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="abEmail">Email *</label>
+                <input type="email" id="abEmail" class="form-control"/>
+              </div>
+              <div class="form-group">
+                <label for="abPhone">Phone</label>
+                <input type="tel" id="abPhone" class="form-control"/>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" style="max-width:220px;margin-bottom:1.8rem;">
+            <label for="abDoorPin">Door PIN Code</label>
+            <input type="text" id="abDoorPin" class="form-control" maxlength="8"
+                   inputmode="numeric" placeholder="4 digits"
+                   style="letter-spacing:0.18em;"/>
+            <p style="margin-top:0.35rem;font-size:0.68rem;color:var(--muted);line-height:1.6;">
+              The Yale keypad code. It belongs to the guest, so changing it here
+              changes it for every stay they have.
+            </p>
+          </div>
+
+          <!-- ── Stay ── -->
+          <p class="nav-section-label" style="margin-bottom:1rem;">The Stay</p>
+          <div class="form-row" style="margin-bottom:1.2rem;">
+            <div class="form-group">
+              <label for="abCheckIn">Check-In *</label>
+              <input type="date" id="abCheckIn" class="form-control"/>
+            </div>
+            <div class="form-group">
+              <label for="abCheckOut">Check-Out *</label>
+              <input type="date" id="abCheckOut" class="form-control"/>
+            </div>
+          </div>
+          <div class="form-row" style="margin-bottom:1.8rem;">
+            <div class="form-group">
+              <label for="abNumGuests">Number of Guests</label>
+              <select id="abNumGuests" class="form-control">
+                <option value="1">1</option><option value="2" selected>2</option>
+                <option value="3">3</option><option value="4">4</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="abSource">Booking Source</label>
+              <select id="abSource" class="form-control">
+                <option value="direct">Direct</option>
+                <option value="referral">Referral</option>
+                <option value="airbnb">Airbnb</option>
+                <option value="vrbo">VRBO</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- ── Price ── -->
+          <p class="nav-section-label" style="margin-bottom:1rem;">Price</p>
+          <div class="form-row" style="margin-bottom:1.2rem;">
+            <div class="form-group">
+              <label for="abNightly">Rate Per Night ($)</label>
+              <input type="number" id="abNightly" class="form-control" min="0" step="0.01"
+                     placeholder="Leave blank to use the calendar rate"/>
+            </div>
+            <div class="form-group">
+              <label for="abDeposit">Deposit</label>
+              <select id="abDeposit" class="form-control">
+                <option value="none">None — full amount due</option>
+                <option value="half">50% deposit, balance before arrival</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="abQuote"
+               style="background:rgba(13,27,46,0.55);border:1px solid rgba(91,141,217,0.22);
+                      border-radius:4px;padding:1.1rem 1.3rem;margin-bottom:1.4rem;
+                      font-size:0.82rem;color:var(--muted);">
+            Choose dates to see the stay priced.
+          </div>
+
+          <div style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary" id="abSaveBtn">Create Booking</button>
+            <button type="button" class="btn btn-ghost" id="abResetBtn">Clear</button>
+            <div id="abMsg" style="font-size:0.78rem;color:var(--muted);"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
     <div class="admin-page" id="page-add-guest">
       <div class="panel">
         <div class="panel-header">
@@ -1236,50 +1369,6 @@
          PAGE: ADMIN USERS
          ═══════════════════════════════ -->
     <div       <!-- ACCESS CODES PAGE -->
-      <div class="admin-page" id="page-access-codes">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
-          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:300;">
-            Access <span style="font-style:italic;color:var(--sky);">Codes</span>
-          </h2>
-          <button class="btn btn-primary" onclick="openAccessCodeModal(null)" style="font-size:0.72rem;">
-            + Set Access Code
-          </button>
-        </div>
-
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:2rem;">
-          <div style="background:rgba(27,42,74,0.4);border:1px solid rgba(91,141,217,0.2);border-radius:4px;padding:1.2rem;">
-            <div style="font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);margin-bottom:0.4rem;">Active Codes</div>
-            <div id="acStatActive" style="font-family:var(--font-serif);font-size:2rem;font-weight:300;color:var(--cream);">—</div>
-          </div>
-          <div style="background:rgba(27,42,74,0.4);border:1px solid rgba(91,141,217,0.2);border-radius:4px;padding:1.2rem;">
-            <div style="font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);margin-bottom:0.4rem;">Checking In (3 days)</div>
-            <div id="acStatSoon" style="font-family:var(--font-serif);font-size:2rem;font-weight:300;color:#FFD54F;">—</div>
-          </div>
-          <div style="background:rgba(27,42,74,0.4);border:1px solid rgba(91,141,217,0.2);border-radius:4px;padding:1.2rem;">
-            <div style="font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue-light);margin-bottom:0.4rem;">Checking Out Today</div>
-            <div id="acStatToday" style="font-family:var(--font-serif);font-size:2rem;font-weight:300;color:#EF9A9A;">—</div>
-          </div>
-        </div>
-
-        <div style="overflow-x:auto;">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Guest</th>
-                <th>Check-In</th>
-                <th>Check-Out</th>
-                <th>Portal PIN</th>
-                <th>Yale Door Code</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="accessCodesBody">
-              <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem;">Loading...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       <!-- REQUESTS PAGE -->
       <div class="admin-page" id="page-requests">
@@ -1473,7 +1562,8 @@
       activity:    'Recent <em>Activity</em>',
       calendar:    'Availability <em>Calendar</em>',
       guests:      'Guest <em>Management</em>',
-      'add-guest': 'Add New <em>Guest</em>',
+      'add-booking': 'New <em>Booking</em>',
+      'add-guest': 'Edit <em>Guest</em>',
       knowledge:   'Knowledge <em>Base</em>',
       'chat-log':  'Chat <em>Log</em>',
       events:      'Event <em>Sources</em>',
@@ -1505,10 +1595,227 @@
         case 'chat-log':    await loadChatLog();    break;
         case 'events':      await loadEventSources(); break;
         case 'admin-users': await loadAdminUsers(); break;
-        case 'access-codes': await loadAccessCodes(); break;
         case 'requests':      await loadRequests();     break;
+        case 'add-booking':   await initAddBooking();    break;
       }
     }
+
+
+    /* ══════════════════════════════════════════════════════
+       ADD BOOKING
+       ══════════════════════════════════════════════════════
+       The price shown here is not worked out in the browser. Every
+       change asks the server for a preview, and the same server code
+       does the arithmetic again when the booking is saved — so the
+       figure on screen and the figure stored can never drift apart,
+       even after a tax rate or a season changes.
+       ══════════════════════════════════════════════════════ */
+
+    let abGuests   = [];
+    let abMode     = 'returning';
+    let abPricing  = null;
+    let abDebounce = null;
+
+    function abMoney(v) {
+      return '$' + Number(v || 0).toLocaleString('en-US',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    window.initAddBooking = async function () {
+      // Load the guest list once per visit so a guest added elsewhere
+      // in this session shows up without a reload.
+      try {
+        const res = await fetch('/api/admin?resource=guests', { headers: authHeaders() });
+        const d   = await res.json().catch(() => ({}));
+        abGuests  = d.guests || [];
+      } catch (err) {
+        abGuests = [];
+      }
+
+      const sel = document.getElementById('abGuestId');
+      sel.innerHTML = '<option value="">— Choose a guest —</option>' +
+        abGuests
+          .slice()
+          .sort((a, b) => (a.last_name || '').localeCompare(b.last_name || ''))
+          .map(g => `<option value="${h(g.id)}" data-pin="${h(g.door_pin || '')}">` +
+                    `${h(g.first_name || '')} ${h(g.last_name || '')} — ${h(g.email || '')}` +
+                    `</option>`).join('');
+
+      abSetMode('returning');
+      abQuoteRefresh();
+    };
+
+    function abSetMode(mode) {
+      abMode = mode;
+      const ret = mode === 'returning';
+      document.getElementById('abReturningWrap').style.display = ret ? '' : 'none';
+      document.getElementById('abNewWrap').style.display       = ret ? 'none' : '';
+      document.getElementById('abModeReturning').className = 'btn ' + (ret ? 'btn-primary' : 'btn-ghost');
+      document.getElementById('abModeNew').className       = 'btn ' + (ret ? 'btn-ghost' : 'btn-primary');
+    }
+
+    /* Ask the server to price the stay. Debounced, because this fires
+       on every keystroke in the rate box. */
+    function abQuoteRefresh() {
+      clearTimeout(abDebounce);
+      abDebounce = setTimeout(abQuoteNow, 350);
+    }
+
+    async function abQuoteNow() {
+      const box     = document.getElementById('abQuote');
+      const checkIn = document.getElementById('abCheckIn').value;
+      const checkOut= document.getElementById('abCheckOut').value;
+
+      if (!checkIn || !checkOut) {
+        abPricing = null;
+        box.innerHTML = 'Choose dates to see the stay priced.';
+        return;
+      }
+
+      box.innerHTML = 'Pricing…';
+      try {
+        const res = await fetch('/api/admin?resource=new-booking', {
+          method:  'POST',
+          headers: authHeaders(),
+          body:    JSON.stringify({
+            mode:           'preview',
+            check_in_date:  checkIn,
+            check_out_date: checkOut,
+            nightly_rate:   document.getElementById('abNightly').value,
+          }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+
+        abPricing = d.pricing;
+        const p = d.pricing;
+
+        const row = (label, value, strong) =>
+          `<tr><td style="padding:0.3rem 0;color:var(--muted);">${label}</td>` +
+          `<td style="padding:0.3rem 0;text-align:right;color:${strong ? 'var(--cream)' : 'var(--sky)'};` +
+          `${strong ? 'font-weight:600;' : ''}">${value}</td></tr>`;
+
+        const taxRows = (p.tax_components || []).map(c =>
+          row(`${h(c.label)} (${(c.rate * 100).toFixed(c.rate * 100 % 1 ? 2 : 0)}%)`, abMoney(c.amount))
+        ).join('');
+
+        box.innerHTML =
+          '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">' +
+          row('Rate per night', abMoney(p.nightly_rate)) +
+          (p.calendar_nightly != null && p.discount > 0
+            ? row('Standard rate per night',
+                  `<span style="text-decoration:line-through;opacity:0.65;">${abMoney(p.calendar_nightly)}</span>`)
+            : '') +
+          row('Nights', p.nights) +
+          '<tr><td colspan="2" style="border-top:1px solid rgba(91,141,217,0.18);padding-top:0.2rem;"></td></tr>' +
+          (p.discount > 0
+            ? row('Standard total', abMoney(p.subtotal)) +
+              row('Discount applied', '&minus;' + abMoney(p.discount))
+            : '') +
+          row('Stay subtotal', abMoney(p.net)) +
+          taxRows +
+          '<tr><td colspan="2" style="border-top:1px solid rgba(91,141,217,0.25);padding-top:0.2rem;"></td></tr>' +
+          row('Total', abMoney(p.total), true) +
+          '</table>' +
+          (p.below_minimum
+            ? `<p style="margin:0.7rem 0 0;font-size:0.72rem;color:#FFD54F;">` +
+              `Below the ${p.min_nights}-night minimum.</p>` : '') +
+          (p.discount > 0
+            ? `<p style="margin:0.7rem 0 0;font-size:0.7rem;color:var(--muted);line-height:1.6;">` +
+              `The guest sees only ${abMoney(p.nightly_rate)} per night and a total of ` +
+              `${abMoney(p.total)}. The standard rate and the discount are kept on the ` +
+              `booking for your own reporting and never appear in their emails or portal.</p>` : '');
+      } catch (err) {
+        abPricing = null;
+        box.innerHTML = `<span style="color:#EF9A9A;">${h(err.message)}</span>`;
+      }
+    }
+
+    async function abSave() {
+      const msg = document.getElementById('abMsg');
+      const btn = document.getElementById('abSaveBtn');
+
+      if (!abPricing) {
+        msg.style.color = '#EF9A9A';
+        msg.textContent = 'The stay needs to price before it can be saved.';
+        return;
+      }
+
+      const body = {
+        mode:           'create',
+        check_in_date:  document.getElementById('abCheckIn').value,
+        check_out_date: document.getElementById('abCheckOut').value,
+        num_guests:     Number(document.getElementById('abNumGuests').value),
+        booking_source: document.getElementById('abSource').value,
+        nightly_rate:   document.getElementById('abNightly').value,
+        deposit:        document.getElementById('abDeposit').value,
+        door_pin:       document.getElementById('abDoorPin').value.trim() || null,
+      };
+
+      if (abMode === 'returning') {
+        body.guest_id = document.getElementById('abGuestId').value;
+        if (!body.guest_id) {
+          msg.style.color = '#EF9A9A';
+          msg.textContent = 'Choose a guest, or switch to New Guest.';
+          return;
+        }
+      } else {
+        body.first_name = document.getElementById('abFirstName').value.trim();
+        body.last_name  = document.getElementById('abLastName').value.trim();
+        body.email      = document.getElementById('abEmail').value.trim();
+        body.phone      = document.getElementById('abPhone').value.trim() || null;
+        if (!body.first_name || !body.last_name || !body.email) {
+          msg.style.color = '#EF9A9A';
+          msg.textContent = 'A new guest needs a first name, last name and email.';
+          return;
+        }
+      }
+
+      btn.disabled = true;
+      msg.style.color = 'var(--muted)';
+      msg.textContent = 'Creating…';
+      try {
+        const res = await fetch('/api/admin?resource=new-booking', {
+          method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+        msg.style.color = '#81C784';
+        msg.textContent = 'Booking created.';
+        setTimeout(() => { showPage('bookings'); }, 700);
+      } catch (err) {
+        msg.style.color = '#EF9A9A';
+        msg.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function abReset() {
+      ['abFirstName','abLastName','abEmail','abPhone','abDoorPin',
+       'abCheckIn','abCheckOut','abNightly'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+      });
+      document.getElementById('abGuestId').value = '';
+      document.getElementById('abMsg').textContent = '';
+      abPricing = null;
+      abQuoteRefresh();
+    }
+
+    // ── Bindings. The page markup is static, so these bind once. ──
+    document.getElementById('abModeReturning')?.addEventListener('click', () => abSetMode('returning'));
+    document.getElementById('abModeNew')?.addEventListener('click', () => abSetMode('new'));
+    document.getElementById('abSaveBtn')?.addEventListener('click', abSave);
+    document.getElementById('abResetBtn')?.addEventListener('click', abReset);
+    ['abCheckIn','abCheckOut','abNightly'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', abQuoteRefresh);
+    });
+    // Picking a returning guest brings their existing door code with them.
+    document.getElementById('abGuestId')?.addEventListener('change', function () {
+      const pin = this.selectedOptions[0]?.dataset.pin || '';
+      document.getElementById('abDoorPin').value = pin;
+    });
+
 
     // ── DASHBOARD ──
     // A booking change affects the bookings table, the dashboard summary
@@ -1994,7 +2301,7 @@
       if (clear) clear.hidden = (showing === total);
 
       if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem;">' +
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:2rem;">' +
           (total ? 'Nothing matches those filters' : 'No bookings found') + '</td></tr>';
         return;
       }
@@ -2009,6 +2316,7 @@
               <td class="col-date">${formatDate(b.check_out_date)}</td>
               <td class="col-num">${b.num_nights || '—'}</td>
               <td class="col-num">${b.num_guests || '—'}</td>
+              <td class="col-num">${h(b.door_pin || '—')}</td>
               <td class="col-source" style="text-transform:capitalize;">${h(b.booking_source || '—')}</td>
               <td class="col-status"><span class="status status-${b.status}">${h(b.status)}</span></td>
               <td class="col-payment">${pay.html}</td>
@@ -2071,7 +2379,7 @@
         fillSourceFilter();
         renderBookings();
       } catch (err) {
-        showLoadError('allBookingsBody', err, 9);
+        showLoadError('allBookingsBody', err, 10);
       }
     }
 
@@ -2881,6 +3189,25 @@
             </div>
             <div id="payResult" style="margin-top:0.6rem;font-size:0.8rem;"></div>
 
+            <label style="margin-top:1.1rem;">Door Code</label>
+            <div style="margin-top:0.4rem;display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;">
+              <div style="flex:0.5;min-width:110px;">
+                <label style="font-size:0.6rem;">Yale keypad PIN</label>
+                <input type="text" id="editDoorPin" maxlength="8" inputmode="numeric"
+                  value="${data.door_pin || ''}" placeholder="4 digits"
+                  style="width:100%;padding:0.5rem;background:var(--navy-light);color:var(--cream);
+                         border:1px solid rgba(46,95,163,0.35);border-radius:4px;font-size:0.85rem;
+                         letter-spacing:0.18em;"/>
+              </div>
+              <button class="btn btn-ghost" id="saveDoorPinBtn" data-booking="${data.id}">Save Code</button>
+              <div id="doorPinMsg" style="font-size:0.75rem;align-self:center;color:var(--muted);"></div>
+            </div>
+            <p style="margin-top:0.4rem;font-size:0.7rem;color:var(--muted);line-height:1.6;">
+              The code programmed on the front door. It belongs to the guest, not the
+              stay &mdash; changing it here changes it for every booking they have.
+              This is not their guest-portal login PIN.
+            </p>
+
             <label style="margin-top:1.1rem;">Change This Booking</label>
             <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;margin-top:0.4rem;">
               <div style="flex:1;min-width:140px;">
@@ -3117,6 +3444,41 @@
 
         // Edit booking. Preview first so the price impact is visible before
         // anything is committed or the guest is emailed.
+        // Save the door code. Its own button and its own request, kept
+        // apart from Save Changes so editing a PIN never reprices a stay.
+        var doorPinBtn = document.getElementById('saveDoorPinBtn');
+        if (doorPinBtn) {
+          doorPinBtn.addEventListener('click', async function () {
+            const input = document.getElementById('editDoorPin');
+            const msg   = document.getElementById('doorPinMsg');
+            const code  = (input.value || '').trim();
+            if (!/^\d{4,8}$/.test(code)) {
+              msg.style.color = '#EF9A9A';
+              msg.textContent = 'Enter 4 to 8 digits.';
+              return;
+            }
+            doorPinBtn.disabled = true;
+            msg.style.color = 'var(--muted)';
+            msg.textContent = 'Saving…';
+            try {
+              const res = await fetch('/api/admin?resource=bookings', {
+                method:  'PATCH',
+                headers: authHeaders(),
+                body:    JSON.stringify({ id: bookingId, yale_pin_code: code }),
+              });
+              const d = await res.json().catch(() => ({}));
+              if (!res.ok) throw new Error(d.error || ('HTTP ' + res.status));
+              msg.style.color = '#81C784';
+              msg.textContent = 'Saved for every stay this guest has.';
+            } catch (err) {
+              msg.style.color = '#EF9A9A';
+              msg.textContent = err.message;
+            } finally {
+              doorPinBtn.disabled = false;
+            }
+          });
+        }
+
         var previewBtn = document.getElementById('previewEditBtn');
         if (previewBtn) {
           const editBody = () => ({
@@ -3435,6 +3797,10 @@
         document.getElementById('gLastName').value         = data.last_name  || '';
         document.getElementById('gEmail').value            = data.email      || '';
         document.getElementById('gPhone').value            = data.phone      || '';
+        // Load the existing door code. This field is marked required, so
+        // leaving it blank on an edit forced a new code to be typed over
+        // the real one, with no way to see what it had been.
+        document.getElementById('gPin').value              = data.door_pin   || '';
         document.getElementById('gEmergencyName').value    = data.emergency_name  || '';
         document.getElementById('gEmergencyPhone').value   = data.emergency_phone || '';
         document.getElementById('gGuestNotes').value       = data.guest_notes       || '';
@@ -3679,80 +4045,6 @@
   </div>
 
   <!-- ACCESS CODE MODAL -->
-  <div class="modal-overlay" id="accessCodeModal">
-    <div class="modal-box" style="max-width:500px;">
-      <div class="modal-header">
-        <h3 class="modal-title" id="accessCodeModalTitle">Set Access Code</h3>
-        <button class="modal-close" onclick="closeAccessCodeModal()">&#215;</button>
-      </div>
-      <div class="modal-body" style="padding:1.5rem;">
-
-        <input type="hidden" id="acBookingId"/>
-
-        <!-- Guest info display -->
-        <div id="acGuestInfo" style="padding:0.8rem 1rem;background:rgba(46,95,163,0.1);border:1px solid rgba(46,95,163,0.2);border-radius:4px;margin-bottom:1.2rem;font-size:0.82rem;color:var(--sky);"></div>
-
-        <!-- Portal PIN -->
-        <div class="form-group" style="margin-bottom:1rem;">
-          <label style="display:flex;justify-content:space-between;align-items:center;">
-            Guest Portal PIN <span style="color:var(--muted);font-size:0.7rem;font-weight:300;">(used to log in to portal)</span>
-          </label>
-          <div style="display:flex;gap:0.6rem;align-items:center;">
-            <input type="text" id="acPortalPin" class="form-control" maxlength="4"
-              pattern="[0-9]{4}" placeholder="4 digits" style="max-width:140px;letter-spacing:0.3em;font-size:1.1rem;"/>
-            <button class="btn btn-ghost" onclick="generatePin('acPortalPin')"
-              style="font-size:0.68rem;padding:0.5rem 0.8rem;white-space:nowrap;">
-              &#9881; Generate
-            </button>
-          </div>
-          <span style="font-size:0.68rem;color:var(--muted);margin-top:0.3rem;display:block;">
-            Guest uses this + their last name to access the portal
-          </span>
-        </div>
-
-        <!-- Yale Door Code -->
-        <div class="form-group" style="margin-bottom:1rem;">
-          <label style="display:flex;justify-content:space-between;align-items:center;">
-            Yale Door Code <span style="color:var(--muted);font-size:0.7rem;font-weight:300;">(enter manually in Yale app)</span>
-          </label>
-          <div style="display:flex;gap:0.6rem;align-items:center;">
-            <input type="text" id="acYaleCode" class="form-control" maxlength="8"
-              pattern="[0-9]+" placeholder="4-8 digits" style="max-width:160px;letter-spacing:0.3em;font-size:1.1rem;"/>
-            <button class="btn btn-ghost" onclick="generatePin('acYaleCode')"
-              style="font-size:0.68rem;padding:0.5rem 0.8rem;white-space:nowrap;">
-              &#9881; Generate
-            </button>
-          </div>
-          <span style="font-size:0.68rem;color:var(--muted);margin-top:0.3rem;display:block;">
-            Separate from portal PIN &mdash; add to Yale Access app manually
-          </span>
-        </div>
-
-        <!-- Same code toggle -->
-        <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:1.2rem;padding:0.8rem;background:rgba(27,42,74,0.4);border-radius:4px;">
-          <input type="checkbox" id="acSameCode" style="accent-color:var(--blue-light);cursor:pointer;width:15px;height:15px;"/>
-          <label for="acSameCode" style="font-size:0.78rem;color:rgba(164,196,224,0.85);cursor:pointer;">
-            Use same code for both portal and Yale lock
-          </label>
-        </div>
-
-        <!-- Yale app reminder -->
-        <div style="padding:0.9rem;background:rgba(255,213,79,0.08);border:1px solid rgba(255,213,79,0.2);border-radius:4px;margin-bottom:1.2rem;">
-          <p style="font-size:0.72rem;color:#FFD54F;line-height:1.7;margin:0;">
-            &#9888; Remember to add the Yale door code manually in the Yale Access app after saving.
-            Set it as a <strong>scheduled code</strong> with check-in and check-out dates.
-          </p>
-        </div>
-
-        <div id="acModalError" style="color:#EF9A9A;font-size:0.78rem;min-height:1rem;margin-bottom:0.8rem;"></div>
-
-        <div style="display:flex;gap:0.8rem;justify-content:flex-end;">
-          <button class="btn btn-ghost" onclick="closeAccessCodeModal()">Cancel</button>
-          <button class="btn btn-primary" id="acSaveBtn" onclick="saveAccessCode()">Save Codes</button>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- RESOLVE REQUEST MODAL -->
   <div class="modal-overlay" id="resolveRequestModal">
